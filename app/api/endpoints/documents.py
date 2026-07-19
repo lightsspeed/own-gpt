@@ -1,10 +1,13 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict, Any
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.services.vector_store import add_documents_to_store
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from app.core.database import get_db
 import tempfile
 import os
 import logging
@@ -96,3 +99,51 @@ async def upload_document(file: UploadFile = File(...)):
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+@router.get("/")
+async def list_documents(db: AsyncSession = Depends(get_db)):
+    """
+    Returns a list of unique uploaded documents by reading the cmetadata field
+    from the pgvector table. Groups by filename to count chunks.
+    """
+    try:
+        # Group by the 'filename' key inside the JSONB 'cmetadata' column
+        query = text(\"\"\"
+            SELECT cmetadata->>'filename' as filename, count(*) as chunks
+            FROM langchain_pg_embedding
+            WHERE cmetadata ? 'filename'
+            GROUP BY cmetadata->>'filename'
+            ORDER BY filename ASC
+        \"\"\")
+        result = await db.execute(query)
+        rows = result.fetchall()
+        
+        docs = [{"filename": row.filename, "chunks": row.chunks} for row in rows]
+        return docs
+    except Exception as e:
+        logger.error(f"Failed to fetch documents: {e}")
+        # Table might not exist yet if no uploads have occurred
+        if "relation \"langchain_pg_embedding\" does not exist" in str(e):
+            return []
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{filename}")
+async def delete_document(filename: str, db: AsyncSession = Depends(get_db)):
+    """
+    Deletes all vector chunks associated with a specific filename.
+    """
+    try:
+        query = text(\"\"\"
+            DELETE FROM langchain_pg_embedding
+            WHERE cmetadata->>'filename' = :filename
+        \"\"\")
+        await db.execute(query, {"filename": filename})
+        await db.commit()
+        return {"status": "success", "message": f"Deleted {filename}"}
+    except Exception as e:
+        logger.error(f"Failed to delete document {filename}: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -35,6 +35,7 @@ import { ChatMessage } from './ChatMessage';
 import type { MessageData } from './ChatMessage';
 import { DocumentUpload } from '../documents/DocumentUpload';
 import { SettingsModal } from '../settings/SettingsModal';
+import { KnowledgeBaseModal } from '../documents/KnowledgeBaseModal';
 import type { AppSettings } from '../settings/SettingsModal';
 import { ToolPicker } from './ToolPicker';
 
@@ -62,6 +63,7 @@ export function ChatLayout() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
+  const [isKBModalOpen, setKBModalOpen] = useState(false);
   const [isToolPickerOpen, setToolPickerOpen] = useState(false);
   const [activeTools, setActiveTools] = useState<string[]>([]);
   const [sessionId, setSessionId] = useState<string>(getOrCreateSessionId);
@@ -434,11 +436,16 @@ export function ChatLayout() {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter>
+        <SidebarFooter className="p-2 border-t border-border/40">
           <SidebarMenu>
             <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => setKBModalOpen(true)}>
+                <BookOpen size={18} className="mr-2" /> <span>Knowledge Base</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
               <SidebarMenuButton onClick={() => setSettingsOpen(true)}>
-                <Settings /> <span>Settings</span>
+                <Settings size={18} className="mr-2" /> <span>Settings</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -744,6 +751,12 @@ export function ChatLayout() {
         onClearHistory={handleClearHistory}
         settings={appSettings}
         onSettingsChange={setAppSettings}
+      />
+
+      {/* Knowledge Base Modal */}
+      <KnowledgeBaseModal 
+        open={isKBModalOpen} 
+        onOpenChange={setKBModalOpen}
       />
     </SidebarProvider>
   );
