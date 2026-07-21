@@ -17,6 +17,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Custom GPT Backend with LangGraph and RAG",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
