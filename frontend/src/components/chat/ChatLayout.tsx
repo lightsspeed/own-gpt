@@ -661,7 +661,7 @@ export function ChatLayout() {
                   <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
                     {(['reading', 'uploading', 'chunking', 'embedding'] as const).map((s, i) => (
                       <div key={s} className={`w-1.5 h-1.5 rounded-full transition-all duration-300
-                        ${ (['reading', 'uploading', 'chunking', 'embedding'] as const).indexOf(uploadProgress.stage) >= i
+                        ${ (['reading', 'uploading', 'chunking', 'embedding'] as const).indexOf(uploadProgress.stage as any) >= i
                             ? 'bg-blue-400 scale-125'
                             : 'bg-blue-400/20'
                         }`}
