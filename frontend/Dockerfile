@@ -1,18 +1,21 @@
-FROM node:20-alpine
-
+# Base stage for dependencies
+FROM node:20-alpine AS base
 WORKDIR /app
-
-# Copy package files
 COPY package.json package-lock.json* ./
-
-# Install dependencies
 RUN npm install
-
-# Copy the rest of the application
 COPY . .
 
-# Expose Vite's default port
+# Development stage (runs Vite dev server)
+FROM base AS development
 EXPOSE 5173
-
-# Run the dev server
 CMD ["npm", "run", "dev", "--", "--host"]
+
+# Production build stage
+FROM base AS builder
+RUN npm run build
+
+# Production run stage (Nginx)
+FROM nginx:stable-alpine AS production
+COPY --from=builder /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

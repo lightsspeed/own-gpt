@@ -109,13 +109,13 @@ async def list_documents(db: AsyncSession = Depends(get_db)):
     """
     try:
         # Group by the 'filename' key inside the JSONB 'cmetadata' column
-        query = text(\"\"\"
+        query = text("""
             SELECT cmetadata->>'filename' as filename, count(*) as chunks
             FROM langchain_pg_embedding
             WHERE cmetadata ? 'filename'
             GROUP BY cmetadata->>'filename'
             ORDER BY filename ASC
-        \"\"\")
+        """)
         result = await db.execute(query)
         rows = result.fetchall()
         
@@ -135,10 +135,10 @@ async def delete_document(filename: str, db: AsyncSession = Depends(get_db)):
     Deletes all vector chunks associated with a specific filename.
     """
     try:
-        query = text(\"\"\"
+        query = text("""
             DELETE FROM langchain_pg_embedding
             WHERE cmetadata->>'filename' = :filename
-        \"\"\")
+        """)
         await db.execute(query, {"filename": filename})
         await db.commit()
         return {"status": "success", "message": f"Deleted {filename}"}
