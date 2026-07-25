@@ -1,8 +1,10 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { ArrowUp, Paperclip, Mic, X, Upload, Wrench } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './FilePreview'
 import { ToolPicker } from './ToolPicker'
+import { SlashCommands, type SlashCommand } from './SlashCommands'
 import { uploadService } from '@/features/chat/services/uploadService'
 import type { AttachmentFile, ToolInfo, ToolMode } from '@/features/chat/types'
 
@@ -34,10 +36,13 @@ export function Composer({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
   const [files, setFiles] = useState<AttachmentFile[]>([])
   const [focused, setFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [slashOpen, setSlashOpen] = useState(false)
+  const [slashQuery, setSlashQuery] = useState('')
 
   const autoResize = () => {
     const ta = textareaRef.current
@@ -48,7 +53,38 @@ export function Composer({
 
   useEffect(() => { autoResize() }, [input])
 
+  const slashInputRef = useRef('')
+
+  const handleInputChange = (val: string) => {
+    setInput(val)
+
+    // Detect slash command at start of text
+    const trimmed = val.trimStart()
+    if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
+      const q = trimmed.slice(1)
+      setSlashQuery(q)
+      setSlashOpen(true)
+      slashInputRef.current = val
+    } else if (slashOpen && (trimmed === '' || trimmed.includes(' '))) {
+      // Close if space typed or input cleared
+      setSlashOpen(false)
+    }
+  }
+
+  const handleSlashSelect = (cmd: SlashCommand) => {
+    setSlashOpen(false)
+    if (cmd.action.type === 'fill') {
+      setInput(cmd.action.value)
+    } else if (cmd.action.type === 'navigate') {
+      navigate(cmd.action.value)
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashOpen) {
+      // Let SlashCommands handle keyboard navigation
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       if (!isLoading) onSend()
@@ -177,6 +213,15 @@ export function Composer({
           focused ? 'border-primary/40 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]' : 'border-border/60',
         )}
       >
+        {/* Slash commands */}
+        {slashOpen && (
+          <SlashCommands
+            query={slashQuery}
+            onSelect={handleSlashSelect}
+            onClose={() => setSlashOpen(false)}
+          />
+        )}
+
         <div className="flex items-end px-2 py-1.5">
           {tools && onToggleTool && (
             <div className="relative">
@@ -214,7 +259,7 @@ export function Composer({
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
