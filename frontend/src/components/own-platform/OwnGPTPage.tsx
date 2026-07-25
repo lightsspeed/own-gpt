@@ -9,7 +9,7 @@ import { ContextBar } from './ContextBar'
 import { ArtifactCard } from './ArtifactCard'
 import { ToolChips } from './ToolChips'
 import { ScrollToBottom } from './ScrollToBottom'
-import { ScrollRail } from './ScrollRail'
+import { ConversationMinimap } from './ConversationMinimap'
 import type { ResourceItem } from '@/features/chat/types'
 
 interface OwnGPTPageProps {
@@ -60,12 +60,15 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     setNewMsgCount(0)
   }, [bottomRef])
 
+  const [minimapVisible, setMinimapVisible] = useState(false)
+
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120
-    isNearBottom.current = near
-    setShowScrollBtn(!near)
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    isNearBottom.current = distFromBottom < 120
+    setShowScrollBtn(distFromBottom > 150)
+    setMinimapVisible(el.scrollHeight > el.clientHeight)
     const progress = el.scrollHeight > el.clientHeight
       ? el.scrollTop / (el.scrollHeight - el.clientHeight)
       : 0
@@ -119,22 +122,20 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
 
     return (
     <div className="flex flex-col h-full">
+      {hasMessages && (
+        <ConversationMinimap
+          scrollRef={scrollRef}
+          progress={scrollProgress}
+          visible={minimapVisible}
+        />
+      )}
+      <ScrollToBottom
+        show={showScrollBtn}
+        onClick={scrollToBottom}
+        newMessages={newMsgCount || undefined}
+        isLoading={isLoading}
+      />
       <div className="relative flex-1 min-h-0">
-        {hasMessages && (
-          <ScrollRail scrollRef={scrollRef} progress={scrollProgress} />
-        )}
-        <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none" style={{ transform: 'translateY(-22px)' }}>
-          <div className="max-w-[920px] mx-auto px-6 flex justify-end">
-            <div className="pointer-events-auto">
-              <ScrollToBottom
-                visible={showScrollBtn}
-                onClick={scrollToBottom}
-                newMessages={newMsgCount || undefined}
-                isLoading={isLoading}
-              />
-            </div>
-          </div>
-        </div>
         <div
           ref={scrollRef}
           onScroll={handleScroll}

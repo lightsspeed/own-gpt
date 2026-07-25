@@ -3,50 +3,55 @@ import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ScrollToBottomProps {
-  visible: boolean
+  show: boolean
   onClick: () => void
   newMessages?: number
   isLoading?: boolean
 }
 
-export function ScrollToBottom({ visible, onClick, newMessages, isLoading }: ScrollToBottomProps) {
+export function ScrollToBottom({ show, onClick, newMessages, isLoading }: ScrollToBottomProps) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    if (visible) setMounted(true)
+    if (show) setMounted(true)
     else {
-      const timer = setTimeout(() => setMounted(false), 200)
+      const timer = setTimeout(() => setMounted(false), 220)
       return () => clearTimeout(timer)
     }
-  }, [visible])
+  }, [show])
 
   if (!mounted) return null
 
-  const label = newMessages
-    ? isLoading
-      ? 'Continue ↓'
-      : 'New response ↓'
-    : null
+  const isStreaming = isLoading
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        'flex items-center justify-center gap-1.5 h-10 rounded-full border bg-elevated/90 backdrop-blur-sm shadow-lg transition-all duration-200',
+        'fixed z-30 flex items-center justify-center rounded-full border shadow-lg transition-all duration-200',
         newMessages
-          ? 'border-primary/30 text-primary hover:border-primary/50 shadow-primary/10'
-          : 'border-border/50 text-muted-foreground hover:border-border/80 hover:text-foreground',
-        visible
-          ? 'opacity-100 translate-y-0 scale-100'
-          : 'opacity-0 translate-y-2 scale-95 pointer-events-none',
-        label ? 'px-4' : 'w-10',
+          ? 'border-primary/30 bg-elevated/95 text-primary hover:border-primary/50 hover:bg-elevated shadow-primary/10'
+          : 'border-border/40 bg-elevated/90 text-muted-foreground hover:border-border/70 hover:text-foreground',
+        show
+          ? 'opacity-100 scale-100 translate-y-0'
+          : 'opacity-0 scale-[0.96] translate-y-2 pointer-events-none',
+        newMessages ? 'gap-1.5 px-4 h-10' : 'w-10 h-10',
       )}
-      style={{ transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)' }}
+      style={{
+        bottom: '92px',
+        right: '32px',
+        boxShadow: newMessages
+          ? '0 8px 24px rgba(0,0,0,0.4)'
+          : '0 8px 24px rgba(0,0,0,0.3)',
+        transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      }}
     >
-      <ChevronDown size={16} className="shrink-0" />
-      {label && (
-        <span className="text-[13px] font-medium whitespace-nowrap">{label}</span>
-      )}
+      <ChevronDown size={18} className="shrink-0" />
+      {newMessages ? (
+        <span className="text-[13px] font-medium whitespace-nowrap">
+          {isStreaming ? 'New response' : `${newMessages} new message${newMessages > 1 ? 's' : ''}`}
+        </span>
+      ) : null}
     </button>
   )
 }
