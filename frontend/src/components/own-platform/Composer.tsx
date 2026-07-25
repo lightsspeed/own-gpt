@@ -1,5 +1,9 @@
-import { useRef, useState, useEffect } from 'react'
-import { ArrowUp, Paperclip, Mic, X } from 'lucide-react'
+import { useRef, useState, useEffect, useCallback } from 'react'
+import { ArrowUp, Paperclip, Mic, X, Upload } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { FilePreview } from './FilePreview'
+import { uploadService } from '@/features/chat/services/uploadService'
+import type { AttachmentFile } from '@/features/chat/types'
 
 interface ComposerProps {
   input: string
@@ -22,8 +26,10 @@ export function Composer({
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [files, setFiles] = useState<{ name: string; size: number }[]>([])
+  const dropRef = useRef<HTMLDivElement>(null)
+  const [files, setFiles] = useState<AttachmentFile[]>([])
   const [focused, setFocused] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   const autoResize = () => {
     const ta = textareaRef.current
@@ -41,33 +47,128 @@ export function Composer({
     }
   }
 
+  const processFiles = useCallback(async (fileList: FileList | File[]) => {
+    const newFiles: AttachmentFile[] = []
+    for (const f of Array.from(fileList)) {
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase()
+      if (!uploadService.ALLOWED_TYPES.includes(ext)) {
+        newFiles.push({
+          id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: f.name,
+          size: f.size,
+          type: f.type || 'application/octet-stream',
+          status: 'error',
+          progress: 0,
+          error: `Unsupported file type`,
+        })
+        continue
+      }
+      if (f.size > uploadService.MAX_SIZE) {
+        newFiles.push({
+          id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: f.name,
+          size: f.size,
+          type: f.type || 'application/octet-stream',
+          status: 'error',
+          progress: 0,
+          error: `File too large (max ${uploadService.formatSize(uploadService.MAX_SIZE)})`,
+        })
+        continue
+      }
+
+      const id = `file-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const preview = uploadService.canPreview(f.type) ? await uploadService.readAsDataURL(f).catch(() => undefined) : undefined
+
+      const fileEntry: AttachmentFile = {
+        id,
+        name: f.name,
+        size: f.size,
+        type: f.type || 'application/octet-stream',
+        status: 'uploading',
+        progress: 0,
+        preview,
+      }
+      newFiles.push(fileEntry)
+
+      uploadService.uploadFile(f, (progress) => {
+        setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, progress } : pf))
+      }).then(result => {
+        setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, status: 'uploaded', url: result.url, progress: 100 } : pf))
+      }).catch(err => {
+        setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, status: 'error', error: err.message } : pf))
+      })
+    }
+    setFiles(prev => [...prev, ...newFiles])
+  }, [])
+
+  // Drag & drop handlers
+  useEffect(() => {
+    const el = dropRef.current
+    if (!el) return
+
+    const onDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true) }
+    const onDragLeave = () => setIsDragging(false)
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        processFiles(e.dataTransfer.files)
+      }
+    }
+
+    el.addEventListener('dragover', onDragOver)
+    el.addEventListener('dragleave', onDragLeave)
+    el.addEventListener('drop', onDrop)
+    return () => {
+      el.removeEventListener('dragover', onDragOver)
+      el.removeEventListener('dragleave', onDragLeave)
+      el.removeEventListener('drop', onDrop)
+    }
+  }, [processFiles])
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newFiles = Array.from(e.target.files || [])
-    setFiles(prev => [...prev, ...newFiles.map(f => ({ name: f.name, size: f.size }))])
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(e.target.files)
+    }
     e.target.value = ''
   }
 
-  return (
-    <div className="w-full max-w-[860px] mx-auto">
-      <div
-        className={`relative bg-elevated/80 backdrop-blur-sm border rounded-2xl shadow-2xl transition-all duration-200 ${
-          focused ? 'border-primary/40 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]' : 'border-border/60'
-        }`}
-      >
-        {files.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-3 pt-3">
-            {files.map(f => (
-              <div key={f.name} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-small text-primary">
-                <Paperclip size={12} />
-                <span className="max-w-[140px] truncate">{f.name}</span>
-                <button onClick={() => setFiles(prev => prev.filter(x => x.name !== f.name))} className="ml-0.5 text-muted-foreground hover:text-foreground">
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+  const removeFile = (id: string) => {
+    setFiles(prev => prev.filter(f => f.id !== id))
+  }
 
+  const hasUploading = files.some(f => f.status === 'uploading')
+  const canSend = input.trim() && !isLoading && !hasUploading
+
+  return (
+    <div ref={dropRef} className="w-full max-w-[860px] mx-auto relative">
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <div className="text-center space-y-2">
+            <Upload size={32} className="mx-auto text-primary/60" />
+            <p className="text-small text-foreground font-medium">Drop files to attach</p>
+          </div>
+        </div>
+      )}
+
+      {/* File previews */}
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-2 pb-2">
+          {files.map(f => (
+            <div key={f.id} className="w-full sm:w-[calc(50%-4px)]">
+              <FilePreview file={f} onRemove={removeFile} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div
+        className={cn(
+          'relative bg-elevated/80 backdrop-blur-sm border rounded-2xl shadow-2xl transition-all duration-200',
+          focused ? 'border-primary/40 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]' : 'border-border/60',
+        )}
+      >
         <div className="flex items-end px-2 py-1.5">
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -85,7 +186,7 @@ export function Composer({
               onKeyDown={handleKeyDown}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              placeholder={placeholder}
+              placeholder={isDragging ? 'Drop files here...' : placeholder}
               disabled={disabled || isLoading}
               rows={1}
               className="flex-1 w-full resize-none bg-transparent text-body text-foreground placeholder:text-muted-foreground/40 outline-none py-2.5 px-2 leading-relaxed"
@@ -122,12 +223,11 @@ export function Composer({
           ) : (
             <button
               onClick={onSend}
-              disabled={disabled || !input.trim()}
-              className={`mb-[3px] p-2 rounded-lg shrink-0 transition-all ${
-                input.trim()
-                  ? 'bg-primary text-primary-foreground hover:opacity-90'
-                  : 'text-muted-foreground'
-              }`}
+              disabled={disabled || !canSend}
+              className={cn(
+                'mb-[3px] p-2 rounded-lg shrink-0 transition-all',
+                canSend ? 'bg-primary text-primary-foreground hover:opacity-90' : 'text-muted-foreground',
+              )}
               title="Send"
             >
               <ArrowUp size={20} />
@@ -135,7 +235,14 @@ export function Composer({
           )}
         </div>
 
-        <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.csv,.json" className="hidden" onChange={handleFileChange} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={uploadService.ALLOWED_TYPES.join(',')}
+          className="hidden"
+          onChange={handleFileChange}
+        />
       </div>
     </div>
   )

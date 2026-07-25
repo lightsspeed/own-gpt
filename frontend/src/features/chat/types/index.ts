@@ -65,6 +65,18 @@ export interface ConversationContext {
   items: ContextItem[];
 }
 
+export interface AttachmentFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url?: string;
+  preview?: string;
+  status: 'pending' | 'uploading' | 'uploaded' | 'error';
+  progress: number;
+  error?: string;
+}
+
 export interface UploadedFile {
   name: string;
   chunks: number;
