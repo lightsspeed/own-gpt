@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, Globe, ExternalLink, RefreshCw, ChevronDown } from 'lucide-react'
-import type { ResourceItem, EvidenceItem } from '@/features/chat/types'
+import type { EvidenceItem, ResourceItem } from '@/features/chat/types'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +9,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MarkdownRenderer } from './MarkdownRenderer'
-import { EvidenceBar } from './EvidenceBar'
 import { EvidenceDrawer } from './EvidenceDrawer'
 
 const COLLAPSE_THRESHOLD = 600
@@ -18,22 +17,23 @@ interface MessageBubbleProps {
   role: 'user' | 'assistant' | 'system'
   content: string
   isStreaming?: boolean
-  resources?: ResourceItem[]
   evidence?: EvidenceItem[]
+  resources?: ResourceItem[]
   answerMode?: string
-  onOpenSources?: (resources: ResourceItem[]) => void
   onEdit?: (content: string) => void
   onRegenerate?: () => void
 }
 
-export function MessageBubble({ role, content, isStreaming, resources, evidence, answerMode, onOpenSources, onEdit, onRegenerate }: MessageBubbleProps) {
+export function MessageBubble({ role, content, isStreaming, evidence, resources, answerMode, onEdit, onRegenerate }: MessageBubbleProps) {
   const isUser = role === 'user'
   const [showActions, setShowActions] = useState(false)
   const [collapsed, setCollapsed] = useState(true)
   const [drawerItem, setDrawerItem] = useState<EvidenceItem | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
 
+  const isLong = !isStreaming && content.length > COLLAPSE_THRESHOLD
   const evidenceItems = evidence || []
+  const hasSources = evidenceItems.length > 0 || (resources && resources.length > 0)
   const drawerIndex = drawerItem ? evidenceItems.indexOf(drawerItem) : -1
 
   useEffect(() => {
@@ -106,10 +106,6 @@ export function MessageBubble({ role, content, isStreaming, resources, evidence,
           </button>
         )}
 
-        {/* Evidence sources - only for non-streaming non-user messages */}
-        {!isUser && !isStreaming && evidenceItems.length > 0 && (
-          <EvidenceBar items={evidenceItems} onSelect={setDrawerItem} />
-        )}
       </div>
 
       {/* Actions */}
@@ -118,7 +114,7 @@ export function MessageBubble({ role, content, isStreaming, resources, evidence,
           {isUser ? (
             <UserActions content={content} onEdit={onEdit} />
           ) : (
-            <AssistantActions content={content} resources={resources} onOpenSources={onOpenSources} onRegenerate={onRegenerate} />
+            <AssistantActions content={content} hasSources={hasSources} onOpenEvidence={() => setDrawerItem(evidenceItems[0] || null)} onRegenerate={onRegenerate} />
           )}
         </div>
       )}
@@ -164,10 +160,10 @@ function UserActions({ content, onEdit }: { content: string; onEdit?: (content: 
   )
 }
 
-function AssistantActions({ content, resources, onOpenSources, onRegenerate }: {
+function AssistantActions({ content, hasSources, onOpenEvidence, onRegenerate }: {
   content: string
-  resources?: ResourceItem[]
-  onOpenSources?: (resources: ResourceItem[]) => void
+  hasSources: boolean
+  onOpenEvidence?: () => void
   onRegenerate?: () => void
 }) {
   const [copied, setCopied] = useState(false)
@@ -210,8 +206,8 @@ function AssistantActions({ content, resources, onOpenSources, onRegenerate }: {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="bg-popover w-[180px] rounded-xl border p-1.5 shadow-xl">
-          {resources && resources.length > 0 && (
-            <DropdownMenuItem className="flex items-center gap-2.5 rounded-lg p-2 text-small cursor-pointer" onSelect={() => onOpenSources?.(resources)}>
+          {hasSources && (
+            <DropdownMenuItem className="flex items-center gap-2.5 rounded-lg p-2 text-small cursor-pointer" onSelect={() => onOpenEvidence?.()}>
               <Globe size={14} /> Sources
             </DropdownMenuItem>
           )}

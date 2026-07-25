@@ -31,6 +31,7 @@ export interface UseChatReturn {
   tools: ToolInfo[];
   toggleTool: (name: string) => void;
   setToolMode: (name: string, mode: ToolMode) => void;
+  loadingHistory: boolean;
 }
 
 const INITIAL_STAGES: PipelineStage[] = [
@@ -77,6 +78,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const [error, setError] = useState<string | null>(null);
   const [context, setContext] = useState<ConversationContext>({ items: [] });
   const [tools, setTools] = useState<ToolInfo[]>(DEFAULT_TOOLS);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const initialLoadDone = useRef(false);
 
   const toggleTool = useCallback((name: string) => {
     setTools(prev => prev.map(t => t.name === name ? { ...t, enabled: !t.enabled } : t));
@@ -114,6 +117,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   /* Load history on mount / session change */
   useEffect(() => {
     let cancelled = false;
+    setLoadingHistory(true);
+    initialLoadDone.current = false;
     const load = async () => {
       const history = await api.fetchHistory(sessionId);
       if (cancelled) return;
@@ -122,13 +127,18 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       } else {
         setMessages([]);
       }
+      if (!cancelled) {
+        setLoadingHistory(false);
+        initialLoadDone.current = true;
+      }
     };
     load();
     return () => { cancelled = true; };
   }, [sessionId]);
 
-  /* Auto-scroll to bottom */
+  /* Auto-scroll to bottom — only after initial load, on new messages */
   useEffect(() => {
+    if (!initialLoadDone.current) return;
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
@@ -347,5 +357,6 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     tools,
     toggleTool,
     setToolMode,
+    loadingHistory,
   };
 }

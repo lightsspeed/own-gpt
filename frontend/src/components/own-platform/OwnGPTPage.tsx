@@ -29,6 +29,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     isLoading,
     streamingId,
     pipelineStages,
+    loadingHistory,
     send,
     stop,
     bottomRef,
@@ -197,7 +198,6 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
                     resources={msg.resources}
                     evidence={msg.evidence}
                     answerMode={msg.answerMode}
-                    onOpenSources={handleOpenSources}
                     onEdit={msg.role === 'user' ? handleEdit : undefined}
                     onRegenerate={msg.role === 'assistant' && idx === visibleMessages.length - 1 && !isLoading ? handleRegenerate : undefined}
                   />
@@ -225,7 +225,13 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
               </div>
             )}
 
-            {!hasMessages && (
+            {loadingHistory && !hasMessages && (
+              <div className="flex items-center justify-center h-48">
+                <div className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+              </div>
+            )}
+
+            {!hasMessages && !loadingHistory && (
               <div
                 className="transition-all duration-500 ease-in-out overflow-hidden"
                 style={{
