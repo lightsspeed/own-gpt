@@ -1,12 +1,22 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { ArrowUp, Paperclip, Mic, X, Upload, Wrench } from 'lucide-react'
+import { Paperclip, Mic, X, Upload, Wrench } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './FilePreview'
 import { ToolPicker } from './ToolPicker'
 import { SlashCommands, type SlashCommand } from './SlashCommands'
 import { uploadService } from '@/features/chat/services/uploadService'
-import type { AttachmentFile, ToolInfo, ToolMode } from '@/features/chat/types'
+import type { AttachmentFile, ToolInfo, ToolMode, ContextItem, ContextCategory } from '@/features/chat/types'
+
+const CATEGORY_META: Record<ContextCategory, { color: string }> = {
+  environment: { color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' },
+  service: { color: 'bg-sky-500/15 text-sky-400 border-sky-500/20' },
+  artifact: { color: 'bg-orange-500/15 text-orange-400 border-orange-500/20' },
+  experiment: { color: 'bg-purple-500/15 text-purple-400 border-purple-500/20' },
+  knowledge: { color: 'bg-blue-500/15 text-blue-400 border-blue-500/20' },
+  timeframe: { color: 'bg-amber-500/15 text-amber-400 border-amber-500/20' },
+  custom: { color: 'bg-muted/30 text-muted-foreground border-muted/30' },
+}
 
 interface ComposerProps {
   input: string
@@ -19,6 +29,8 @@ interface ComposerProps {
   tools?: ToolInfo[]
   onToggleTool?: (name: string) => void
   onToolModeChange?: (name: string, mode: ToolMode) => void
+  contextItems?: ContextItem[]
+  onContextRemove?: (id: string) => void
 }
 
 export function Composer({
@@ -28,14 +40,16 @@ export function Composer({
   onStop,
   isLoading = false,
   disabled = false,
-  placeholder = 'Ask anything...',
+  placeholder = 'Message OwnGPT...',
   tools,
   onToggleTool,
   onToolModeChange,
+  contextItems,
+  onContextRemove,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const dropRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const [files, setFiles] = useState<AttachmentFile[]>([])
   const [focused, setFocused] = useState(false)
@@ -53,20 +67,14 @@ export function Composer({
 
   useEffect(() => { autoResize() }, [input])
 
-  const slashInputRef = useRef('')
-
   const handleInputChange = (val: string) => {
     setInput(val)
-
-    // Detect slash command at start of text
     const trimmed = val.trimStart()
     if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
       const q = trimmed.slice(1)
       setSlashQuery(q)
       setSlashOpen(true)
-      slashInputRef.current = val
     } else if (slashOpen && (trimmed === '' || trimmed.includes(' '))) {
-      // Close if space typed or input cleared
       setSlashOpen(false)
     }
   }
@@ -81,10 +89,7 @@ export function Composer({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slashOpen) {
-      // Let SlashCommands handle keyboard navigation
-      return
-    }
+    if (slashOpen) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       if (!isLoading) onSend()
@@ -98,44 +103,24 @@ export function Composer({
       if (!uploadService.ALLOWED_TYPES.includes(ext)) {
         newFiles.push({
           id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: f.name,
-          size: f.size,
-          type: f.type || 'application/octet-stream',
-          status: 'error',
-          progress: 0,
-          error: `Unsupported file type`,
+          name: f.name, size: f.size, type: f.type || 'application/octet-stream',
+          status: 'error', progress: 0, error: `Unsupported file type`,
         })
         continue
       }
       if (f.size > uploadService.MAX_SIZE) {
         newFiles.push({
           id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          name: f.name,
-          size: f.size,
-          type: f.type || 'application/octet-stream',
-          status: 'error',
-          progress: 0,
-          error: `File too large (max ${uploadService.formatSize(uploadService.MAX_SIZE)})`,
+          name: f.name, size: f.size, type: f.type || 'application/octet-stream',
+          status: 'error', progress: 0, error: `File too large (max ${uploadService.formatSize(uploadService.MAX_SIZE)})`,
         })
         continue
       }
-
       const id = `file-${Date.now()}-${Math.random().toString(36).slice(2)}`
       const preview = uploadService.canPreview(f.type) ? await uploadService.readAsDataURL(f).catch(() => undefined) : undefined
-
-      const fileEntry: AttachmentFile = {
-        id,
-        name: f.name,
-        size: f.size,
-        type: f.type || 'application/octet-stream',
-        status: 'uploading',
-        progress: 0,
-        preview,
-      }
-      newFiles.push(fileEntry)
-
-      uploadService.uploadFile(f, (progress) => {
-        setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, progress } : pf))
+      newFiles.push({ id, name: f.name, size: f.size, type: f.type || 'application/octet-stream', status: 'uploading', progress: 0, preview })
+      uploadService.uploadFile(f, (p) => {
+        setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, progress: p } : pf))
       }).then(result => {
         setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, status: 'uploaded', url: result.url, progress: 100 } : pf))
       }).catch(err => {
@@ -145,21 +130,15 @@ export function Composer({
     setFiles(prev => [...prev, ...newFiles])
   }, [])
 
-  // Drag & drop handlers
   useEffect(() => {
-    const el = dropRef.current
+    const el = containerRef.current
     if (!el) return
-
     const onDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true) }
     const onDragLeave = () => setIsDragging(false)
     const onDrop = (e: DragEvent) => {
-      e.preventDefault()
-      setIsDragging(false)
-      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        processFiles(e.dataTransfer.files)
-      }
+      e.preventDefault(); setIsDragging(false)
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) processFiles(e.dataTransfer.files)
     }
-
     el.addEventListener('dragover', onDragOver)
     el.addEventListener('dragleave', onDragLeave)
     el.addEventListener('drop', onDrop)
@@ -171,24 +150,22 @@ export function Composer({
   }, [processFiles])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      processFiles(e.target.files)
-    }
+    if (e.target.files && e.target.files.length > 0) processFiles(e.target.files)
     e.target.value = ''
   }
 
-  const removeFile = (id: string) => {
-    setFiles(prev => prev.filter(f => f.id !== id))
-  }
+  const removeFile = (id: string) => setFiles(prev => prev.filter(f => f.id !== id))
 
   const hasUploading = files.some(f => f.status === 'uploading')
   const canSend = input.trim() && !isLoading && !hasUploading
+  const activeToolCount = tools?.filter(t => t.enabled).length || 0
+  const hasContext = contextItems && contextItems.length > 0
+  const hasAttachments = files.length > 0
 
   return (
-    <div ref={dropRef} className="w-full max-w-[860px] mx-auto relative">
-      {/* Drag overlay */}
+    <div ref={containerRef} className="w-full max-w-[920px] mx-auto relative">
       {isDragging && (
-        <div className="absolute inset-0 z-50 rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-50 rounded-[18px] border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-sm flex items-center justify-center pointer-events-none">
           <div className="text-center space-y-2">
             <Upload size={32} className="mx-auto text-primary/60" />
             <p className="text-small text-foreground font-medium">Drop files to attach</p>
@@ -196,66 +173,106 @@ export function Composer({
         </div>
       )}
 
-      {/* File previews */}
-      {files.length > 0 && (
-        <div className="flex flex-wrap gap-2 pb-2">
-          {files.map(f => (
-            <div key={f.id} className="w-full sm:w-[calc(50%-4px)]">
-              <FilePreview file={f} onRemove={removeFile} />
-            </div>
-          ))}
-        </div>
-      )}
-
       <div
         className={cn(
-          'relative bg-elevated/80 backdrop-blur-sm border rounded-2xl shadow-2xl transition-all duration-200',
-          focused ? 'border-primary/40 shadow-[0_0_0_1px_rgba(59,130,246,0.15)]' : 'border-border/60',
+          'relative flex flex-col rounded-[18px] border shadow-2xl transition-all duration-160 bg-elevated/90 backdrop-blur-sm',
+          focused
+            ? 'border-primary shadow-[0_0_0_3px_rgba(59,130,246,0.12)]'
+            : 'border-border/60',
         )}
       >
-        {/* Slash commands */}
+        {/* Slash commands (positioned above) */}
         {slashOpen && (
-          <SlashCommands
-            query={slashQuery}
-            onSelect={handleSlashSelect}
-            onClose={() => setSlashOpen(false)}
-          />
+          <div className="absolute bottom-full left-0 right-0 mb-2 z-50">
+            <SlashCommands
+              query={slashQuery}
+              onSelect={handleSlashSelect}
+              onClose={() => setSlashOpen(false)}
+            />
+          </div>
         )}
 
-        <div className="flex items-end px-2 py-1.5">
-          {tools && onToggleTool && (
-            <div className="relative">
-              <button
-                onClick={() => setToolsOpen(!toolsOpen)}
-                className={cn(
-                  'p-2 mb-[3px] rounded-lg transition-all shrink-0',
-                  toolsOpen || tools.some(t => t.enabled)
-                    ? 'text-primary hover:bg-primary/10'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                title="Toggle tools"
-              >
-                <Wrench size={18} />
-              </button>
-              {toolsOpen && (
-                <ToolPicker
-                  tools={tools}
-                  onToggle={onToggleTool}
-                  onModeChange={onToolModeChange || (() => {})}
-                  onClose={() => setToolsOpen(false)}
-                />
-              )}
-            </div>
-          )}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 mb-[3px] text-muted-foreground hover:text-foreground rounded-lg transition-all shrink-0"
-            title="Attach files"
-          >
-            <Paperclip size={20} />
-          </button>
+        {/* Inline attachments */}
+        {hasAttachments && (
+          <div className="flex flex-wrap gap-1.5 pt-3 px-[18px]">
+            {files.map(f => (
+              <div key={f.id} className="flex-1 min-w-[200px]">
+                <FilePreview file={f} onRemove={removeFile} />
+              </div>
+            ))}
+          </div>
+        )}
 
-          <div className="relative flex-1">
+        {/* Inline context chips */}
+        {hasContext && (
+          <div className="flex items-center gap-1.5 pt-2.5 px-[18px] overflow-x-auto">
+            {contextItems.map(item => {
+              const meta = CATEGORY_META[item.category]
+              return (
+                <div
+                  key={item.id}
+                  className={cn(
+                    'group flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg border text-[11px] font-medium transition-all',
+                    meta.color,
+                  )}
+                >
+                  <span className="max-w-[100px] truncate">{item.label}</span>
+                  <button
+                    onClick={() => onContextRemove?.(item.id)}
+                    className="ml-0.5 p-0.5 rounded text-current/40 hover:text-current opacity-0 group-hover:opacity-100 transition-all duration-160"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Main row: toolbar + textarea + actions */}
+        <div className="flex items-end px-[18px] py-[14px] gap-2">
+          {/* Left toolbar */}
+          <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
+            {tools && onToggleTool && (
+              <div className="relative">
+                <button
+                  onClick={() => setToolsOpen(!toolsOpen)}
+                    className={cn(
+                      'flex items-center justify-center w-9 h-9 rounded-[10px] transition-all duration-160',
+                      toolsOpen || activeToolCount > 0
+                        ? 'bg-primary/[0.08] text-primary hover:bg-primary/[0.12]'
+                        : 'text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.05]',
+                  )}
+                  title="Toggle tools"
+                >
+                  <Wrench size={17} />
+                  {activeToolCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-primary text-[9px] font-bold text-white flex items-center justify-center">
+                      {activeToolCount}
+                    </span>
+                  )}
+                </button>
+                {toolsOpen && (
+                  <ToolPicker
+                    tools={tools}
+                    onToggle={onToggleTool}
+                    onModeChange={onToolModeChange || (() => {})}
+                    onClose={() => setToolsOpen(false)}
+                  />
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center justify-center w-9 h-9 rounded-[10px] transition-all duration-160 text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.05]"
+              title="Attach files"
+            >
+              <Paperclip size={18} />
+            </button>
+          </div>
+
+          {/* Textarea */}
+          <div className="relative flex-1 min-w-0">
             <textarea
               ref={textareaRef}
               value={input}
@@ -266,50 +283,50 @@ export function Composer({
               placeholder={isDragging ? 'Drop files here...' : placeholder}
               disabled={disabled || isLoading}
               rows={1}
-              className="flex-1 w-full resize-none bg-transparent text-body text-foreground placeholder:text-muted-foreground/40 outline-none py-2.5 px-2 leading-relaxed"
-              style={{ minHeight: '1.75rem', maxHeight: '10rem' }}
+              className="w-full resize-none bg-transparent outline-none text-[16px] text-foreground placeholder:text-foreground/55 placeholder:font-normal leading-relaxed"
+              style={{ minHeight: '1.75rem', maxHeight: '10rem', paddingTop: '2px' }}
             />
-            {input && !isLoading && (
+          </div>
+
+          {/* Right actions */}
+          <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
+            <button
+              disabled={disabled || isLoading}
+              className="flex items-center justify-center w-9 h-9 rounded-[10px] transition-all duration-160 text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.05]"
+              title="Voice input"
+            >
+              <Mic size={18} />
+            </button>
+
+            <div className="w-px h-6 bg-foreground/[0.18] mx-0.5" />
+
+            {isLoading ? (
               <button
-                onClick={() => setInput('')}
-                className="absolute bottom-2.5 right-1 p-1 text-muted-foreground/40 hover:text-foreground transition-colors"
+                onClick={onStop}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-160 shrink-0"
+                title="Stop generation"
               >
-                <X size={14} />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+              </button>
+            ) : (
+              <button
+                onClick={onSend}
+                disabled={disabled || !canSend}
+                className={cn(
+                  'flex items-center justify-center w-9 h-9 rounded-full transition-all duration-160 shrink-0',
+                  canSend
+                    ? 'bg-primary text-primary-foreground hover:scale-105 active:scale-[0.96] shadow-md'
+                    : 'bg-muted/10 text-muted-foreground/35',
+                )}
+                title="Send"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19V5" />
+                  <path d="M5 12l7-7 7 7" />
+                </svg>
               </button>
             )}
           </div>
-
-          <button
-            disabled={disabled || isLoading}
-            className="p-2 mb-[3px] text-muted-foreground hover:text-foreground rounded-lg transition-all shrink-0"
-            title="Voice input"
-          >
-            <Mic size={20} />
-          </button>
-
-          <div className="w-px h-6 bg-border/60 mx-1 mb-[3px]" />
-
-          {isLoading ? (
-            <button
-              onClick={onStop}
-              className="mb-[3px] bg-destructive text-destructive-foreground p-2 rounded-lg shrink-0 hover:brightness-110 transition-all"
-              title="Stop generation"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
-            </button>
-          ) : (
-            <button
-              onClick={onSend}
-              disabled={disabled || !canSend}
-              className={cn(
-                'mb-[3px] p-2 rounded-lg shrink-0 transition-all',
-                canSend ? 'bg-primary text-primary-foreground hover:opacity-90' : 'text-muted-foreground',
-              )}
-              title="Send"
-            >
-              <ArrowUp size={20} />
-            </button>
-          )}
         </div>
 
         <input

@@ -5,7 +5,6 @@ import { Composer } from './Composer'
 import { MessageBubble } from './MessageBubble'
 import { GenerationSpinner } from './GenerationSpinner'
 import { ContextPanel } from './ContextPanel'
-import { ContextBar } from './ContextBar'
 import { ArtifactCard } from './ArtifactCard'
 import { ToolChips } from './ToolChips'
 import { ScrollToBottom } from './ScrollToBottom'
@@ -234,12 +233,6 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
       </div>
 
       <div className="pb-4">
-        <ContextBar
-          items={context.items}
-          onAdd={addContextItem}
-          onRemove={removeContextItem}
-          onClear={clearContext}
-        />
         <Composer
           input={input}
           setInput={setInput}
@@ -249,6 +242,8 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
           tools={tools}
           onToggleTool={toggleTool}
           onToolModeChange={setToolMode}
+          contextItems={context.items}
+          onContextRemove={removeContextItem}
         />
       </div>
 
