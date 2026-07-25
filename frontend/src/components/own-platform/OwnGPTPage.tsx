@@ -168,12 +168,6 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
 
     return (
     <div className="flex flex-col h-full">
-      <ScrollToBottom
-        show={showScrollBtn}
-        onClick={scrollToBottom}
-        newMessages={newMsgCount || undefined}
-        isLoading={isLoading}
-      />
       <div className="relative flex-1 min-h-0">
         <div
           ref={scrollRef}
@@ -283,18 +277,26 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
       </div>
 
       <div className="pb-4">
-        <Composer
-          input={input}
-          setInput={setInput}
-          onSend={send}
-          onStop={stop}
-          isLoading={isLoading}
-          tools={tools}
-          onToggleTool={toggleTool}
-          onToolModeChange={setToolMode}
-          contextItems={context.items}
-          onContextRemove={removeContextItem}
-        />
+        <div className="max-w-[920px] mx-auto relative">
+          <ScrollToBottom
+            show={showScrollBtn}
+            onClick={scrollToBottom}
+            newMessages={newMsgCount || undefined}
+            isLoading={isLoading}
+          />
+          <Composer
+            input={input}
+            setInput={setInput}
+            onSend={send}
+            onStop={stop}
+            isLoading={isLoading}
+            tools={tools}
+            onToggleTool={toggleTool}
+            onToolModeChange={setToolMode}
+            contextItems={context.items}
+            onContextRemove={removeContextItem}
+          />
+        </div>
       </div>
 
       <ContextPanel
