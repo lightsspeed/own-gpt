@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useChat } from '@/features/chat/hooks/useChat'
 import { Composer } from './Composer'
@@ -8,8 +8,9 @@ import { ContextPanel } from './ContextPanel'
 import { ArtifactCard } from './ArtifactCard'
 import { ToolChips } from './ToolChips'
 import { ScrollToBottom } from './ScrollToBottom'
-import { ConversationMinimap } from './ConversationMinimap'
+import { ConversationNavigator } from './ConversationNavigator'
 import type { ResourceItem } from '@/features/chat/types'
+import type { NavigatorAnchor } from './ConversationNavigator'
 
 interface OwnGPTPageProps {
   sessionId: string
@@ -119,13 +120,41 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     }
   }
 
+  const anchors: NavigatorAnchor[] = useMemo(() => {
+    const result: NavigatorAnchor[] = []
+    for (const msg of messages) {
+      if (msg.role === 'tool_event') continue
+      if (msg.role === 'user') {
+        result.push({
+          id: msg.id,
+          type: 'user',
+          label: msg.content.slice(0, 60) + (msg.content.length > 60 ? '…' : ''),
+          timestamp: msg.timestamp,
+          detail: msg.usedTools?.length ? `${msg.usedTools.length} tool${msg.usedTools.length > 1 ? 's' : ''}` : undefined,
+        })
+      } else if (msg.role === 'assistant' && msg.artifacts?.length) {
+        for (const art of msg.artifacts) {
+          result.push({
+            id: art.id,
+            type: 'artifact',
+            label: art.title.slice(0, 50) + (art.title.length > 50 ? '…' : ''),
+            timestamp: new Date(art.createdAt),
+          })
+        }
+      }
+    }
+    return result
+  }, [messages])
+
     return (
     <div className="flex flex-col h-full">
       {hasMessages && (
-        <ConversationMinimap
+        <ConversationNavigator
           scrollRef={scrollRef}
           progress={scrollProgress}
           visible={minimapVisible}
+          anchors={anchors}
+          streamingId={streamingId}
         />
       )}
       <ScrollToBottom

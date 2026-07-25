@@ -33,13 +33,14 @@ export function ScrollToBottom({ show, onClick, newMessages, isLoading }: Scroll
           ? 'border-primary/30 bg-elevated/95 text-primary hover:border-primary/50 hover:bg-elevated shadow-primary/10'
           : 'border-border/40 bg-elevated/90 text-muted-foreground hover:border-border/70 hover:text-foreground',
         show
-          ? 'opacity-100 scale-100 translate-y-0'
-          : 'opacity-0 scale-[0.96] translate-y-2 pointer-events-none',
+          ? 'opacity-100 scale-100'
+          : 'opacity-0 scale-[0.96] pointer-events-none',
         newMessages ? 'gap-1.5 px-4 h-10' : 'w-10 h-10',
       )}
       style={{
-        bottom: '92px',
-        right: '32px',
+        left: '50%',
+        bottom: '84px',
+        transform: `translateX(-50%) ${show ? 'translateY(0)' : 'translateY(2px)'}`,
         boxShadow: newMessages
           ? '0 8px 24px rgba(0,0,0,0.4)'
           : '0 8px 24px rgba(0,0,0,0.3)',
@@ -49,7 +50,7 @@ export function ScrollToBottom({ show, onClick, newMessages, isLoading }: Scroll
       <ChevronDown size={18} className="shrink-0" />
       {newMessages ? (
         <span className="text-[13px] font-medium whitespace-nowrap">
-          {isStreaming ? 'New response' : `${newMessages} new message${newMessages > 1 ? 's' : ''}`}
+          {isStreaming ? 'Continue generating' : `${newMessages} new message${newMessages > 1 ? 's' : ''}`}
         </span>
       ) : null}
     </button>
