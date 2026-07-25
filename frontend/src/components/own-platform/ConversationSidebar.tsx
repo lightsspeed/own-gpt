@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import {
-  Search, Pin, Trash2, Edit2, Check, X, LogOut, Settings, PanelLeftClose, Plus, MessageSquare,
+  Search, Pin, Trash2, Edit2, Check, X, LogOut, Settings, PanelLeftClose, Plus,
   MoreHorizontal, Copy, Share2, Archive,
 } from 'lucide-react'
 import type { ChatSession } from '@/features/chat/types'
@@ -330,15 +330,7 @@ function SessionRow({
                 {session.title}
               </span>
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-caption text-muted-foreground/40">{dateLabel(session.updated_at)}</span>
-              {session.message_count != null && (
-                <span className="text-caption text-muted-foreground/30 flex items-center gap-1">
-                  <MessageSquare size={10} />
-                  {session.message_count}
-                </span>
-              )}
-            </div>
+
           </div>
 
           {/* Hover ⋯ menu */}
@@ -389,15 +381,4 @@ function MenuButton({ icon, label, danger, onClick }: { icon: React.ReactNode; l
   )
 }
 
-function dateLabel(dateStr?: string): string {
-  if (!dateStr) return 'Unknown'
-  const d = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
 
-  if (days === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return `${days} days ago`
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
-}

@@ -82,7 +82,7 @@ export function MessageBubble({ role, content, isStreaming, resources, answerMod
       >
         <div className={cn('relative overflow-hidden transition-all duration-300', isLong && collapsed ? 'max-h-[300px]' : 'max-h-[99999px]')}>
           <MarkdownRenderer content={content} />
-          {isStreaming && <span className="inline-block w-[6px] h-[1em] bg-primary/70 rounded-sm ml-0.5 animate-pulse" />}
+
           {isLong && collapsed && (
             <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#000] to-transparent pointer-events-none" />
           )}
