@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, Globe, ExternalLink, RefreshCw, ChevronDown } from 'lucide-react'
-import type { ResourceItem } from '@/features/chat/types'
+import type { ResourceItem, EvidenceItem } from '@/features/chat/types'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +9,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { EvidenceBar } from './EvidenceBar'
+import { EvidenceDrawer } from './EvidenceDrawer'
 
 const COLLAPSE_THRESHOLD = 600
 
@@ -17,18 +19,22 @@ interface MessageBubbleProps {
   content: string
   isStreaming?: boolean
   resources?: ResourceItem[]
+  evidence?: EvidenceItem[]
   answerMode?: string
   onOpenSources?: (resources: ResourceItem[]) => void
   onEdit?: (content: string) => void
   onRegenerate?: () => void
 }
 
-export function MessageBubble({ role, content, isStreaming, resources, answerMode, onOpenSources, onEdit, onRegenerate }: MessageBubbleProps) {
+export function MessageBubble({ role, content, isStreaming, resources, evidence, answerMode, onOpenSources, onEdit, onRegenerate }: MessageBubbleProps) {
   const isUser = role === 'user'
   const [showActions, setShowActions] = useState(false)
   const [collapsed, setCollapsed] = useState(true)
+  const [drawerItem, setDrawerItem] = useState<EvidenceItem | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
-  const isLong = !isStreaming && content.length > COLLAPSE_THRESHOLD
+
+  const evidenceItems = evidence || []
+  const drawerIndex = drawerItem ? evidenceItems.indexOf(drawerItem) : -1
 
   useEffect(() => {
     if (isUser) {
@@ -54,6 +60,7 @@ export function MessageBubble({ role, content, isStreaming, resources, answerMod
 
   return (
     <div className={cn('flex flex-col group', isUser ? 'items-end' : 'items-start')}>
+      {/* Answer mode badge */}
       {!isUser && answerMode && !isStreaming && (
         <div className="flex items-center gap-2 px-1 mb-2">
           <span className={cn(
@@ -72,6 +79,8 @@ export function MessageBubble({ role, content, isStreaming, resources, answerMod
           </span>
         </div>
       )}
+
+      {/* Message content */}
       <div
         className={cn(
           'px-4 py-2.5 max-w-[85%] text-body text-foreground',
@@ -96,8 +105,14 @@ export function MessageBubble({ role, content, isStreaming, resources, answerMod
             {collapsed ? 'Show more' : 'Show less'}
           </button>
         )}
+
+        {/* Evidence sources - only for non-streaming non-user messages */}
+        {!isUser && !isStreaming && evidenceItems.length > 0 && (
+          <EvidenceBar items={evidenceItems} onSelect={setDrawerItem} />
+        )}
       </div>
 
+      {/* Actions */}
       {showActions && (
         <div className={cn('flex items-center gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity', isUser ? 'flex-row-reverse' : 'flex-row')}>
           {isUser ? (
@@ -107,6 +122,21 @@ export function MessageBubble({ role, content, isStreaming, resources, answerMod
           )}
         </div>
       )}
+
+      {/* Evidence Drawer */}
+      <EvidenceDrawer
+        item={drawerItem}
+        onClose={() => setDrawerItem(null)}
+        onNavigate={(dir) => {
+          const idx = evidenceItems.indexOf(drawerItem!)
+          const next = dir === 'next' ? idx + 1 : idx - 1
+          if (next >= 0 && next < evidenceItems.length) {
+            setDrawerItem(evidenceItems[next])
+          }
+        }}
+        hasPrev={drawerIndex > 0}
+        hasNext={drawerIndex < evidenceItems.length - 1}
+      />
     </div>
   )
 }

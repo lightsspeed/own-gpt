@@ -39,6 +39,7 @@ export interface MessageData {
   tool?: ToolCall;
   timestamp?: Date;
   resources?: ResourceItem[];
+  evidence?: EvidenceItem[];
   artifacts?: Artifact[];
   images?: string[];
   feedback?: 'liked' | 'disliked' | null;
@@ -115,6 +116,47 @@ export const DEFAULT_TOOLS: ToolInfo[] = [
   { name: 'image_analysis', label: 'Image Analysis', icon: '📷', color: 'text-amber-400', desc: 'Analyze uploaded images', category: 'analysis', enabled: false, mode: 'manual' },
   { name: 'memory', label: 'Memory', icon: '🧠', color: 'text-rose-400', desc: 'Recall information from past conversations', category: 'knowledge', enabled: false, mode: 'auto' },
 ]
+
+export type ConfidenceLabel = 'high' | 'medium' | 'low' | 'no_evidence';
+
+export type RetrievalMethod = 'vector' | 'bm25' | 'hybrid' | 'web' | 'memory' | 'none';
+
+export interface EvidenceItem {
+  id: string;
+  title: string;
+  source_type: 'knowledge' | 'web' | 'memory' | 'file';
+  url?: string | null;
+  chunk?: string | null;
+  confidence_label: ConfidenceLabel;
+  retrieval_method: RetrievalMethod;
+  chunk_index?: number | null;
+  total_chunks?: number | null;
+  document_id?: string | null;
+  metadata?: Record<string, unknown>;
+  raw_score?: number | null;
+  reranker_score?: number | null;
+}
+
+export interface EvidenceBundle {
+  items: EvidenceItem[];
+  answer_mode: string;
+}
+
+export const CONFIDENCE_LABELS: Record<ConfidenceLabel, { label: string; color: string }> = {
+  high: { label: 'High Confidence', color: 'text-success' },
+  medium: { label: 'Strong Match', color: 'text-primary' },
+  low: { label: 'Low Confidence', color: 'text-warning' },
+  no_evidence: { label: 'No Evidence', color: 'text-muted-foreground/50' },
+};
+
+export const RETRIEVAL_LABELS: Record<RetrievalMethod, { label: string; color: string }> = {
+  hybrid: { label: 'Hybrid', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  vector: { label: 'Vector', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+  bm25: { label: 'BM25', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  web: { label: 'Web', color: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
+  memory: { label: 'Memory', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+  none: { label: 'None', color: 'bg-muted/10 text-muted-foreground/50 border-border/30' },
+};
 
 export type PipelineStageStatus = 'waiting' | 'active' | 'done';
 

@@ -267,6 +267,13 @@ export function useChat(options: UseChatOptions): UseChatReturn {
                 }
                 return m;
               }));
+            } else if (payload.type === 'evidence') {
+              setMessages(prev => prev.map(m => {
+                if (m.id === assistantMessageId) {
+                  return { ...m, evidence: payload.evidence, answerMode: payload.answer_mode };
+                }
+                return m;
+              }));
             } else if (payload.type === 'resources') {
               setMessages(prev => prev.map(m => {
                 if (m.id === assistantMessageId) {
