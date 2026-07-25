@@ -44,7 +44,7 @@ export function ConversationOutline({ chapters, streamingId, onAnchorClick }: Co
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
-  if (chapters.length <= 1) return null
+  if (chapters.length === 0) return null
 
   return (
     <div ref={panelRef} className="relative">

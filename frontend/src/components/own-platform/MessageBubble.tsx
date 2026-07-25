@@ -55,9 +55,20 @@ export function MessageBubble({ role, content, isStreaming, resources, answerMod
   return (
     <div className={cn('flex flex-col group', isUser ? 'items-end' : 'items-start')}>
       {!isUser && answerMode && !isStreaming && (
-        <div className="flex items-center gap-2 px-1 mb-1">
-          <span className="text-caption text-muted-foreground/40 font-mono uppercase tracking-wider">
-            {answerMode === 'grounded' ? 'Grounded' : answerMode === 'hybrid' ? 'Hybrid' : answerMode === 'web' ? 'Web' : answerMode === 'synthesis' ? 'Synthesis' : answerMode}
+        <div className="flex items-center gap-2 px-1 mb-2">
+          <span className={cn(
+            'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider',
+            answerMode === 'web' && 'bg-info/10 text-info/80',
+            answerMode === 'grounded' && 'bg-success/10 text-success/80',
+            answerMode === 'hybrid' && 'bg-warning/10 text-warning/80',
+            answerMode === 'synthesis' && 'bg-primary/10 text-primary/80',
+            !['web', 'grounded', 'hybrid', 'synthesis'].includes(answerMode) && 'bg-muted/10 text-muted-foreground/60',
+          )}>
+            {answerMode === 'web' && '🌐'}
+            {answerMode === 'grounded' && '📚'}
+            {answerMode === 'hybrid' && '🔀'}
+            {answerMode === 'synthesis' && '✨'}
+            {answerMode === 'web' ? 'Web Search' : answerMode === 'grounded' ? 'Grounded' : answerMode === 'hybrid' ? 'Hybrid' : answerMode === 'synthesis' ? 'Synthesis' : answerMode}
           </span>
         </div>
       )}

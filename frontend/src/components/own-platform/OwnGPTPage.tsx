@@ -43,7 +43,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     sessionId,
     model: 'gpt-4o-mini',
     temperature: 0.7,
-    systemPrompt: 'You are a helpful AI engineering assistant on the Own Platform.',
+    systemPrompt: `You are a helpful AI engineering assistant on the Own Platform. Today's date is ${new Date().toISOString().split('T')[0]}.`,
   })
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -71,6 +71,10 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     isNearBottom.current = distFromBottom < 80
     setShowScrollBtn(distFromBottom > 140)
   }, [])
+
+  useEffect(() => {
+    handleScroll()
+  }, [messages, handleScroll])
 
   useEffect(() => {
     if (isNearBottom.current) {
@@ -176,8 +180,8 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
           onScroll={handleScroll}
           className="overflow-y-auto custom-scrollbar h-full"
         >
-          <div className="pt-6 pb-4 px-6">
-            <div className="max-w-[920px] mx-auto space-y-6">
+          <div className="pt-4 pb-4 px-6">
+            <div className="max-w-[920px] mx-auto space-y-5">
             {hasMessages && (
               <div className="flex items-center gap-3 pb-2 border-b border-border/10">
                 <ConversationOutline
