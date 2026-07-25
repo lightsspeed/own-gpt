@@ -6,11 +6,13 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/app
+      - flashrank_cache:/app/.cache/flashrank
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/owngpt
       - REDIS_URL=redis://redis:6379/0
+      - PG_HOST=db
     env_file:
       - .env
     depends_on:
@@ -50,3 +52,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  flashrank_cache:

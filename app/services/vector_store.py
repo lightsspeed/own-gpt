@@ -1,3 +1,4 @@
+from typing import Optional
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres.vectorstores import PGVector
 from app.core.config import settings
@@ -17,13 +18,14 @@ vector_store = PGVector(
     use_jsonb=True,
 )
 
-def add_documents_to_store(docs):
+def add_documents_to_store(docs, ids: Optional[list[str]] = None):
     """
     Adds a list of LangChain Document objects to the pgvector store.
     Explicit UUIDs are passed to avoid null id constraint violations.
     """
     import uuid
-    ids = [str(uuid.uuid4()) for _ in docs]
+    if ids is None:
+        ids = [str(uuid.uuid4()) for _ in docs]
     vector_store.add_documents(docs, ids=ids)
 
 def similarity_search(query: str, k: int = 4):

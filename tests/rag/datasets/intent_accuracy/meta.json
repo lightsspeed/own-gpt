@@ -1,0 +1,7 @@
+{
+  "display_name": "Intent Accuracy",
+  "description": "Benchmark for intent classification accuracy — covers knowledge, coding, web, general, memory, reasoning, and tool intents.",
+  "source": "Hand-curated queries representing each supported intent",
+  "total_questions": 40,
+  "categories": ["knowledge", "coding", "web", "general", "memory", "reasoning", "tool"]
+}

@@ -1,0 +1,7 @@
+{
+  "display_name": "FastAPI",
+  "description": "Benchmark questions about FastAPI web framework — covering path operations, dependency injection, Pydantic models, security, async, WebSocket, testing, and deployment.",
+  "source": "FastAPI official documentation (https://fastapi.tiangolo.com/)",
+  "total_questions": 20,
+  "categories": ["basics", "dependency_injection", "pydantic", "security", "async", "deployment"]
+}

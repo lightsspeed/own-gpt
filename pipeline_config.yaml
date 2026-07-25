@@ -1,0 +1,56 @@
+# Pipeline Configuration
+# All values configurable here — no hardcoded values in pipeline code.
+
+# ── Stage 1: Intent Classification ──────────────────────────────────────────
+intent_enabled: true
+intent_model: "gpt-4o-mini"
+# Max latency budget before falling back: rule_based <50ms, llm <300ms
+
+# ── Stage 3: Query Rewriting ─────────────────────────────────────────────────
+rewrite_enabled: true
+rewrite_model: "gpt-4o-mini"
+# Only applied when intent is "rag" or "web"
+
+# ── Stage 4: Knowledge Retrieval (Hybrid Search) ────────────────────────────
+retrieval_k: 20          # Final top-K after fusion (passed to reranker)
+
+retriever:
+  top_k_vector: 20       # Top-K from vector search
+  top_k_bm25: 20         # Top-K from BM25 (Whoosh)
+
+fusion:
+  algorithm: rrf
+  k: 60                  # RRF rank constant
+
+search:
+  similarity_threshold: 0.72  # Minimum similarity to consider a chunk
+
+# ── Stage 5: Cross-Encoder Reranking ─────────────────────────────────────────
+rerank_top_k: 5          # Return top-5 after reranking
+reranker_model: "ms-marco-MiniLM-L-12-v2"
+reranker_cache_dir: "/app/.cache/flashrank"
+
+# ── Stage 6: Confidence Evaluation ───────────────────────────────────────────
+# Composite score combines: retrieval, reranker, intent confidence, source agreement
+confidence_high: 0.70    # >= 0.70 → answer directly
+confidence_medium: 0.45  # >= 0.45 → fallback to web search
+# < 0.45 → ask for clarification
+
+# ── Stage 8: Response Validation ─────────────────────────────────────────────
+validation_enabled: true
+validation_model: "gpt-4o-mini"
+# Rule-based validation runs first (no LLM cost)
+# LLM validation only fires when rules fail
+
+# ── Stage 9: Tracing ─────────────────────────────────────────────────────────
+trace_enabled: true
+trace_ttl_days: 7        # Traces stored in Redis for 7 days
+
+# ── Evaluation & Regression Thresholds ───────────────────────────────────────
+evaluation:
+  minimum_faithfulness: 0.93
+  minimum_answer_relevancy: 0.92
+  minimum_context_precision: 0.90
+  minimum_context_recall: 0.90
+  maximum_latency_ms: 2500
+  warning_zone: 0.02       # Within 2% of threshold → WARNING (not blocking)

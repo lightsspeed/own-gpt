@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Send, Settings, History, FileText, Plus, Loader2,
   Globe, BookOpen, Zap, PanelLeftClose, PanelLeft, Mic, Trash2, MessageSquare,
-  Pin, Edit2, Check, X, MoreHorizontal, ImagePlus
+  Pin, Edit2, Check, X, MoreHorizontal, FileDown
 } from 'lucide-react';
 import {
   Sidebar,
@@ -31,8 +31,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChatMessage } from './ChatMessage';
-import type { MessageData } from './ChatMessage';
+import { ChatMessage } from '@/features/chat/messages';
+import type { MessageData } from '@/features/chat/messages';
 import { DocumentUpload } from '../documents/DocumentUpload';
 import { SettingsModal } from '../settings/SettingsModal';
 import { KnowledgeBaseModal } from '../documents/KnowledgeBaseModal';
@@ -61,6 +61,11 @@ export function ChatLayout() {
   const [input, setInput] = useState('');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
+  // Content buffer for smooth streaming — flushes on each animation frame
+  const contentBuffer = useRef('');
+  const rafPending = useRef(false);
+  const assistantIdRef = useRef('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isKBModalOpen, setKBModalOpen] = useState(false);
@@ -71,14 +76,12 @@ export function ChatLayout() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string; chunks: number; type: string }[]>([]);
-  const [imageAttachments, setImageAttachments] = useState<{ name: string; base64: string; mimeType: string; preview: string }[]>([]);
   const [uploadProgress, setUploadProgress] = useState<{
     filename: string;
     stage: 'reading' | 'uploading' | 'chunking' | 'embedding' | 'done' | 'error';
     chunks?: number;
   } | null>(null);
   const hiddenFileInputRef = useRef<HTMLInputElement>(null);
-  const hiddenImageInputRef = useRef<HTMLInputElement>(null);
   const inputBarRef = useRef<HTMLDivElement>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>({
     model: 'gpt-4o-mini',
@@ -86,6 +89,7 @@ export function ChatLayout() {
     systemPrompt: 'You are a helpful, knowledgeable AI assistant with access to tools including web search and a knowledge base of uploaded documents. Be concise, accurate, and friendly.',
   });
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
 
   const fetchSessions = async () => {
     try {
@@ -135,23 +139,42 @@ export function ChatLayout() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  const downloadPDF = () => {
+    const el = chatRef.current;
+    if (!el || messages.length === 0) return;
+    const styles = Array.from(document.styleSheets).map(s => {
+      try { return Array.from(s.cssRules || []).map(r => r.cssText).join(''); } catch { return ''; }
+    }).join('');
+    const win = window.open('', '_blank');
+    if (!win) { alert('Please allow popups to download PDF'); return; }
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Chat</title>
+<style>${styles}</style>
+<style>
+  body { background: #fff !important; color: #111 !important; padding: 24px !important; min-height: auto !important; }
+  button, .flex.items-center.gap-1, .group-hover\\:opacity-100 { display: none !important; }
+  [class*="opacity-0"] { opacity: 1 !important; }
+  .fixed, .absolute { position: static !important; }
+  .h-screen, .min-h-screen { min-height: auto !important; height: auto !important; }
+</style></head><body>${el.innerHTML}</body></html>`);
+    win.document.close();
+    setTimeout(() => { win.focus(); win.print(); }, 500);
+  };
+
   const handleSend = async () => {
-    if ((!input.trim() && imageAttachments.length === 0) || isLoading) return;
-    const userContent = input.trim() || (imageAttachments.length > 0 ? 'Analyze this image' : '');
+    if (!input.trim() || isLoading) return;
     const userMsg: MessageData = { 
       id: Date.now().toString(), 
       role: 'user', 
-      content: userContent,
-      images: imageAttachments.map(img => img.preview),
+      content: input.trim(),
       timestamp: new Date() 
     };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
-    const imagesToSend = [...imageAttachments];
-    setImageAttachments([]);
     setIsLoading(true);
 
     const assistantMessageId = (Date.now() + 1).toString();
+    assistantIdRef.current = assistantMessageId;
+    setStreamingId(assistantMessageId);
     setMessages(prev => [...prev, {
       id: assistantMessageId,
       role: 'assistant',
@@ -172,11 +195,7 @@ export function ChatLayout() {
           system_prompt: uploadedFiles.length > 0
             ? `${appSettings.systemPrompt}\n\nIMPORTANT: The user has uploaded custom files. You MUST call the 'search_knowledge_base' tool to query and retrieve facts from these documents to construct your answer. Do not answer from your pre-trained memory. Always provide citations (Sources) in your answer referencing the exact filename.`
             : appSettings.systemPrompt,
-          images: imagesToSend.length > 0 ? imagesToSend.map(img => ({
-            base64: img.base64,
-            mimeType: img.mimeType,
-            name: img.name,
-          })) : undefined,
+
         }),
       });
 
@@ -207,12 +226,23 @@ export function ChatLayout() {
             const payload = JSON.parse(dataStr);
             console.log("SSE payload:", payload);
             if (payload.type === 'content') {
-              setMessages(prev => prev.map(m => {
-                if (m.id === assistantMessageId) {
-                  return { ...m, content: m.content + payload.content };
-                }
-                return m;
-              }));
+              // Buffer chunks and flush on next animation frame for smooth rendering
+              contentBuffer.current += payload.content;
+              if (!rafPending.current) {
+                rafPending.current = true;
+                requestAnimationFrame(() => {
+                  const chunk = contentBuffer.current;
+                  contentBuffer.current = '';
+                  rafPending.current = false;
+                  if (!chunk) return;
+                  setMessages(prev => prev.map(m => {
+                    if (m.id === assistantIdRef.current) {
+                      return { ...m, content: m.content + chunk };
+                    }
+                    return m;
+                  }));
+                });
+              }
             } else if (payload.type === 'tool_start') {
               setMessages(prev => {
                 const idx = prev.findIndex(m => m.id === assistantMessageId);
@@ -238,7 +268,7 @@ export function ChatLayout() {
             } else if (payload.type === 'resources') {
               setMessages(prev => prev.map(m => {
                 if (m.id === assistantMessageId) {
-                  return { ...m, resources: payload.resources };
+                  return { ...m, resources: payload.resources, answerMode: payload.answer_mode, answerModeMetadata: payload.answer_mode_metadata };
                 }
                 return m;
               }));
@@ -260,6 +290,7 @@ export function ChatLayout() {
       }));
     } finally {
       setIsLoading(false);
+      setStreamingId(null);
     }
   };
 
@@ -469,6 +500,9 @@ export function ChatLayout() {
               Live
             </span>
             <span>{messages.filter(m => m.role === 'user').length} msgs</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={downloadPDF}>
+              <FileDown size={14} />
+            </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSettingsOpen(true)}>
               <Settings size={14} />
             </Button>
@@ -477,14 +511,27 @@ export function ChatLayout() {
 
         {/* Messages */}
         <ScrollArea className="flex-1 h-full w-full">
-          <div className="max-w-3xl mx-auto px-4 pt-20 pb-40 space-y-5">
+          <div ref={chatRef} className="max-w-3xl mx-auto px-4 pt-20 pb-40 space-y-5">
             {isLoadingHistory ? (
               <div className="flex justify-center items-center h-40 gap-3 text-muted-foreground">
                 <Loader2 className="animate-spin" size={18} />
                 <span className="text-sm">Restoring conversation…</span>
               </div>
             ) : (
-              messages.map(msg => <ChatMessage key={msg.id} {...msg} />)
+              messages.map(msg => (
+                <ChatMessage
+                  key={msg.id}
+                  {...msg}
+                  isStreaming={msg.id === streamingId && msg.role === 'assistant'}
+                  onEdit={(text) => {
+                    setInput(text);
+                    document.getElementById('chat-input')?.focus();
+                  }}
+                  onFeedback={(id, fb) => {
+                    setMessages(prev => prev.map(m => m.id === id ? { ...m, feedback: fb } : m));
+                  }}
+                />
+              ))
             )}
 
             {/* Typing indicator */}
@@ -522,28 +569,6 @@ export function ChatLayout() {
                     >
                       <X size={10} />
                     </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Image Attachment Thumbnails */}
-            {imageAttachments.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                {imageAttachments.map((img, i) => (
-                  <div key={i} className="relative group animate-in fade-in zoom-in-75 duration-200">
-                    <img
-                      src={img.preview}
-                      alt={img.name}
-                      className="w-16 h-16 rounded-xl object-cover border border-white/10 shadow-lg"
-                    />
-                    <button
-                      onClick={() => setImageAttachments(prev => prev.filter((_, idx) => idx !== i))}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 hover:bg-red-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                    >
-                      <X size={10} className="text-white" />
-                    </button>
-                    <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors" />
                   </div>
                 ))}
               </div>
@@ -595,29 +620,6 @@ export function ChatLayout() {
                   setUploadProgress({ filename: file.name, stage: 'error' });
                   setTimeout(() => setUploadProgress(null), 3000);
                 }
-                e.target.value = '';
-              }}
-            />
-
-            {/* Hidden Image Picker */}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              multiple
-              ref={hiddenImageInputRef}
-              className="hidden"
-              onChange={async (e) => {
-                const files = Array.from(e.target.files || []);
-                const results = await Promise.all(files.map(file => new Promise<{ name: string; base64: string; mimeType: string; preview: string }>((resolve) => {
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const dataUrl = reader.result as string;
-                    const base64 = dataUrl.split(',')[1];
-                    resolve({ name: file.name, base64, mimeType: file.type, preview: dataUrl });
-                  };
-                  reader.readAsDataURL(file);
-                })));
-                setImageAttachments(prev => [...prev, ...results]);
                 e.target.value = '';
               }}
             />
@@ -709,16 +711,6 @@ export function ChatLayout() {
                 disabled={isLoadingHistory}
               />
 
-              {/* Image Attach button */}
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-10 w-10 rounded-full flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
-                onClick={() => hiddenImageInputRef.current?.click()}
-              >
-                <ImagePlus size={18} />
-              </Button>
-
               {/* Mic button */}
               <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors">
                 <Mic size={20} />
@@ -730,7 +722,7 @@ export function ChatLayout() {
                 size="icon"
                 className="h-10 w-10 rounded-full bg-white hover:bg-gray-200 text-black shadow-lg transition-transform hover:scale-105 active:scale-95 flex-shrink-0"
                 onClick={handleSend}
-                disabled={isLoading || isLoadingHistory || (!input.trim() && imageAttachments.length === 0)}
+                disabled={isLoading || isLoadingHistory || !input.trim()}
               >
                 <Send size={18} />
               </Button>

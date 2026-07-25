@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Pre-create the FlashRank model cache directory so volume mounts work correctly
+RUN mkdir -p /app/.cache/flashrank
+
 # Change ownership of the app directory to the non-root user
 RUN chown -R appuser:appuser /app
 

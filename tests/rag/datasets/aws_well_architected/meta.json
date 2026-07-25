@@ -1,0 +1,7 @@
+{
+  "display_name": "AWS Well-Architected Framework",
+  "description": "Benchmark questions about the AWS Well-Architected Framework — covering the six pillars: operational excellence, security, reliability, performance efficiency, cost optimization, and sustainability.",
+  "source": "AWS Well-Architected Framework (https://docs.aws.amazon.com/wellarchitected/latest/framework/)",
+  "total_questions": 18,
+  "categories": ["operational_excellence", "security", "reliability", "performance_efficiency", "cost_optimization", "sustainability"]
+}

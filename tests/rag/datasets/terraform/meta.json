@@ -1,0 +1,7 @@
+{
+  "display_name": "Terraform",
+  "description": "Benchmark questions about Terraform by HashiCorp — covering HCL syntax, resources, modules, state management, workspaces, providers, and CLI commands.",
+  "source": "Terraform official documentation (https://developer.hashicorp.com/terraform/docs)",
+  "total_questions": 20,
+  "categories": ["basics", "hcl", "state", "modules", "providers", "cli"]
+}

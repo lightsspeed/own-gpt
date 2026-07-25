@@ -1,0 +1,40 @@
+{"id": "intent-001", "query": "Explain Kubernetes Services", "expected_intent": "knowledge"}
+{"id": "intent-002", "query": "Describe Terraform modules", "expected_intent": "knowledge"}
+{"id": "intent-003", "query": "Tell me about OAuth 2.0", "expected_intent": "knowledge"}
+{"id": "intent-004", "query": "What is FastAPI dependency injection", "expected_intent": "knowledge"}
+{"id": "intent-005", "query": "How does a transformer work", "expected_intent": "knowledge"}
+{"id": "intent-006", "query": "Overview of Kubernetes architecture", "expected_intent": "knowledge"}
+{"id": "intent-007", "query": "Introduction to Terraform state", "expected_intent": "knowledge"}
+{"id": "intent-008", "query": "Difference between Pod and Deployment", "expected_intent": "knowledge"}
+{"id": "intent-009", "query": "Compare FastAPI and Flask", "expected_intent": "knowledge"}
+{"id": "intent-010", "query": "Benefits of Infrastructure as Code", "expected_intent": "knowledge"}
+{"id": "intent-011", "query": "Best practices for Docker security", "expected_intent": "knowledge"}
+{"id": "intent-012", "query": "Architecture of a RAG pipeline", "expected_intent": "knowledge"}
+{"id": "intent-013", "query": "Lifecycle of a Kubernetes Pod", "expected_intent": "knowledge"}
+{"id": "intent-014", "query": "Write a Python function to sort a list", "expected_intent": "coding"}
+{"id": "intent-015", "query": "Fix this bug in the sorting algorithm", "expected_intent": "coding"}
+{"id": "intent-016", "query": "Create a Dockerfile for a Node.js app", "expected_intent": "coding"}
+{"id": "intent-017", "query": "Refactor this class to use dependency injection", "expected_intent": "coding"}
+{"id": "intent-018", "query": "How do I implement JWT authentication in FastAPI", "expected_intent": "coding"}
+{"id": "intent-019", "query": "Latest AI news", "expected_intent": "web"}
+{"id": "intent-020", "query": "Weather in London today", "expected_intent": "web"}
+{"id": "intent-021", "query": "Current price of Bitcoin", "expected_intent": "web"}
+{"id": "intent-022", "query": "Recent releases of Kubernetes", "expected_intent": "web"}
+{"id": "intent-023", "query": "What happened in AI this week", "expected_intent": "web"}
+{"id": "intent-024", "query": "Breaking news in tech", "expected_intent": "web"}
+{"id": "intent-025", "query": "hello", "expected_intent": "general"}
+{"id": "intent-026", "query": "thanks", "expected_intent": "general"}
+{"id": "intent-027", "query": "What is 2+2", "expected_intent": "general"}
+{"id": "intent-028", "query": "5 * 3 =", "expected_intent": "general"}
+{"id": "intent-029", "query": "Convert 10 USD to EUR", "expected_intent": "web"}
+{"id": "intent-030", "query": "Who are you", "expected_intent": "general"}
+{"id": "intent-031", "query": "My name is Alice, remember that", "expected_intent": "memory"}
+{"id": "intent-032", "query": "What do you know about me", "expected_intent": "memory"}
+{"id": "intent-033", "query": "Prove that sqrt(2) is irrational", "expected_intent": "reasoning"}
+{"id": "intent-034", "query": "What is anchoring bias", "expected_intent": "knowledge"}
+{"id": "intent-035", "query": "Explain CAP theorem", "expected_intent": "knowledge"}
+{"id": "intent-036", "query": "Explain Terraform state", "expected_intent": "knowledge"}
+{"id": "intent-037", "query": "Upload this file to the knowledge base", "expected_intent": "tool"}
+{"id": "intent-038", "query": "Send an email to John about the meeting", "expected_intent": "tool"}
+{"id": "intent-039", "query": "Deploy FastAPI on Kubernetes", "expected_intent": "tool"}
+{"id": "intent-040", "query": "Explain anchoring bias in behavioral economics", "expected_intent": "knowledge"}

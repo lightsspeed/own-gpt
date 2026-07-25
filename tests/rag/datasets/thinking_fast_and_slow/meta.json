@@ -1,0 +1,7 @@
+{
+  "display_name": "Thinking, Fast and Slow",
+  "description": "Benchmark questions based on Daniel Kahneman's 'Thinking, Fast and Slow' covering System 1/2, heuristics, biases, prospect theory, decision-making, definitions, applications, multi-hop reasoning, adversarial, and out-of-scope categories.",
+  "source": "Thinking, Fast and Slow by Daniel Kahneman (2011)",
+  "total_questions": 75,
+  "categories": ["system_1_2", "heuristics", "biases", "prospect_theory", "decision_making", "definitions", "applications", "follow_up", "multi_hop", "adversarial", "out_of_scope"]
+}

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Card } from "@/components/ui/card";
-import { Globe, BookOpen, Zap, FileText, Copy, Check, ExternalLink } from 'lucide-react';
+import { Globe, BookOpen, Zap, FileText, Copy, Check, ThumbsUp, ThumbsDown, Edit2 } from 'lucide-react';
+import { EvidencePanel } from '@/components/evidence';
 
 interface ToolCall {
   name: string;
@@ -25,7 +26,21 @@ export interface MessageData {
   tool?: ToolCall;
   timestamp?: Date;
   resources?: ResourceItem[];
-  images?: string[]; // preview data URLs for display
+  images?: string[];
+  feedback?: 'liked' | 'disliked' | null;
+  answerMode?: 'grounded' | 'hybrid' | 'synthesis' | 'no_evidence';
+  answerModeMetadata?: {
+    chunk_count: number;
+    doc_count: number;
+    confidence: number;
+    retrieval_method: string;
+  };
+}
+
+export interface ChatMessageProps extends MessageData {
+  onEdit?: (content: string) => void;
+  onFeedback?: (id: string, feedback: 'liked' | 'disliked' | null) => void;
+  isStreaming?: boolean;
 }
 
 const TOOL_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -46,83 +61,59 @@ const TOOL_META: Record<string, { label: string; icon: React.ReactNode; color: s
   },
 };
 
+
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+
   return (
     <button
-      onClick={copy}
-      className="absolute top-2 right-2 p-1.5 rounded-md bg-blue-500/10 hover:bg-blue-500/25 text-white/50 hover:text-blue-300 transition-all"
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      className={`p-1.5 rounded-md transition-all ${
+        copied
+          ? 'bg-green-500/20 text-green-400'
+          : 'bg-blue-500/10 hover:bg-blue-500/25 text-white/50 hover:text-blue-300'
+      }`}
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
     </button>
   );
 }
 
-function SourceCard({ res, index }: { res: ResourceItem; index: number }) {
-  const [showTooltip, setShowTooltip] = useState(false);
-  const isWeb = res.type === 'web';
-  const shortTitle = isWeb
-    ? (res.url ? new URL(res.url).hostname.replace('www.', '') : res.title)
-    : res.title;
+function MessageActionButton({ icon, label, active, onClick }: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  const [clicked, setClicked] = useState(false);
 
-  const inner = (
-    <div
-      className="relative"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+  return (
+    <button
+      onClick={() => {
+        onClick?.();
+        setClicked(true);
+        setTimeout(() => setClicked(false), 600);
+      }}
+      title={label}
+      className={`p-1.5 rounded-md transition-all active:scale-90 ${
+        active
+          ? 'bg-blue-500/20 text-blue-400'
+          : clicked
+            ? 'bg-white/10 text-white/70'
+            : 'text-white/30 hover:text-white/70 hover:bg-white/5'
+      }`}
     >
-      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-all select-none max-w-[220px]
-        ${ isWeb
-          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/40'
-          : 'bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20 hover:border-blue-500/40'
-        }`}
-      >
-        {isWeb
-          ? <Globe size={11} className="flex-shrink-0" />
-          : <FileText size={11} className="flex-shrink-0" />
-        }
-        <span className="truncate">{shortTitle}</span>
-        {isWeb && <ExternalLink size={10} className="flex-shrink-0 opacity-50" />}
-      </div>
-
-      {/* Hover Tooltip Preview */}
-      {showTooltip && res.snippet && (
-        <div className="absolute bottom-full left-0 mb-2 z-50 w-64 pointer-events-none animate-in fade-in slide-in-from-bottom-1 duration-150">
-          <div className="bg-[#1a1b1e] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className={`flex items-center gap-2 px-3 py-2 border-b border-white/5
-              ${ isWeb ? 'bg-emerald-500/10' : 'bg-blue-500/10' }`}
-            >
-              {isWeb
-                ? <Globe size={12} className="text-emerald-400 flex-shrink-0" />
-                : <FileText size={12} className="text-blue-400 flex-shrink-0" />
-              }
-              <span className="text-xs font-semibold text-white/80 truncate">{shortTitle}</span>
-            </div>
-            {/* Snippet */}
-            <div className="px-3 py-2.5">
-              <p className="text-[11px] text-white/60 leading-relaxed line-clamp-4">{res.snippet}</p>
-            </div>
-          </div>
-          {/* Arrow */}
-          <div className="absolute left-4 bottom-[-5px] w-2.5 h-2.5 bg-[#1a1b1e] border-r border-b border-white/10 rotate-45" />
-        </div>
-      )}
-    </div>
+      {icon}
+    </button>
   );
-
-  if (isWeb && res.url) {
-    return <a key={index} href={res.url} target="_blank" rel="noopener noreferrer">{inner}</a>;
-  }
-  return <div key={index}>{inner}</div>;
 }
 
-export function ChatMessage({ role, content, tool, timestamp, resources, images }: MessageData) {
+export const ChatMessage = memo(function ChatMessage({ id, role, content, tool, timestamp, resources, images, feedback, answerMode, answerModeMetadata, onEdit, onFeedback, isStreaming }: ChatMessageProps) {
   // Tool event pill – shown inline between messages
   if (role === 'tool_event' && tool) {
     const meta = TOOL_META[tool.name] || {
@@ -145,8 +136,8 @@ export function ChatMessage({ role, content, tool, timestamp, resources, images 
           {tool.status === 'done' && <span className="ml-1 opacity-60">✓</span>}
         </div>
       </div>
-    );
-  }
+  );
+}
 
   const isUser = role === 'user';
 
@@ -173,9 +164,16 @@ export function ChatMessage({ role, content, tool, timestamp, resources, images 
                 {content}
               </div>
             )}
+            {/* Question actions */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <MessageActionButton icon={<Copy size={12} />} label="Copy" onClick={() => navigator.clipboard.writeText(content)} />
+              {onEdit && (
+                <MessageActionButton icon={<Edit2 size={12} />} label="Edit" onClick={() => onEdit(content)} />
+              )}
+            </div>
           </div>
         ) : (
-          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 w-full">
+          <div className="w-full">
             <div className="
               prose prose-invert prose-sm max-w-[95%]
               prose-p:my-3 prose-p:leading-relaxed prose-p:text-gray-300 prose-p:text-[15px]
@@ -199,65 +197,78 @@ export function ChatMessage({ role, content, tool, timestamp, resources, images 
                 remarkPlugins={[remarkGfm]}
                 components={{
                   code({ node, className, children, ...props }: any) {
-                    const match = /language-(\w+)/.exec(className || '');
-                    const codeString = String(children).replace(/\n$/, '');
-                    const isBlock = match || codeString.includes('\n');
-                    if (isBlock) {
-                      return (
-                        <div className="relative my-3 rounded-xl overflow-hidden border border-blue-500/20">
-                          <div className="flex items-center justify-between px-4 py-1.5 bg-blue-950/60 border-b border-blue-500/10">
-                            <span className="text-xs text-blue-300/60 font-mono">{match ? match[1] : 'code'}</span>
-                            <CopyButton text={codeString} />
-                          </div>
-                          <SyntaxHighlighter
-                            style={oneDark}
-                            language={match ? match[1] : 'text'}
-                            PreTag="div"
-                            customStyle={{
-                              margin: 0,
-                              padding: '1rem',
-                              background: 'rgba(0,0,0,0.4)',
-                              fontSize: '0.8rem',
-                              lineHeight: '1.6',
-                            }}
-                            {...props}
-                          >
-                            {codeString}
-                          </SyntaxHighlighter>
-                        </div>
-                      );
-                    }
+                  const match = /language-(\w+)/.exec(className || '');
+                  const codeString = String(children).replace(/\n$/, '');
+                  const isBlock = match || codeString.includes('\n');
+                  if (isBlock) {
                     return (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    );
-                  },
-                  // Render horizontal rules as proper dividers
-                  hr: () => <hr className="border-white/10 my-4" />,
-                  // Open links in new tab
-                  a: ({ href, children, ...props }: any) => (
-                    <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                      <div className="relative my-3 rounded-xl overflow-hidden border border-blue-500/20">
+                        <div className="flex items-center justify-between px-4 py-1.5 bg-blue-950/60 border-b border-blue-500/10">
+                          <span className="text-xs text-blue-300/60 font-mono">{match ? match[1] : 'code'}</span>
+                          <CopyButton text={codeString} />
+                        </div>
+                        <SyntaxHighlighter
+                          style={oneDark}
+                          language={match ? match[1] : 'text'}
+                          PreTag="div"
+                          customStyle={{
+                            margin: 0,
+                            padding: '1rem',
+                            background: 'rgba(0,0,0,0.4)',
+                            fontSize: '0.8rem',
+                            lineHeight: '1.6',
+                          }}
+                          {...props}
+                        >
+                          {codeString}
+                        </SyntaxHighlighter>
+    </div>
+  );
+}
+                  return (
+                    <code className={className} {...props}>
                       {children}
-                    </a>
-                  ),
-                }}
-              >
-                {content}
-              </ReactMarkdown>
+                    </code>
+                  );
+                },
+                hr: () => <hr className="border-white/10 my-4" />,
+                a: ({ href, children, ...props }: any) => (
+                  <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                    {children}
+                  </a>
+                ),
+              }}
+            >
+              {content}
+            </ReactMarkdown>
             </div>
 
-            {/* Resources Section */}
-            {resources && resources.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-white/5">
-                <span className="text-xs text-muted-foreground/60 mb-2 font-medium flex items-center gap-1.5">
-                  <BookOpen size={11} /> Sources
-                </span>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {resources.map((res, i) => (
-                    <SourceCard key={i} res={res} index={i} />
-                  ))}
-                </div>
+            {/* Evidence Panel — unified answer mode, sources, confidence, pipeline, debug */}
+            <EvidencePanel
+              answerMode={answerMode}
+              retrievalMethod={answerModeMetadata?.retrieval_method}
+              chunkCount={answerModeMetadata?.chunk_count}
+              docCount={answerModeMetadata?.doc_count}
+              confidence={answerModeMetadata?.confidence}
+              resources={resources}
+              isStreaming={isStreaming}
+            />
+            {/* Answer actions — only after streaming completes */}
+            {content && !isStreaming && (
+              <div className="flex items-center gap-1 mt-2">
+                <MessageActionButton icon={<Copy size={12} />} label="Copy" onClick={() => navigator.clipboard.writeText(content)} />
+                <MessageActionButton
+                  icon={<ThumbsUp size={12} />}
+                  label="Like"
+                  active={feedback === 'liked'}
+                  onClick={() => onFeedback?.(id, feedback === 'liked' ? null : 'liked')}
+                />
+                <MessageActionButton
+                  icon={<ThumbsDown size={12} />}
+                  label="Dislike"
+                  active={feedback === 'disliked'}
+                  onClick={() => onFeedback?.(id, feedback === 'disliked' ? null : 'disliked')}
+                />
               </div>
             )}
           </div>
@@ -270,4 +281,4 @@ export function ChatMessage({ role, content, tool, timestamp, resources, images 
       </div>
     </div>
   );
-}
+});

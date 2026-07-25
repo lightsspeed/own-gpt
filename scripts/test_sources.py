@@ -1,0 +1,20 @@
+import requests
+
+r = requests.post("http://localhost:8000/api/v1/chat/evaluate",
+    json={"message": "What is terraform state?"}, timeout=60)
+data = r.json()
+trace = data.get("trace", {})
+print("Trace keys:", list(trace.keys())[:20])
+print(f"  intent: {trace.get('intent', 'N/A')}")
+print(f"  route_decision: {trace.get('route_decision', 'N/A')}")
+print(f"  intent_confidence: {trace.get('intent_confidence', 'N/A')}")
+print(f"  intent_used_llm: {trace.get('intent_used_llm', 'N/A')}")
+print(f"  retriever_type: {trace.get('retriever_type', 'N/A')}")
+print(f"  top_k: {trace.get('top_k', 'N/A')}")
+print(f"  similarity_threshold: {trace.get('similarity_threshold', 'N/A')}")
+print(f"  confidence_decision: {trace.get('confidence_decision', 'N/A')}")
+print(f"  num_retrieved: {trace.get('num_retrieved', 'N/A')}")
+print(f"  num_reranked: {trace.get('num_reranked', 'N/A')}")
+print(f"  vector_search_ms: {trace.get('vector_search_ms', 'N/A')}")
+print(f"  bm25_ms: {trace.get('bm25_ms', 'N/A')}")
+print(f"  rewritten_query: {trace.get('rewritten_query', 'N/A')}")

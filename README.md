@@ -62,8 +62,24 @@ OwnGPT is a fully-featured, local generative AI chatbot application. It features
 - `/app` - FastAPI application and LangGraph agent logic
   - `/api` - REST endpoints (chat streaming, document upload)
   - `/agent` - LangGraph nodes, state definitions, and tools
+  - `/evaluation` - Benchmarking, analytics, regression gates, and reporting
   - `/models` - SQLAlchemy database models
   - `/services` - pgvector integration and utility services
+- `/docs` - Architecture and developer documentation
+- `/tests/rag/datasets` - Benchmark datasets (thinking_fast_and_slow, fastapi, kubernetes, terraform, aws_well_architected)
+- `/scripts` - Ingestion, testing, and verification utilities
+
+## Documentation
+
+See the [docs/](docs/) directory for detailed guides:
+
+- [Architecture](docs/architecture.md) — system design and component interactions
+- [Evaluation](docs/evaluation.md) — scoring methodology, analytics, and regression gates
+- [Benchmark](docs/benchmark.md) — how to run, interpret, and configure benchmarks
+- [Datasets](docs/datasets.md) — available datasets and how to add new ones
+- [CI/CD](docs/ci-cd.md) — GitHub Actions workflow and quality gates
+- [Reproducibility](docs/reproducibility.md) — metadata capture and dependency freezing
+- [Developer Guide](docs/developer-guide.md) — setup, ingestion, extension, and troubleshooting
 
 ## License
 MIT License

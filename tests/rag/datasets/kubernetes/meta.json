@@ -1,0 +1,7 @@
+{
+  "display_name": "Kubernetes",
+  "description": "Benchmark questions about Kubernetes container orchestration — covering pods, deployments, services, configmaps, RBAC, networking, storage, and scheduling.",
+  "source": "Kubernetes official documentation (https://kubernetes.io/docs/)",
+  "total_questions": 20,
+  "categories": ["basics", "workloads", "networking", "storage", "security", "scheduling"]
+}

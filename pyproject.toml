@@ -1,0 +1,11 @@
+[project]
+name = "own-gpt"
+version = "0.1.0"
+description = "RAG-powered conversational AI with hybrid search and evaluation"
+requires-python = ">=3.11"
+
+[project.scripts]
+rag = "app.evaluation.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

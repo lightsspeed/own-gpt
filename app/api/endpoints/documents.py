@@ -79,12 +79,22 @@ async def upload_document(file: UploadFile = File(...)):
         )
         splits = splitter.split_documents(docs)
 
-        # Inject filename into metadata for traceability
+        # Inject metadata for traceability and coverage analysis
+        import uuid
         for chunk in splits:
             chunk.metadata["filename"] = file.filename
+            chunk.metadata["chunk_id"] = str(uuid.uuid4())
 
         # --- Embed & store ---
-        add_documents_to_store(splits)
+        ids = [chunk.metadata["chunk_id"] for chunk in splits]
+        add_documents_to_store(splits, ids=ids)
+
+        # Incrementally update Whoosh BM25 index
+        try:
+            from app.core.whoosh_manager import add_to_whoosh_index
+            add_to_whoosh_index(splits)
+        except Exception as whoosh_err:
+            logger.warning("whoosh_incremental_update_failed error=%s", whoosh_err)
 
         return DocumentResponse(
             filename=file.filename,
@@ -108,17 +118,18 @@ async def list_documents(db: AsyncSession = Depends(get_db)):
     from the pgvector table. Groups by filename to count chunks.
     """
     try:
-        # Group by the 'filename' key inside the JSONB 'cmetadata' column
+        # Group by the 'filename' key inside the JSONB 'cmetadata' column.
+        # Use COALESCE to handle legacy chunks where filename was not set.
         query = text("""
-            SELECT cmetadata->>'filename' as filename, count(*) as chunks
+            SELECT COALESCE(cmetadata->>'filename', cmetadata->>'source', 'unknown') as filename,
+                   count(*) as chunks
             FROM langchain_pg_embedding
-            WHERE cmetadata ? 'filename'
-            GROUP BY cmetadata->>'filename'
+            GROUP BY COALESCE(cmetadata->>'filename', cmetadata->>'source', 'unknown')
             ORDER BY filename ASC
         """)
         result = await db.execute(query)
         rows = result.fetchall()
-        
+
         docs = [{"filename": row.filename, "chunks": row.chunks} for row in rows]
         return docs
     except Exception as e:
@@ -129,17 +140,19 @@ async def list_documents(db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{filename}")
+@router.delete("/{filename:path}")
 async def delete_document(filename: str, db: AsyncSession = Depends(get_db)):
     """
     Deletes all vector chunks associated with a specific filename.
+    Supports filenames with '/' (from source paths).
     """
     try:
         query = text("""
             DELETE FROM langchain_pg_embedding
             WHERE cmetadata->>'filename' = :filename
+               OR cmetadata->>'source' = :filename2
         """)
-        await db.execute(query, {"filename": filename})
+        await db.execute(query, {"filename": filename, "filename2": filename})
         await db.commit()
         return {"status": "success", "message": f"Deleted {filename}"}
     except Exception as e:

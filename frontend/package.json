@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "oxlint",
+    "lint": "oxlint && node scripts/check-design-tokens.mjs",
+    "lint:tokens": "node scripts/check-design-tokens.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -24,10 +25,12 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "html2pdf.js": "^0.14.0",
     "lucide-react": "^1.25.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.18.1",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0"

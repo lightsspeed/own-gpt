@@ -1,0 +1,20 @@
+ingestion:
+  source_dir: "./test_ingest_src"
+  recursive: true
+  supported_extensions:
+    - .pdf
+    - .docx
+    - .pptx
+    - .csv
+    - .xlsx
+    - .html
+    - .htm
+  chunking:
+    chunk_size: 1000
+    chunk_overlap: 200
+  manifest:
+    path: "data/ingestion/manifest.json"
+  processing:
+    batch_size: 10
+    max_retries: 2
+    retry_delay: 1.0

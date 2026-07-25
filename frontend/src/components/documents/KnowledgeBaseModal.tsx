@@ -96,7 +96,7 @@ export function KnowledgeBaseModal({ open, onOpenChange }: KnowledgeBaseModalPro
                     key={i}
                     className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-colors group"
                   >
-                    <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
                       <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
                         <FileText size={18} className="text-blue-400" />
                       </div>
