@@ -42,15 +42,15 @@ export const api = {
     temperature?: number;
     systemPrompt?: string;
     uploadedFiles?: { name: string; chunks: number; type: string }[];
-    activeTools?: Record<string, boolean>;
+    activeTools?: Record<string, string>;
     context?: ContextItem[];
   }): Promise<Response> {
     const { sessionId, message, model, temperature, systemPrompt, uploadedFiles, activeTools, context } = params;
     let prompt = systemPrompt || '';
 
     const toolInstructions: string[] = [];
-    const webOn = activeTools?.web;
-    const kbOn = activeTools?.kb;
+    const webOn = activeTools?.web_search === 'auto' || activeTools?.web_search === 'manual';
+    const kbOn = activeTools?.knowledge_base === 'auto' || activeTools?.knowledge_base === 'manual';
 
     if (webOn && !kbOn) {
       toolInstructions.push('CRITICAL: You MUST use the web search tool to find real-time information. Do NOT answer from your pre-trained knowledge or memory. Do NOT search the knowledge base. Every factual claim MUST be backed by a web search result with a URL citation. If you cannot find information via web search, state that clearly.');
@@ -79,7 +79,10 @@ export const api = {
         model,
         temperature,
         system_prompt: prompt,
-        active_tools: activeTools,
+        active_tools: activeTools ? {
+          web: activeTools.web_search === 'auto' || activeTools.web_search === 'manual',
+          kb: activeTools.knowledge_base === 'auto' || activeTools.knowledge_base === 'manual',
+        } : undefined,
         context: context?.map(c => ({ category: c.category, label: c.label, value: c.value })),
       }),
     });
