@@ -3,6 +3,9 @@ import { Search, MessageSquare, FileText, Code, Wrench, Hash, Command } from 'lu
 import { cn } from '@/lib/utils'
 import { api } from '@/features/chat/services/chatApi'
 
+const searchCache = new Map<string, { results: SearchResult[]; total: number }>()
+const MAX_CACHE = 50
+
 interface SearchResult {
   session_id: string
   session_title: string
@@ -48,9 +51,18 @@ export function SearchPalette({ open, onClose, onSelect, onNewChat }: SearchPale
 
   const doSearch = useCallback(async (q: string, f: string) => {
     if (!q.trim()) { setResults([]); return }
+    const key = `${q}:${f}`
+    const cached = searchCache.get(key)
+    if (cached) { setResults(cached.results); return }
     setLoading(true)
     const data = await api.search(q, f, 20)
-    setResults(data.results || [])
+    const results = data.results || []
+    if (searchCache.size >= MAX_CACHE) {
+      const firstKey = searchCache.keys().next().value
+      if (firstKey) searchCache.delete(firstKey)
+    }
+    searchCache.set(key, { results, total: data.total })
+    setResults(results)
     setLoading(false)
     setSelectedIdx(0)
   }, [])

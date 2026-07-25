@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
@@ -71,7 +71,7 @@ interface ArtifactCardProps {
   onAction?: (action: { label: string; href?: string }) => void
 }
 
-export function ArtifactCard({ artifact, onAction }: ArtifactCardProps) {
+export const ArtifactCard = React.memo(function ArtifactCard({ artifact, onAction }: ArtifactCardProps) {
   const cfg = TYPE_CONFIG[artifact.type] || TYPE_CONFIG.finding
   const [copied, setCopied] = useState(false)
 
@@ -197,7 +197,7 @@ export function ArtifactCard({ artifact, onAction }: ArtifactCardProps) {
       </div>
     </div>
   )
-}
+})
 
 function timeAgo(dateStr: string): string {
   const now = Date.now()

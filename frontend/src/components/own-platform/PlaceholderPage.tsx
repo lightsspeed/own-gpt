@@ -5,7 +5,7 @@ interface PlaceholderPageProps {
   description?: string
 }
 
-export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
+function PlaceholderPageInner({ title, description }: PlaceholderPageProps) {
   return (
     <div className="flex-1 flex items-center justify-center px-6">
       <div className="max-w-md text-center space-y-4">
@@ -23,3 +23,6 @@ export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
     </div>
   )
 }
+
+export { PlaceholderPageInner as PlaceholderPage }
+export default PlaceholderPageInner

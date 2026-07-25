@@ -1,3 +1,4 @@
+import React from 'react'
 import { cn } from '@/lib/utils'
 
 const TOOL_MAP: Record<string, { icon: string; label: string; color: string }> = {
@@ -14,7 +15,7 @@ interface ToolChipsProps {
   className?: string
 }
 
-export function ToolChips({ tools, className }: ToolChipsProps) {
+function ToolChipsInner({ tools, className }: ToolChipsProps) {
   if (!tools || tools.length === 0) return null
 
   return (
@@ -38,3 +39,5 @@ export function ToolChips({ tools, className }: ToolChipsProps) {
     </div>
   )
 }
+
+export const ToolChips = React.memo(ToolChipsInner)

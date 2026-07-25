@@ -449,3 +449,5 @@ function AutoRow({ name, status }: { name: string; status: string }) {
     </div>
   )
 }
+
+export default DashboardPage

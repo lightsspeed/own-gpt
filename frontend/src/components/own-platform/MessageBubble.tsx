@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, Globe, ExternalLink, RefreshCw, ChevronDown } from 'lucide-react'
 import type { EvidenceItem, ResourceItem } from '@/features/chat/types'
@@ -24,7 +24,7 @@ interface MessageBubbleProps {
   onRegenerate?: () => void
 }
 
-export function MessageBubble({ role, content, isStreaming, evidence, resources, answerMode, onEdit, onRegenerate }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, evidence, resources, answerMode, onEdit, onRegenerate }: MessageBubbleProps) {
   const isUser = role === 'user'
   const [showActions, setShowActions] = useState(false)
   const [collapsed, setCollapsed] = useState(true)
@@ -135,7 +135,7 @@ export function MessageBubble({ role, content, isStreaming, evidence, resources,
       />
     </div>
   )
-}
+})
 
 function UserActions({ content, onEdit }: { content: string; onEdit?: (content: string) => void }) {
   const [copied, setCopied] = useState(false)

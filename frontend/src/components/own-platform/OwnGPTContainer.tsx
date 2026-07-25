@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { ConversationSidebar } from './ConversationSidebar'
 import { OwnGPTPage } from './OwnGPTPage'
 import { SearchPalette } from './SearchPalette'
+import { PerformanceMetrics } from './PerformanceMetrics'
 import { SettingsPanel } from './SettingsPanel'
 import { Menu, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -137,6 +138,9 @@ export function OwnGPTContainer() {
       </main>
 
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <PerformanceMetrics />
     </div>
   )
 }
+
+export default OwnGPTContainer
