@@ -8,6 +8,7 @@ import { ContextPanel } from './ContextPanel'
 import { ContextBar } from './ContextBar'
 import { ArtifactCard } from './ArtifactCard'
 import { ToolChips } from './ToolChips'
+import { ScrollToBottom } from './ScrollToBottom'
 import type { ResourceItem } from '@/features/chat/types'
 
 interface OwnGPTPageProps {
@@ -48,17 +49,37 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
   const hasMessages = visibleMessages.length > 0
 
   const isNearBottom = useRef(true)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const [newMsgCount, setNewMsgCount] = useState(0)
+  const [scrollProgress, setScrollProgress] = useState(0)
+  const prevMsgLen = useRef(visibleMessages.length)
+
+  const scrollToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setNewMsgCount(0)
+  }, [bottomRef])
+
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    isNearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+    isNearBottom.current = near
+    setShowScrollBtn(!near)
+    const progress = el.scrollHeight > el.clientHeight
+      ? el.scrollTop / (el.scrollHeight - el.clientHeight)
+      : 0
+    setScrollProgress(progress)
   }, [])
 
   useEffect(() => {
     if (isNearBottom.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setNewMsgCount(0)
+    } else if (isLoading && visibleMessages.length > prevMsgLen.current) {
+      setNewMsgCount(c => c + 1)
     }
-  }, [messages, isLoading, bottomRef])
+    prevMsgLen.current = visibleMessages.length
+  }, [messages, isLoading, bottomRef, visibleMessages.length])
 
   const streamingMsg = messages.find(m => m.id === streamingId)
   const showSpinner = isLoading && streamingId !== null && streamingMsg && !streamingMsg.content
@@ -87,15 +108,29 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     }
   }
 
-  return (
+    return (
     <div className="flex flex-col h-full">
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="overflow-y-auto custom-scrollbar flex-1"
-      >
-        <div className="pt-6 pb-4 px-6">
-          <div className="max-w-[860px] mx-auto space-y-6">
+      <div className="relative flex-1">
+        {/* Scroll progress rail */}
+        <div className="absolute right-1 top-0 bottom-0 w-[3px] z-10 pointer-events-none">
+          <div
+            className="w-full bg-border/10 rounded-full transition-opacity"
+            style={{ height: '100%' }}
+          >
+            <div
+              className="w-full bg-primary/40 rounded-full transition-all duration-100"
+              style={{ height: `${scrollProgress * 100}%` }}
+            />
+          </div>
+        </div>
+
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="overflow-y-auto custom-scrollbar h-full"
+        >
+          <div className="pt-6 pb-4 px-6">
+            <div className="max-w-[860px] mx-auto space-y-6">
             {messages.map((msg, idx) => {
               if (msg.role === 'tool_event') return null
               return (
@@ -184,6 +219,18 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
           </div>
         </div>
       </div>
+
+      {/* Scroll-to-bottom button */}
+      <div className="absolute bottom-0 left-0 right-0 pointer-events-none" style={{ transform: 'translateY(-16px)' }}>
+        <div className="pointer-events-auto" style={{ display: showScrollBtn ? 'block' : 'none' }}>
+          <ScrollToBottom
+            visible={showScrollBtn}
+            onClick={scrollToBottom}
+            newMessages={newMsgCount || undefined}
+          />
+        </div>
+      </div>
+    </div>
 
       <div className="pb-4">
         <ContextBar

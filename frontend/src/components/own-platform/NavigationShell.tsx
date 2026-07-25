@@ -14,79 +14,106 @@ export interface NavItem {
   children?: NavItem[]
 }
 
-const DEFAULT_NAV_ITEMS: NavItem[] = [
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const NAV_GROUPS: NavGroup[] = [
   {
-    id: 'dashboard',
-    label: 'Dashboard',
-    icon: <Activity size={20} />,
-    path: '/dashboard',
-  },
-  {
-    id: 'owngpt',
-    label: 'OwnGPT',
-    icon: <Sparkles size={20} />,
-    path: '/',
-  },
-  {
-    id: 'ownops',
-    label: 'OwnOps',
-    icon: <Zap size={20} />,
-    path: '/operations',
-    children: [
-      { id: 'findings', label: 'Findings', icon: null, path: '/findings' },
-      { id: 'evaluation', label: 'Evaluation', icon: null, path: '/evaluation' },
+    label: 'Core',
+    items: [
+      {
+        id: 'owngpt',
+        label: 'OwnGPT',
+        icon: <Sparkles size={20} />,
+        path: '/',
+      },
+      {
+        id: 'dashboard',
+        label: 'Dashboard',
+        icon: <Activity size={20} />,
+        path: '/dashboard',
+      },
+      {
+        id: 'ownops',
+        label: 'OwnOps',
+        icon: <Zap size={20} />,
+        path: '/operations',
+        children: [
+          { id: 'findings', label: 'Findings', icon: null, path: '/findings' },
+          { id: 'evaluation', label: 'Evaluation', icon: null, path: '/evaluation' },
+        ],
+      },
     ],
   },
   {
-    id: 'ownmonitor',
-    label: 'OwnMonitor',
-    icon: <Monitor size={20} />,
-    path: '/monitor',
-    children: [
-      { id: 'recommendations', label: 'Recommendations', icon: null, path: '/recommendations' },
-      { id: 'decisions', label: 'Decisions', icon: null, path: '/decisions' },
+    label: 'Observability',
+    items: [
+      {
+        id: 'ownmonitor',
+        label: 'OwnMonitor',
+        icon: <Monitor size={20} />,
+        path: '/monitor',
+        children: [
+          { id: 'recommendations', label: 'Recommendations', icon: null, path: '/recommendations' },
+          { id: 'decisions', label: 'Decisions', icon: null, path: '/decisions' },
+        ],
+      },
+      {
+        id: 'ownanalytics',
+        label: 'OwnAnalytics',
+        icon: <BarChart3 size={20} />,
+        path: '/analytics',
+      },
     ],
   },
   {
-    id: 'ownlearn',
-    label: 'OwnLearn',
-    icon: <BookOpen size={20} />,
-    path: '/learn',
-    children: [
-      { id: 'capabilities', label: 'Capabilities', icon: null, path: '/capabilities' },
+    label: 'Development',
+    items: [
+      {
+        id: 'ownlab',
+        label: 'OwnLab',
+        icon: <Beaker size={20} />,
+        path: '/experiments',
+      },
+      {
+        id: 'ownflow',
+        label: 'OwnFlow',
+        icon: <GitBranch size={20} />,
+        path: '/automation',
+      },
     ],
   },
   {
-    id: 'ownlab',
-    label: 'OwnLab',
-    icon: <Beaker size={20} />,
-    path: '/experiments',
-  },
-  {
-    id: 'ownanalytics',
-    label: 'OwnAnalytics',
-    icon: <BarChart3 size={20} />,
-    path: '/analytics',
-  },
-  {
-    id: 'ownflow',
-    label: 'OwnFlow',
-    icon: <GitBranch size={20} />,
-    path: '/automation',
-  },
-  {
-    id: 'ownartifacts',
-    label: 'OwnArtifacts',
-    icon: <Archive size={20} />,
-    path: '/artifacts',
-  },
-  {
-    id: 'ownconfig',
-    label: 'OwnConfig',
-    icon: <Cog size={20} />,
-    path: '/config/snapshots',
+    label: 'Configuration',
+    items: [
+      {
+        id: 'ownlearn',
+        label: 'OwnLearn',
+        icon: <BookOpen size={20} />,
+        path: '/learn',
+        children: [
+          { id: 'capabilities', label: 'Capabilities', icon: null, path: '/capabilities' },
+        ],
+      },
+      {
+        id: 'ownartifacts',
+        label: 'OwnArtifacts',
+        icon: <Archive size={20} />,
+        path: '/artifacts',
+      },
+      {
+        id: 'ownconfig',
+        label: 'OwnConfig',
+        icon: <Cog size={20} />,
+        path: '/config/snapshots',
+      },
+    ],
   },
 ]
+
+const DEFAULT_NAV_ITEMS = NAV_GROUPS.flatMap(g => g.items)
 
 interface NavigationShellProps {
   children: React.ReactNode
@@ -167,60 +194,86 @@ export function NavigationShell({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 custom-scrollbar">
-          <div className="space-y-0.5">
-            {filteredItems.map(item => (
-              <div key={item.id}>
-                <button
-                  onClick={() => {
-                    if (item.children) {
-                      toggleSection(item.id)
-                    } else {
-                      onNavigate?.(item.path)
-                    }
-                  }}
-                  className={cn(
-                    'group relative flex items-center gap-3 w-full rounded-lg px-3 py-2.5 transition-all text-left',
-                    isActive(item.path)
-                      ? 'bg-elevated text-foreground font-semibold'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-hover',
+          <div className="space-y-4">
+            {NAV_GROUPS.map((group, gi) => {
+              const groupItems = searchQuery
+                ? filteredItems.filter(fi => group.items.some(i => i.id === fi.id))
+                : group.items
+              if (groupItems.length === 0) return null
+              return (
+                <div key={gi}>
+                  {!searchQuery && (
+                    <div className="px-3 py-1.5">
+                      <span className="text-caption font-semibold uppercase tracking-wider text-muted-foreground/40">
+                        {group.label}
+                      </span>
+                    </div>
                   )}
-                >
-                  {item.id === currentPath.split('/')[1] && (
-                    <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary" />
-                  )}
-                  {item.icon && <span className="shrink-0">{item.icon}</span>}
-                  <span className="text-small flex-1">{item.label}</span>
-                  {item.children && (
-                    <span className={cn(
-                      'text-muted-foreground transition-transform',
-                      expandedSections.has(item.id) && 'rotate-180',
-                    )}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </span>
-                  )}
-                </button>
-                {item.children && expandedSections.has(item.id) && (
-                  <div className="ml-3 space-y-0.5 mt-0.5">
-                    {item.children.map(child => (
-                      <button
-                        key={child.id}
-                        onClick={() => onNavigate?.(child.path)}
-                        className={cn(
-                          'flex items-center gap-3 w-full rounded-lg py-2 px-3 transition-all text-left text-small',
-                          isActive(child.path)
-                            ? 'text-foreground bg-elevated font-semibold'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-hover',
-                        )}
-                      >
-                        {child.label}
-                      </button>
-                    ))}
+                  <div className="space-y-0.5">
+                    {groupItems.map(item => {
+                      const active = isActive(item.path)
+                      const expanded = expandedSections.has(item.id)
+                      return (
+                        <div key={item.id}>
+                          <button
+                            onClick={() => {
+                              if (item.children) {
+                                toggleSection(item.id)
+                              } else {
+                                onNavigate?.(item.path)
+                              }
+                            }}
+                            className={cn(
+                              'group relative flex items-center gap-3 w-full rounded-lg px-3 py-2.5 transition-all text-left',
+                              active
+                                ? 'text-foreground font-semibold'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-hover',
+                            )}
+                          >
+                            {/* Left accent bar */}
+                            <span className={cn(
+                              'absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full transition-all duration-200',
+                              active ? 'bg-primary opacity-100' : 'bg-transparent opacity-0 group-hover:bg-border/40 group-hover:opacity-100',
+                            )} />
+                            {item.icon && <span className={cn('shrink-0 transition-colors', active ? 'text-primary' : '')}>{item.icon}</span>}
+                            <span className="text-small flex-1">{item.label}</span>
+                            {item.children && (
+                              <span className={cn(
+                                'text-muted-foreground transition-transform duration-200',
+                                expanded && 'rotate-180',
+                              )}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="m6 9 6 6 6-6" />
+                                </svg>
+                              </span>
+                            )}
+                          </button>
+                          {item.children && expanded && (
+                            <div className="ml-3 space-y-0.5 mt-0.5 overflow-hidden animate-slide-down">
+                              {item.children.map(child => (
+                                <button
+                                  key={child.id}
+                                  onClick={() => onNavigate?.(child.path)}
+                                  className={cn(
+                                    'flex items-center gap-3 w-full rounded-lg py-2 px-3 transition-all text-left text-small',
+                                    isActive(child.path)
+                                      ? 'text-foreground font-semibold'
+                                      : 'text-muted-foreground hover:text-foreground hover:bg-hover',
+                                  )}
+                                >
+                                  <span className="w-1 h-1 rounded-full bg-border/40 shrink-0" />
+                                  {child.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              )
+            })}
           </div>
         </nav>
 
