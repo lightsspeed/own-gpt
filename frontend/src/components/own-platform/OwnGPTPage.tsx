@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { cn } from '@/lib/utils'
 import { useChat } from '@/features/chat/hooks/useChat'
 import { Composer } from './Composer'
 import { MessageBubble } from './MessageBubble'
@@ -120,29 +121,100 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     }
   }
 
+  const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null)
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const handleNavigatorClick = useCallback((_anchorId: string, targetMsgId: string) => {
+    setHighlightedMsgId(targetMsgId)
+    if (highlightTimer.current) clearTimeout(highlightTimer.current)
+    highlightTimer.current = setTimeout(() => setHighlightedMsgId(null), 2000)
+  }, [])
+
+  function extractHeadings(content: string): string[] {
+    const headings: string[] = []
+    const lines = content.split('\n')
+    for (const line of lines) {
+      const match = line.match(/^(#{1,3})\s+(.+)$/)
+      if (match) headings.push(match[2].trim())
+    }
+    return headings.slice(0, 5)
+  }
+
   const anchors: NavigatorAnchor[] = useMemo(() => {
     const result: NavigatorAnchor[] = []
+    let sectionResponseCount = 0
+    let sectionArtifactCount = 0
+    let sectionToolCount = 0
+    let lastUserIdx = -1
+
     for (const msg of messages) {
       if (msg.role === 'tool_event') continue
+
       if (msg.role === 'user') {
+        if (lastUserIdx >= 0) {
+          const prev = result[lastUserIdx]
+          prev.responseCount = sectionResponseCount
+          prev.artifactCount = sectionArtifactCount
+          prev.toolCount = sectionToolCount
+        }
+        sectionResponseCount = 0
+        sectionArtifactCount = 0
+        sectionToolCount = 0
+        lastUserIdx = result.length
+        const label = msg.content.length > 48 ? msg.content.slice(0, 48).replace(/\s+\S*$/, '') + '…' : msg.content
         result.push({
-          id: msg.id,
+          id: `user-${msg.id}`,
+          targetMsgId: msg.id,
           type: 'user',
-          label: msg.content.slice(0, 60) + (msg.content.length > 60 ? '…' : ''),
-          timestamp: msg.timestamp,
-          detail: msg.usedTools?.length ? `${msg.usedTools.length} tool${msg.usedTools.length > 1 ? 's' : ''}` : undefined,
+          label,
         })
-      } else if (msg.role === 'assistant' && msg.artifacts?.length) {
-        for (const art of msg.artifacts) {
+      }
+
+      if (msg.role === 'assistant') {
+        sectionResponseCount++
+        if (msg.usedTools?.length) sectionToolCount += msg.usedTools.length
+        if (msg.artifacts?.length) {
+          sectionArtifactCount += msg.artifacts.length
+          for (const art of msg.artifacts) {
+            result.push({
+              id: `artifact-${art.id}`,
+              targetMsgId: msg.id,
+              type: 'artifact',
+              label: art.title.length > 48 ? art.title.slice(0, 48).replace(/\s+\S*$/, '') + '…' : art.title,
+              artifactCount: 1,
+            })
+          }
+        }
+        const headings = extractHeadings(msg.content)
+        for (const h of headings) {
           result.push({
-            id: art.id,
-            type: 'artifact',
-            label: art.title.slice(0, 50) + (art.title.length > 50 ? '…' : ''),
-            timestamp: new Date(art.createdAt),
+            id: `heading-${msg.id}-${h.slice(0, 16)}`,
+            targetMsgId: msg.id,
+            type: 'section',
+            label: h.length > 48 ? h.slice(0, 48).replace(/\s+\S*$/, '') + '…' : h,
           })
         }
       }
     }
+
+    if (lastUserIdx >= 0) {
+      const prev = result[lastUserIdx]
+      prev.responseCount = sectionResponseCount
+      prev.artifactCount = sectionArtifactCount
+      prev.toolCount = sectionToolCount
+    }
+
+    const MAX_ANCHORS = 25
+    if (result.length > MAX_ANCHORS) {
+      const step = (result.length - 1) / (MAX_ANCHORS - 1)
+      const sampled: NavigatorAnchor[] = [result[0]]
+      for (let i = 1; i < MAX_ANCHORS - 1; i++) {
+        sampled.push(result[Math.round(i * step)])
+      }
+      sampled.push(result[result.length - 1])
+      return sampled
+    }
+
     return result
   }, [messages])
 
@@ -155,6 +227,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
           visible={minimapVisible}
           anchors={anchors}
           streamingId={streamingId}
+          onAnchorClick={handleNavigatorClick}
         />
       )}
       <ScrollToBottom
@@ -174,7 +247,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
             {messages.map((msg, idx) => {
               if (msg.role === 'tool_event') return null
               return (
-                <div key={msg.id} className="animate-message-in space-y-3">
+                <div key={msg.id} className={cn('animate-message-in space-y-3', highlightedMsgId === msg.id && 'animate-highlight-fade')}>
                   <MessageBubble
                     role={msg.role}
                     content={msg.content}
