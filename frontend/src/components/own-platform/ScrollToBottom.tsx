@@ -22,37 +22,37 @@ export function ScrollToBottom({ show, onClick, newMessages, isLoading }: Scroll
 
   if (!mounted) return null
 
-  const isStreaming = isLoading
+  const hasNewMessages = !!newMessages && newMessages > 0
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        'fixed z-30 flex items-center justify-center rounded-full border shadow-lg transition-all duration-200',
-        newMessages
-          ? 'border-primary/30 bg-elevated/95 text-primary hover:border-primary/50 hover:bg-elevated shadow-primary/10'
-          : 'border-border/40 bg-elevated/90 text-muted-foreground hover:border-border/70 hover:text-foreground',
+        'fixed z-30 flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 ease-out',
+        hasNewMessages
+          ? 'bg-primary text-white shadow-[0_8px_20px_rgba(0,0,0,0.28)]'
+          : 'bg-[rgba(32,32,34,0.95)] backdrop-blur-[12px] text-muted-foreground border border-white/[0.08] shadow-[0_8px_20px_rgba(0,0,0,0.28)]',
         show
-          ? 'opacity-100 scale-100'
-          : 'opacity-0 scale-[0.96] pointer-events-none',
-        newMessages ? 'gap-1.5 px-4 h-10' : 'w-10 h-10',
+          ? 'opacity-100 scale-100 translate-y-0'
+          : 'opacity-0 scale-[0.96] translate-y-2 pointer-events-none',
+        !hasNewMessages && 'hover:translate-y-[-2px] hover:scale-105',
       )}
       style={{
         left: '50%',
-        bottom: '84px',
-        transform: `translateX(-50%) ${show ? 'translateY(0)' : 'translateY(2px)'}`,
-        boxShadow: newMessages
-          ? '0 8px 24px rgba(0,0,0,0.4)'
-          : '0 8px 24px rgba(0,0,0,0.3)',
+        bottom: '96px',
+        transform: `translateX(-50%) ${show ? 'translateY(0)' : 'translateY(8px)'}`,
         transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
-      <ChevronDown size={18} className="shrink-0" />
-      {newMessages ? (
-        <span className="text-[13px] font-medium whitespace-nowrap">
-          {isStreaming ? 'Continue generating' : `${newMessages} new message${newMessages > 1 ? 's' : ''}`}
-        </span>
-      ) : null}
+      {hasNewMessages ? (
+        <span className="text-[13px] font-bold leading-none">{newMessages}</span>
+      ) : (
+        <ChevronDown
+          size={18}
+          strokeWidth={2}
+          className={cn(isLoading && 'animate-bounce-subtle')}
+        />
+      )}
     </button>
   )
 }

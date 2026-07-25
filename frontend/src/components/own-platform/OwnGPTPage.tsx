@@ -58,14 +58,18 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     setNewMsgCount(0)
+    setTimeout(() => {
+      const ta = document.querySelector('textarea')
+      if (ta) ta.focus()
+    }, 300)
   }, [bottomRef])
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    isNearBottom.current = distFromBottom < 120
-    setShowScrollBtn(distFromBottom > 150)
+    isNearBottom.current = distFromBottom < 80
+    setShowScrollBtn(distFromBottom > 140)
   }, [])
 
   useEffect(() => {
