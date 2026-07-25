@@ -801,11 +801,34 @@
 
 ---
 
-## Full Application Sitemap
+## Module: Conversation
+
+### Screen: Conversation Workspace
+
+- **Purpose**: Primary AI interaction surface — conversational interface with supporting context panels for artifacts, lineage, and tools.
+- **Primary User**: All users
+- **Route**: `/conversation` (default: `/`)
+- **Navigation Location**: Sidebar — Home > OwnGPT, or default landing page
+- **Parent Screen**: None (root)
+- **Child Screens**: None (artifacts open in Context Panel or navigate to detail screens)
+- **Primary Actions**: Send message, review AI response, invoke tool, approve/reject, attach file, search history
+- **Secondary Actions**: Toggle context panel, toggle split view, export conversation, branch conversation
+- **Data Displayed**: Message thread (user + AI messages), streaming response, artifact cards, tool results, evidence blocks, approval requests, follow-up suggestions, context panel (artifact preview, tool output, lineage)
+- **Entry Points**: Default landing page, sidebar link, notification click, global search
+- **Exit Paths**: Navigate to detail screen via artifact click, open in split view with OwnOps
+- **Related Screens**: All detail screens (artifact navigation), OwnOps (split view)
+- **Permissions**: All authenticated users
+- **Empty State**: Welcome message with suggested starting points (first-time) or restored last conversation (returning)
+- **Loading State**: Thread skeleton with 3 placeholder message blocks
+- **Error State**: "Failed to load conversation" with retry; errors within thread shown inline
+- **Mobile Priority**: High (primary interface)
+
+---
 
 ```mermaid
 graph TD
     ROOT["/ — Operator Dashboard"]
+    CONV["/conversation — Conversation Workspace"]
 
     subgraph Observe
         FINDINGS["/findings — Findings List"]
@@ -858,12 +881,20 @@ graph TD
         HELP["/help — Help & Documentation"]
     end
 
+    ROOT --> CONV
     ROOT --> FINDINGS
     ROOT --> RECS
     ROOT --> EXPS
     ROOT --> CONFIG
     ROOT --> CE
     ROOT --> OPS
+
+    CONV --> FINDING
+    CONV --> REC
+    CONV --> EXP
+    CONV --> DECISION
+    CONV --> CONFIGDETAIL
+    CONV --> ARTDETAIL
 
     FINDINGS --> FINDING
     FINDING --> REC
@@ -910,6 +941,7 @@ graph TD
 
 ```
 /                                       Operator Dashboard
+├── /conversation                       Conversation Workspace
 ├── /findings                           Findings List
 │   └── /findings/:id                   Finding Detail
 ├── /recommendations                    Recommendations List
@@ -948,9 +980,9 @@ graph TD
 ## Navigation Depth Analysis
 
 | Depth | Screens |
-|---|---|
+|---|---|---|
 | Level 0 (root) | Operator Dashboard |
-| Level 1 (list/index) | Findings List, Recommendations List, Experiments List, Decisions List, Config Snapshots List, CE Dashboard, Operations Control Plane, Automation Dashboard, Capabilities Registry, Learning Ledger Browser, Artifact Explorer, Analytics Overview, Knowledge Base, Governance Dashboard |
+| Level 1 (list/index) | Conversation Workspace, Findings List, Recommendations List, Experiments List, Decisions List, Config Snapshots List, CE Dashboard, Operations Control Plane, Automation Dashboard, Capabilities Registry, Learning Ledger Browser, Artifact Explorer, Analytics Overview, Knowledge Base, Governance Dashboard |
 | Level 2 (detail) | Finding Detail, Recommendation Detail, Experiment Detail, Experiment Designer, Decision Detail, Config Snapshot Detail, Config Diff, Evaluation Detail, Capability Health Detail, Job Detail, Schedule Editor, Trigger Config, Capability Detail, Ledger Record Detail, Artifact Detail, Analytics Category Detail, Audit Log |
 | Level 3+ | None |
 
@@ -963,6 +995,7 @@ graph TD
 ```mermaid
 graph LR
     DASH["Operator Dashboard"]
+    CONV["Conversation Workspace"]
     FI["Findings List"]
     FIDET["Finding Detail"]
     REC["Recommendations List"]
@@ -995,12 +1028,20 @@ graph LR
     SETT["Settings"]
     HELP["Help"]
 
+    DASH --> CONV
     DASH --> FI
     DASH --> REC
     DASH --> EXP
     DASH --> CFG
     DASH --> CE
     DASH --> OPS
+
+    CONV --> FIDET
+    CONV --> RECDET
+    CONV --> EXPDET
+    CONV --> DECDET
+    CONV --> CFGDET
+    CONV --> ARTDET
 
     FI --> FIDET
     FIDET --> RECDET
@@ -1055,40 +1096,41 @@ graph LR
 | Order | Screen | Complexity | Depends On | MVP |
 |---|---|---|---|---|
 | 1 | Operator Dashboard | High | All modules (aggregates data) | Yes |
-| 2 | Findings List | Medium | Evidence Engine API | Yes |
-| 3 | Finding Detail | Medium | Evidence Engine API | Yes |
-| 4 | Recommendations List | Medium | Recommendation Engine API | Yes |
-| 5 | Recommendation Detail | Medium | Recommendation Engine API | Yes |
-| 6 | Experiment Designer | High | Experimentation API | Yes |
-| 7 | Experiment Detail | High | Experimentation API | Yes |
-| 8 | Config Snapshots List | Medium | Config Management API | Yes |
-| 9 | Config Snapshot Detail | Medium | Config Management API | Yes |
-| 10 | Config Diff | Medium | Config Management API | Yes |
-| 11 | Decisions List | Low | Operations API | Yes |
-| 12 | Decision Detail | Low | Operations API | Yes |
-| 13 | CE Dashboard | Medium | Automation API | Yes |
-| 14 | Evaluation Detail | Low | Automation API | Yes |
-| 15 | Operations Control Plane | Medium | Operations API | Yes |
-| 16 | Capability Health Detail | Low | Operations API | Yes |
-| 17 | Automation Dashboard | Medium | Automation API | V2 |
-| 18 | Job Detail | Low | Automation API | V2 |
-| 19 | Schedule Editor | Low | Automation API | V2 |
-| 20 | Trigger Config | Low | Automation API | V2 |
-| 21 | Capabilities Registry | Low | Capability Registry API | V2 |
-| 22 | Capability Detail | Low | Capability Registry API | V2 |
-| 23 | Learning Ledger Browser | Low | Learning Ledger API | V2 |
-| 24 | Ledger Record Detail | Low | Learning Ledger API | V2 |
-| 25 | Artifact Explorer | Medium | All artifact APIs | V2 |
-| 26 | Artifact Detail | Medium | All artifact APIs | V2 |
-| 27 | Analytics Overview | Medium | Analytics API | V2 |
-| 28 | Analytics Category Detail | Low | Analytics API | V2 |
-| 29 | Knowledge Base | Low | Documents API | V2 |
-| 30 | Governance Dashboard | Low | Governance | V2 |
-| 31 | Audit Log | Low | Governance | V2 |
-| 32 | Profile & Preferences | Low | Auth | Yes |
-| 33 | Help & Documentation | Low | Static | V2 |
-| 34 | Notification Panel | Medium | Notification system | V2 |
-| 35 | Global Search Palette | High | All artifact APIs | V2 |
+| 2 | Conversation Workspace | High | AI Engine, all artifact APIs | Yes |
+| 3 | Findings List | Medium | Evidence Engine API | Yes |
+| 4 | Finding Detail | Medium | Evidence Engine API | Yes |
+| 5 | Recommendations List | Medium | Recommendation Engine API | Yes |
+| 6 | Recommendation Detail | Medium | Recommendation Engine API | Yes |
+| 7 | Experiment Designer | High | Experimentation API | Yes |
+| 8 | Experiment Detail | High | Experimentation API | Yes |
+| 9 | Config Snapshots List | Medium | Config Management API | Yes |
+| 10 | Config Snapshot Detail | Medium | Config Management API | Yes |
+| 11 | Config Diff | Medium | Config Management API | Yes |
+| 12 | Decisions List | Low | Operations API | Yes |
+| 13 | Decision Detail | Low | Operations API | Yes |
+| 14 | CE Dashboard | Medium | Automation API | Yes |
+| 15 | Evaluation Detail | Low | Automation API | Yes |
+| 16 | Operations Control Plane | Medium | Operations API | Yes |
+| 17 | Capability Health Detail | Low | Operations API | Yes |
+| 18 | Automation Dashboard | Medium | Automation API | V2 |
+| 19 | Job Detail | Low | Automation API | V2 |
+| 20 | Schedule Editor | Low | Automation API | V2 |
+| 21 | Trigger Config | Low | Automation API | V2 |
+| 22 | Capabilities Registry | Low | Capability Registry API | V2 |
+| 23 | Capability Detail | Low | Capability Registry API | V2 |
+| 24 | Learning Ledger Browser | Low | Learning Ledger API | V2 |
+| 25 | Ledger Record Detail | Low | Learning Ledger API | V2 |
+| 26 | Artifact Explorer | Medium | All artifact APIs | V2 |
+| 27 | Artifact Detail | Medium | All artifact APIs | V2 |
+| 28 | Analytics Overview | Medium | Analytics API | V2 |
+| 29 | Analytics Category Detail | Low | Analytics API | V2 |
+| 30 | Knowledge Base | Low | Documents API | V2 |
+| 31 | Governance Dashboard | Low | Governance | V2 |
+| 32 | Audit Log | Low | Governance | V2 |
+| 33 | Profile & Preferences | Low | Auth | Yes |
+| 34 | Help & Documentation | Low | Static | V2 |
+| 35 | Notification Panel | Medium | Notification system | V2 |
+| 36 | Global Search Palette | High | All artifact APIs | V2 |
 
 ---
 
@@ -1096,7 +1138,7 @@ graph LR
 
 | Complexity | Count | Screens |
 |---|---|---|
-| High | 5 | Dashboard, Experiment Designer, Experiment Detail, Config Diff, Global Search |
+| High | 6 | Dashboard, Conversation Workspace, Experiment Designer, Experiment Detail, Config Diff, Global Search |
 | Medium | 16 | Findings List/Detail, Recommendations List/Detail, Config Lists, CE Dashboard, Operations CP, Automation Dashboard, Artifact Explorer/Detail, Analytics Overview, Notification Panel, Decisions screens |
 | Low | 14 | Decision Detail, Evaluation Detail, Health Detail, Jobs/Schedules/Triggers, Capabilities/Ledger screens, Analytics Detail, KB, Governance/Audit, Settings, Help |
 
@@ -1105,14 +1147,15 @@ graph LR
 ## MVP Screens (Must Ship)
 
 1. Operator Dashboard
-2. Findings List + Detail
-3. Recommendations List + Detail
-4. Experiment Designer + Detail
-5. Decisions List + Detail
-6. Config Snapshots List + Detail + Diff
-7. CE Dashboard + Evaluation Detail
-8. Operations Control Plane + Health Detail
-9. Profile & Preferences
+2. Conversation Workspace
+3. Findings List + Detail
+4. Recommendations List + Detail
+5. Experiment Designer + Detail
+6. Decisions List + Detail
+7. Config Snapshots List + Detail + Diff
+8. CE Dashboard + Evaluation Detail
+9. Operations Control Plane + Health Detail
+10. Profile & Preferences
 
 ## V2 Screens (Post-Launch)
 

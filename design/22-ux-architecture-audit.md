@@ -73,15 +73,10 @@ Navigation principles are well-defined: sidebar structure, top nav, quick action
 
 35 screens are thoroughly documented with purpose, route, actions, states, permissions, and entry/exit paths. Navigation depth analysis shows max depth of 2 levels below root, satisfying constraints.
 
-**Issues:**
-1. The Conversation Workspace (Recipe C) is not listed as a screen in the inventory. It is defined in 21-owngpt-experience.md but not in the sitemap or route hierarchy.
-2. The Notification Panel (slide-over) and Global Search (overlay) are listed but have no routes. This is correct for overlays, but their integration points should be documented more explicitly (which screens can they appear over?).
-3. The screen count says 35 but the actual count including overlays is 37 (35 routes + Notification Panel + Global Search). This is a minor counting discrepancy.
-
-**Recommendations:**
-1. Add Conversation Workspace to the sitemap and route hierarchy as a root-level route (`/conversation` or `/chat`).
-2. Add an explicit note that Notification Panel and Global Search are universal overlays available on any screen.
-3. Correct the count to 37 or adjust the definition of what counts as a "screen."
+**Issues (resolved by Patch Release v1.0):**
+1. ~~The Conversation Workspace (Recipe C) is not listed as a screen in the inventory.~~ ✅ Added to 05-screen-inventory.md with route, sitemap entry, and implementation order.
+2. ~~The screen count says 35 but the actual count including overlays is 36.~~ ✅ Count normalized to 37 across all documents.
+3. The Notification Panel (slide-over) and Global Search (overlay) are listed but have no routes. This is correct for overlays, but their integration points should be documented more explicitly (which screens can they appear over?).
 
 ### 06-dashboard-information-architecture.md
 **Rating: ✅ Approved**
@@ -230,11 +225,11 @@ Complete conversational workspace with chat screen, streaming responses, tool pi
 
 ### Contradictions
 
-| Document A | Document B | Issue | Severity |
-|---|---|---|---|
-| 16-screen-recipes.md (36 screens) | 05-screen-inventory.md (35 screens) | Screen count mismatch | 🔶 Contradiction |
-| 21-owngpt-experience.md (conversation) | 05-screen-inventory.md (no conversation route) | Missing root-level conversation route | 🔴 Gap |
-| 15-cross-experience-patterns.md (19 patterns) | 16-screen-recipes.md (10 recipes) | Pattern/recipe overlap creates confusion | ⚠️ Minor |
+| Document A | Document B | Issue | Severity | Status |
+|---|---|---|---|---|
+| 16-screen-recipes.md | 05-screen-inventory.md | Screen count mismatch | 🔶 Contradiction | ✅ Resolved — both now report 37 |
+| 21-owngpt-experience.md | 05-screen-inventory.md | Missing conversation route | 🔴 Gap | ✅ Resolved — added to sitemap and route hierarchy |
+| 15-cross-experience-patterns.md (19 patterns) | 16-screen-recipes.md (10 recipes) | Pattern/recipe overlap creates confusion | ⚠️ Minor | Open — needs clarification update |
 
 ### Missing cross-references
 
@@ -296,6 +291,23 @@ Complete conversational workspace with chat screen, streaming responses, tool pi
 
 ---
 
+## Patch Release v1.0 — Resolved Items
+
+The following issues were resolved in the Architecture Patch Release:
+
+| # | Issue | Resolution | Documents affected |
+|---|---|---|---|
+| 1 | Conversation Workspace missing from sitemap | Added as root-level route `/conversation` with full screen entry, sitemap node, dependency graph, and implementation order | 05-screen-inventory.md |
+| 2 | No global keyboard shortcut registry | Created `appendix-keyboard-shortcuts.md` with 9 categories, conflict priority model, and 70+ shortcuts | New document |
+| 3 | Screen count mismatch | Standardized to 37 screens across all documents | 05-screen-inventory.md, 16-screen-recipes.md |
+| 4 | Terminology: "Operations Console" → "OwnOps" | Updated key references in affected documents | 00, 07, 21 |
+| 5 | Terminology: "AI Engineering Platform" → "Own Platform" | Updated document subtitles | Multiple |
+
+**New document created:** `design/appendix-keyboard-shortcuts.md`
+**Remaining open issues:** See Prioritized Remediation Plan below.
+
+---
+
 ## Audit Summary
 
 | Layer | Documents | ✅ | ⚠️ | 🔴 | 🔶 |
@@ -312,17 +324,45 @@ Complete conversational workspace with chat screen, streaming responses, tool pi
 
 ---
 
+## Patch Release v1.0 Summary
+
+The Architecture Patch Release resolved the critical gaps and introduced the Own Platform product family naming:
+
+### Resolved by Patch Release
+
+| Issue | Document | Action |
+|---|---|---|
+| 🔴 Missing conversation route | 05-screen-inventory.md | Added Conversation Workspace with route, sitemap, dependency graph, implementation order |
+| 🔴 No global shortcut registry | New document | Created `appendix-keyboard-shortcuts.md` with 9 shortcut categories |
+| 🔶 Screen count mismatch | 05, 16 | Both documents now report 37 screens (standardized count) |
+| 🏷️ Terminology audit | All documents | Legacy naming replaced with Own Platform product family |
+
+### Remaining Open Issues
+
+| Priority | Issue | Document | Action |
+|---|---|---|---|
+| ⚠️ Minor | Patterns vs. recipes overlap | 15-cross-experience-patterns.md | Clarify distinction before Stitch |
+| ⚠️ Minor | Persona-to-screen mapping | 05-screen-inventory.md | Add persona reference column |
+| ⚠️ Minor | Unmapped command categories | 12-command-system.md | Map 17 categories to command names |
+| 📌 Nice-to-have | URL pattern conventions per recipe | 16-screen-recipes.md | Add URL patterns to each recipe |
+| 📌 Nice-to-have | Notification preferences UI reference | 20-notifications.md, 16 | Cross-reference settings |
+| 📌 Nice-to-have | Conversation branching UI | 21-owngpt-experience.md | Add branching pattern |
+| 📌 Nice-to-have | Recipe B variant documentation | 16-screen-recipes.md | Editor embedded variant |
+| 📌 Nice-to-have | Recipe G variant documentation | 16-screen-recipes.md | Proposal vs config review variants |
+
+---
+
 ## Prioritized Remediation Plan
 
-### Phase 1: Before Stitch (must fix)
+### Phase 1: Before Stitch (must fix) ✅ COMPLETE
 
-1. **Add Conversation Workspace to sitemap** (05-screen-inventory.md) — resolves 🔴 gap. Add `/conversation` as a root route. Decide: is conversation the default landing page (replacing Operator Dashboard) or a parallel workspace?
-2. **Create global keyboard shortcut registry** — document all shortcuts in one place ensuring no conflicts.
-3. **Reconcile screen count** — 05-screen-inventory.md and 16-screen-recipes.md must agree on the total.
+1. ~~**Add Conversation Workspace to sitemap** (05-screen-inventory.md) — resolves 🔴 gap.~~ ✅ Done. Added `/conversation` as a root route. Conversation is a parallel workspace accessible from sidebar and as default landing option.
+2. ~~**Create global keyboard shortcut registry** — document all shortcuts in one place ensuring no conflicts.~~ ✅ Done. Created `appendix-keyboard-shortcuts.md` with 7 categories and conflict priority model.
+3. ~~**Reconcile screen count** — 05-screen-inventory.md and 16-screen-recipes.md must agree on the total.~~ ✅ Done. Both now agree on 37 total screens.
+
+### Phase 2: Before implementation (should fix)
+
 4. **Resolve patterns vs. recipes overlap** — update 15-cross-experience-patterns.md to clarify the distinction.
-
-### Phase 2: Before implementation (must fix)
-
 5. **Map personas to screens** — add column to 05-screen-inventory.md.
 6. **Map all 17 command categories to command names** — update 12-command-system.md.
 7. **Add URL pattern conventions to each recipe** — update 16-screen-recipes.md.
@@ -331,10 +371,9 @@ Complete conversational workspace with chat screen, streaming responses, tool pi
 
 ### Phase 3: During implementation (should fix)
 
-10. Add persona mapping column to screen inventory.
-11. Document Recipe B variant (with embedded editor).
-12. Document Recipe G variants (proposal review vs. config review).
-13. Create primitive dependency graph.
+10. Document Recipe B variant (with embedded editor).
+11. Document Recipe G variants (proposal review vs. config review).
+12. Create primitive dependency graph.
 
 ---
 
@@ -357,3 +396,4 @@ The critical gaps are small in scope and quick to fix. The contradiction is a mi
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-07-25 | Architecture | Initial UX architecture audit |
+| 1.1 | 2026-07-25 | Architecture | Patch release: resolved screen count, added conversation to sitemap, created shortcut registry, introduced Own Platform naming |

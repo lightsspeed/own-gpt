@@ -1,6 +1,6 @@
 # Screen Recipes
 
-> Reusable architectural blueprints for every screen in the AI Engineering Platform.
+> Reusable architectural blueprints for every screen in the Own Platform.
 >
 > **Not about pixels. Not about React. Not about components. Not about visual styling.**
 >
@@ -10,11 +10,11 @@
 
 ## Why Screen Recipes?
 
-The screen inventory (Phase 5) defines 35 screens.
+The screen inventory (Phase 5) defines 37 screens.
 
-35 unique behavioral models would be impossible to maintain, impossible to learn, and impossible to build consistently.
+37 unique behavioral models would be impossible to maintain, impossible to learn, and impossible to build consistently.
 
-Screen recipes reduce 35 screens to **10 reusable archetypes**.
+Screen recipes reduce 37 screens to **10 reusable archetypes**.
 
 Every screen in the product is built from exactly one recipe.
 
@@ -1263,46 +1263,47 @@ Use when the user needs to configure preferences, profile settings, or system-le
 
 ## Screen-to-Recipe Mapping
 
-All 35 platform screens mapped to exactly one recipe. No screen requires a unique behavioral model.
+All 37 platform screens mapped to exactly one recipe. No screen requires a unique behavioral model.
 
 | # | Screen | Route | Recipe | Rationale |
 |---|--------|-------|--------|-----------|
 | 1 | Operator Dashboard | `/` | A — Overview + Actions | Aggregate status with drill-down; multi-source attention queue |
-| 2 | Findings List | `/findings` | B — Collection + Inspector | Standard list + drill-down detail |
-| 3 | Finding Detail | `/findings/:id` | B — Collection + Inspector | Detail view of a collection item |
-| 4 | Recommendations List | `/recommendations` | B — Collection + Inspector | Standard list + drill-down detail |
-| 5 | Recommendation Detail | `/recommendations/:id` | G — Review + Approval | Decision-focused review with approve/reject |
-| 6 | Experiments List | `/experiments` | B — Collection + Inspector | Standard list + drill-down detail |
-| 7 | Experiment Designer | `/experiments/new` | F — Editor + Preview | Form with live preview before launch |
-| 8 | Experiment Detail | `/experiments/:id` | B — Collection + Inspector | Detail view with variant comparison (Recipe E embedded) |
-| 9 | Decisions List | `/decisions` | B — Collection + Inspector | Standard list + drill-down detail |
-| 10 | Decision Detail | `/decisions/:id` | B — Collection + Inspector | Read-only detail with audit and lineage |
-| 11 | Config Snapshots List | `/configuration` | B — Collection + Inspector | Standard list + drill-down; active config banner |
-| 12 | Config Snapshot Detail | `/configuration/:id` | G — Review + Approval | Decision-focused review with approve/reject/rollback |
-| 13 | Config Diff | `/configuration/diff` | E — Compare + Analysis | Side-by-side or unified diff |
-| 14 | CE Dashboard | `/evaluation` | A — Overview + Actions | Scores, trends, and drill-down by capability |
-| 15 | Evaluation Detail | `/evaluation/:id` | D — Timeline + Detail | Window metrics with event timeline |
-| 16 | Operations Control Plane | `/operations` | H — Monitoring + Status | Health grid with capability status |
-| 17 | Capability Health Detail | `/operations/:capabilityId` | H — Monitoring + Status | Deep-dive metrics for one capability |
-| 18 | Automation Dashboard | `/automation` | A — Overview + Actions | Job history, schedules, triggers overview |
-| 19 | Job Detail | `/automation/jobs/:id` | D — Timeline + Detail | Execution timeline with logs |
-| 20 | Schedule Editor | `/automation/schedules` | B — Collection + Inspector | List + create/edit (Recipe F embedded for forms) |
-| 21 | Trigger Config | `/automation/triggers` | B — Collection + Inspector | List + create/edit (Recipe F embedded for forms) |
-| 22 | Capabilities Registry | `/capabilities` | B — Collection + Inspector | Card grid + drill-down detail |
-| 23 | Capability Detail | `/capabilities/:id` | B — Collection + Inspector | Metadata, dependencies, links to health |
-| 24 | Learning Ledger Browser | `/ledger` | B — Collection + Inspector | Table + drill-down record detail |
-| 25 | Ledger Record Detail | `/ledger/:id` | B — Collection + Inspector | Raw payload and lineage view |
-| 26 | Artifact Explorer | `/artifacts` | I — Search + Explore | Faceted search across all artifact types |
-| 27 | Artifact Detail | `/artifacts/:id` | B — Collection + Inspector | Metadata, payload, lineage graph |
-| 28 | Analytics Overview | `/analytics` | A — Overview + Actions | Category summary cards with drill-down |
-| 29 | Analytics Category Detail | `/analytics/:category` | B — Collection + Inspector | Charts and tables for one category |
-| 30 | Knowledge Base | `/knowledge` | B — Collection + Inspector | Document list with file operations |
-| 31 | Governance Dashboard | `/governance` | A — Overview + Actions | Policy compliance and audit overview |
-| 32 | Audit Log | `/governance/audit` | B — Collection + Inspector | Chronological table with filters |
-| 33 | Profile & Preferences | `/settings` | J — Settings + Configuration | User preferences and profile |
-| 34 | Help & Documentation | `/help` | J — Settings + Configuration | Searchable docs and reference |
-| 35 | Notification Panel | (slide-over) | I — Search + Explore | Filtered notification list with navigation |
-| 36 | Global Search | (overlay) | I — Search + Explore | Command palette with type-prefixed search |
+| 2 | Conversation Workspace | `/conversation` | C — Conversation + Context | Primary AI interaction surface with context panels |
+| 3 | Findings List | `/findings` | B — Collection + Inspector | Standard list + drill-down detail |
+| 4 | Finding Detail | `/findings/:id` | B — Collection + Inspector | Detail view of a collection item |
+| 5 | Recommendations List | `/recommendations` | B — Collection + Inspector | Standard list + drill-down detail |
+| 6 | Recommendation Detail | `/recommendations/:id` | G — Review + Approval | Decision-focused review with approve/reject |
+| 7 | Experiments List | `/experiments` | B — Collection + Inspector | Standard list + drill-down detail |
+| 8 | Experiment Designer | `/experiments/new` | F — Editor + Preview | Form with live preview before launch |
+| 9 | Experiment Detail | `/experiments/:id` | B — Collection + Inspector | Detail view with variant comparison (Recipe E embedded) |
+| 10 | Decisions List | `/decisions` | B — Collection + Inspector | Standard list + drill-down detail |
+| 11 | Decision Detail | `/decisions/:id` | B — Collection + Inspector | Read-only detail with audit and lineage |
+| 12 | Config Snapshots List | `/configuration` | B — Collection + Inspector | Standard list + drill-down; active config banner |
+| 13 | Config Snapshot Detail | `/configuration/:id` | G — Review + Approval | Decision-focused review with approve/reject/rollback |
+| 14 | Config Diff | `/configuration/diff` | E — Compare + Analysis | Side-by-side or unified diff |
+| 15 | CE Dashboard | `/evaluation` | A — Overview + Actions | Scores, trends, and drill-down by capability |
+| 16 | Evaluation Detail | `/evaluation/:id` | D — Timeline + Detail | Window metrics with event timeline |
+| 17 | Operations Control Plane | `/operations` | H — Monitoring + Status | Health grid with capability status |
+| 18 | Capability Health Detail | `/operations/:capabilityId` | H — Monitoring + Status | Deep-dive metrics for one capability |
+| 19 | Automation Dashboard | `/automation` | A — Overview + Actions | Job history, schedules, triggers overview |
+| 20 | Job Detail | `/automation/jobs/:id` | D — Timeline + Detail | Execution timeline with logs |
+| 21 | Schedule Editor | `/automation/schedules` | B — Collection + Inspector | List + create/edit (Recipe F embedded for forms) |
+| 22 | Trigger Config | `/automation/triggers` | B — Collection + Inspector | List + create/edit (Recipe F embedded for forms) |
+| 23 | Capabilities Registry | `/capabilities` | B — Collection + Inspector | Card grid + drill-down detail |
+| 24 | Capability Detail | `/capabilities/:id` | B — Collection + Inspector | Metadata, dependencies, links to health |
+| 25 | Learning Ledger Browser | `/ledger` | B — Collection + Inspector | Table + drill-down record detail |
+| 26 | Ledger Record Detail | `/ledger/:id` | B — Collection + Inspector | Raw payload and lineage view |
+| 27 | Artifact Explorer | `/artifacts` | I — Search + Explore | Faceted search across all artifact types |
+| 28 | Artifact Detail | `/artifacts/:id` | B — Collection + Inspector | Metadata, payload, lineage graph |
+| 29 | Analytics Overview | `/analytics` | A — Overview + Actions | Category summary cards with drill-down |
+| 30 | Analytics Category Detail | `/analytics/:category` | B — Collection + Inspector | Charts and tables for one category |
+| 31 | Knowledge Base | `/knowledge` | B — Collection + Inspector | Document list with file operations |
+| 32 | Governance Dashboard | `/governance` | A — Overview + Actions | Policy compliance and audit overview |
+| 33 | Audit Log | `/governance/audit` | B — Collection + Inspector | Chronological table with filters |
+| 34 | Profile & Preferences | `/settings` | J — Settings + Configuration | User preferences and profile |
+| 35 | Help & Documentation | `/help` | J — Settings + Configuration | Searchable docs and reference |
+| 36 | Notification Panel | (slide-over) | I — Search + Explore | Filtered notification list with navigation |
+| 37 | Global Search | (overlay) | I — Search + Explore | Command palette with type-prefixed search |
 
 ### Mapping summary
 
@@ -1317,6 +1318,8 @@ All 35 platform screens mapped to exactly one recipe. No screen requires a uniqu
 | G — Review + Approval | 2 | Recommendation Detail, Config Snapshot Detail |
 | H — Monitoring + Status | 2 | Operations Control Plane, Capability Health Detail |
 | I — Search + Explore | 2 | Artifact Explorer, Notification Panel, Global Search |
+| J — Settings + Configuration | 2 | Profile & Preferences, Help & Documentation |
+| **Total** | **37** | |
 | J — Settings + Configuration | 2 | Profile & Preferences, Help & Documentation |
 
 ---

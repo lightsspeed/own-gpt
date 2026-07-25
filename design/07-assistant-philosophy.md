@@ -40,11 +40,11 @@ The default interaction model for the platform is conversation. An engineer open
 - "What configuration changes are pending approval?"
 - "Walk me through the evidence for finding #1024."
 
-The assistant answers. The engineer drills in when they need depth. The assistant handles the first 80% of understanding; the Operations Console handles the remaining 20% of deep work.
+The assistant answers. The engineer drills in when they need depth. OwnGPT handles the first 80% of understanding; OwnOps handles the remaining 20% of deep work.
 
-### The Operations Console Is Power Mode
+### OwnOps Is Power Mode
 
-The Operations Console is the intentional, focused workspace for:
+OwnOps (Operations Console) is the intentional, focused workspace for:
 
 - **Bulk operations**: reviewing 50 findings at once, comparing 6 experiment variants, auditing configuration history
 - **Deep inspection**: examining raw artifact payloads, tracing lineage across 10 hops, comparing side-by-side diffs
@@ -611,7 +611,7 @@ The assistant operates in distinct modes. Each mode changes how inputs are proce
 
 ---
 
-## Relationship With the Operations Console
+## Relationship With OwnOps
 
 ### When to Stay in the Assistant
 

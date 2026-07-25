@@ -16,7 +16,7 @@ A platform with two complementary interfaces:
 
 1. **The AI Assistant** — The primary interface. Engineers ask questions, investigate failures, compare experiments, and plan changes through natural conversation. Every answer is grounded in platform artifacts with traceable lineage.
 
-2. **The Operations Console** — The power user interface. Engineers inspect findings in bulk, compare experiment results side-by-side, audit configuration history, and manage automation schedules. The console is for depth; the assistant is for velocity.
+2. **OwnOps (Operations Console)** — The power user interface. Engineers inspect findings in bulk, compare experiment results side-by-side, audit configuration history, and manage automation schedules. OwnOps is for depth; OwnGPT is for velocity.
 
 ## What Makes This Different
 

@@ -14,7 +14,7 @@
 
 OwnGPT is the primary interface for human-AI interaction in the AI Engineering Platform. It is where operators ask questions, issue commands, review artifacts, make decisions, and manage their relationship with the platform's AI capabilities.
 
-The Operations Console (the broader platform UI) is the "power mode" workspace for deep inspection and management. OwnGPT is the conversational layer that makes the platform accessible, responsive, and intelligent.
+OwnOps (the Operations Console) is the "power mode" workspace for deep inspection and management. OwnGPT is the conversational layer that makes the platform accessible, responsive, and intelligent.
 
 ### Design goals
 
@@ -382,9 +382,9 @@ The conversation workspace follows the platform's state model (13).
 
 ---
 
-## Split View with Operations Console
+## Split View with OwnOps
 
-OwnGPT can operate in split view alongside the Operations Console, enabling conversation-powered investigation.
+OwnGPT can operate in split view alongside OwnOps (Operations Console), enabling conversation-powered investigation.
 
 ### Split view modes
 
@@ -604,7 +604,7 @@ Developer information appears in the context panel (when in developer mode) or a
 - Developer mode
 - Keyboard shortcut handling
 
-### Operations Console owns:
+### OwnOps owns:
 - All list/detail screens (Findings, Experiments, etc.)
 - Dashboards
 - Monitoring
