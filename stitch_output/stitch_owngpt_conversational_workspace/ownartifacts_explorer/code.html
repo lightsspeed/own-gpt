@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OwnOps | OwnArtifacts Explorer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "text-primary": "#F5F5F5",
+                        "on-surface-variant": "#c7c4d7",
+                        "on-tertiary-container": "#452000",
+                        "error": "#ffb4ab",
+                        "on-primary": "#1000a9",
+                        "inverse-surface": "#e4e1ed",
+                        "bg-secondary": "#171717",
+                        "tertiary-container": "#d97721",
+                        "surface-container-high": "#292932",
+                        "bg-tertiary": "#262626",
+                        "inverse-on-surface": "#303038",
+                        "inverse-primary": "#494bd6",
+                        "primary-fixed": "#e1e0ff",
+                        "surface": "#13131b",
+                        "on-tertiary-fixed-variant": "#703700",
+                        "on-secondary": "#003731",
+                        "bg-primary": "#0A0A0A",
+                        "primary-container": "#8083ff",
+                        "surface-variant": "#34343d",
+                        "on-primary-container": "#0d0096",
+                        "secondary": "#4fdbc8",
+                        "primary": "#c0c1ff",
+                        "on-error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "secondary-fixed": "#71f8e4",
+                        "on-secondary-fixed": "#00201c",
+                        "error-container": "#93000a",
+                        "ai-presence": "#6366F1",
+                        "surface-container": "#1f1f27",
+                        "surface-container-lowest": "#0d0d15",
+                        "surface-bright": "#393841",
+                        "on-error": "#690005",
+                        "border-subtle": "#262626",
+                        "tertiary-fixed": "#ffdcc5",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "background": "#13131b",
+                        "slate-gray": "#404040",
+                        "on-tertiary": "#4f2500",
+                        "on-background": "#e4e1ed",
+                        "surface-container-highest": "#34343d",
+                        "surface-container-low": "#1b1b23",
+                        "secondary-container": "#04b4a2",
+                        "on-secondary-container": "#003f38",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "outline-variant": "#464554",
+                        "success-teal": "#14B8A6",
+                        "text-secondary": "#A3A3A3",
+                        "tertiary": "#ffb783",
+                        "outline": "#908fa0",
+                        "surface-tint": "#c0c1ff",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-surface": "#e4e1ed",
+                        "on-primary-fixed": "#07006c",
+                        "surface-dim": "#13131b",
+                        "on-tertiary-fixed": "#301400"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-lg": "24px",
+                        "stack-md": "16px",
+                        "sidebar-width": "280px",
+                        "inset-md": "16px",
+                        "max-content-width": "800px",
+                        "context-panel-width": "400px",
+                        "stack-sm": "8px",
+                        "gutter": "24px"
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #0A0A0A;
+            color: #F5F5F5;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #404040;
+        }
+        .artifact-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 24px;
+        }
+    </style>
+</head>
+<body class="flex min-h-screen">
+<!-- SideNavBar (Left) -->
+<aside class="w-sidebar-width h-screen sticky top-0 left-0 bg-bg-secondary border-r border-border-subtle flex flex-col p-inset-md gap-stack-md z-50">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-8 h-8 bg-ai-presence rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">deployed_code</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-text-primary tracking-tight">OwnOps</h1>
+<p class="font-body-md text-label-md text-text-secondary -mt-1">Platform Engineering</p>
+</div>
+</div>
+<button class="w-full bg-ai-presence text-white py-2.5 rounded-lg font-label-md text-label-md flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all mb-4">
+<span class="material-symbols-outlined text-[20px]">add</span>
+            New Experiment
+        </button>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined">science</span>
+<span class="font-body-md text-body-md">OwnLab</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">OwnAnalytics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface-container-high text-ai-presence font-bold transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+<span class="font-body-md text-body-md">OwnArtifacts</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">OwnConfig</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-border-subtle pt-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined text-[20px]">menu_book</span>
+<span class="font-label-md text-label-md">Documentation</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container-low transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined text-[20px]">support_agent</span>
+<span class="font-label-md text-label-md">Support</span>
+</a>
+<div class="flex items-center gap-3 px-3 py-4 mt-2">
+<img class="w-8 h-8 rounded-full border border-border-subtle" data-alt="A professional headshot of a software engineer in a dark workspace, with subtle blue and purple neon lighting reflecting on their glasses, in a minimalist high-tech style that conveys expertise and focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnlrpLRovk72L_I3Oy414iQ492QKwn5RWrwjvnReOmYOFGTOG5m2v2tfmMXMJJ5j2ba7nYVYoyFmaSX2lI3vILRa8MN6lTP1HfwvsQhCzg-0Fp0pt1KdeSwUT6cHCV1xkz0Zohrk9m3qTEZWduvxssICCqaep3vG7nKhi02F5wUEg7yA_32xTFlFAcZwWNKeo3kkFvdj-A0ig_BkL_gymyjX_N8uKva7CnVyprSvrWv5aJU1lw7HxLV3-CfQqdp8nqoufoDlxLw0E"/>
+<div class="overflow-hidden">
+<p class="font-label-md text-label-md text-text-primary truncate">Dev. Admin</p>
+<p class="text-[11px] text-text-secondary truncate">admin@ownops.io</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 flex flex-col min-w-0">
+<!-- TopNavBar -->
+<header class="h-16 w-full sticky top-0 z-40 bg-bg-primary border-b border-border-subtle flex justify-between items-center px-gutter transition-all duration-200">
+<div class="flex items-center gap-8">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-[18px]">search</span>
+<input class="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-label-md text-text-primary focus:ring-2 focus:ring-ai-presence w-64 transition-all" placeholder="Search artifacts..." type="text"/>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="font-label-md text-label-md text-text-primary border-b-2 border-ai-presence pb-1" href="#">Explorer</a>
+<a class="font-label-md text-label-md text-text-secondary hover:text-text-primary transition-all" href="#">History</a>
+<a class="font-label-md text-label-md text-text-secondary hover:text-text-primary transition-all" href="#">Compare</a>
+</nav>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1 border-r border-border-subtle pr-3 mr-1">
+<button class="p-2 text-text-secondary hover:text-text-primary transition-all"><span class="material-symbols-outlined">schedule</span></button>
+<button class="p-2 text-text-secondary hover:text-text-primary transition-all"><span class="material-symbols-outlined">filter_alt</span></button>
+<button class="p-2 text-text-secondary hover:text-text-primary transition-all"><span class="material-symbols-outlined">more_vert</span></button>
+</div>
+<button class="px-4 py-1.5 rounded-lg border border-border-subtle font-label-md text-label-md text-text-primary hover:bg-surface-container-low transition-all">Save</button>
+<button class="px-4 py-1.5 rounded-lg bg-ai-presence text-white font-label-md text-label-md hover:opacity-90 active:scale-95 transition-all">Deploy</button>
+</div>
+</header>
+<!-- Content Area -->
+<div class="p-8 flex-1 overflow-y-auto">
+<div class="max-w-[1200px] mx-auto">
+<!-- Header & Filters -->
+<div class="mb-10">
+<h2 class="font-headline-lg text-headline-lg text-text-primary mb-2">Artifact Explorer</h2>
+<p class="text-text-secondary font-body-md text-body-md mb-8">Inspect and trace engineering assets across the experimentation lifecycle.</p>
+<div class="flex flex-wrap items-center gap-3">
+<button class="px-4 py-1.5 rounded-full bg-ai-presence text-white font-label-md text-label-md">All Assets</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container border border-border-subtle text-text-secondary hover:text-text-primary font-label-md text-label-md transition-colors">Learning</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container border border-border-subtle text-text-secondary hover:text-text-primary font-label-md text-label-md transition-colors">Evaluation</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container border border-border-subtle text-text-secondary hover:text-text-primary font-label-md text-label-md transition-colors">Config</button>
+<button class="px-4 py-1.5 rounded-full bg-surface-container border border-border-subtle text-text-secondary hover:text-text-primary font-label-md text-label-md transition-colors">Experiment</button>
+<div class="ml-auto flex items-center gap-2 text-text-secondary font-label-md text-label-md">
+<span>Sorted by</span>
+<button class="flex items-center gap-1 text-text-primary">Recent <span class="material-symbols-outlined text-[16px]">expand_more</span></button>
+</div>
+</div>
+</div>
+<!-- Bento Artifact Grid -->
+<div class="artifact-grid">
+<!-- Artifact Card 1: Selected -->
+<div class="bg-surface-container-high rounded-xl border-2 border-ai-presence p-6 flex flex-col gap-4 relative shadow-lg transition-transform hover:-translate-y-1 cursor-pointer">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-ai-presence/20 flex items-center justify-center text-ai-presence">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">assessment</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-success-teal/10 text-success-teal text-[10px] font-bold uppercase tracking-wider">Evaluation</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px] text-text-primary leading-tight">Model-V4_Drift_Analysis</h3>
+<p class="text-text-secondary font-label-md text-label-md mt-1">Generated 2h ago by Pipeline-92</p>
+</div>
+<p class="text-text-secondary font-body-md text-[14px] line-clamp-2">Comprehensive evaluation of weights distribution and feature importance for the visual transformer ensemble.</p>
+<div class="mt-auto pt-4 flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full bg-slate-gray border border-bg-primary flex items-center justify-center text-[10px]">JS</div>
+<div class="w-6 h-6 rounded-full bg-ai-presence border border-bg-primary flex items-center justify-center text-[10px]">SY</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 rounded hover:bg-surface-container transition-colors text-text-secondary"><span class="material-symbols-outlined text-[20px]">share</span></button>
+<button class="px-3 py-1 rounded bg-ai-presence text-white font-label-md text-label-md">Inspect</button>
+</div>
+</div>
+</div>
+<!-- Artifact Card 2 -->
+<div class="bg-bg-secondary rounded-xl border border-border-subtle p-6 flex flex-col gap-4 transition-all hover:bg-surface-container-low hover:border-text-secondary/30 group">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-tertiary/10 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings_input_component</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-bold uppercase tracking-wider">Config</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px] text-text-primary leading-tight group-hover:text-ai-presence transition-colors">Hyperparam_Registry_v12</h3>
+<p class="text-text-secondary font-label-md text-label-md mt-1">Updated 5h ago • Size: 24KB</p>
+</div>
+<p class="text-text-secondary font-body-md text-[14px] line-clamp-2">Static configuration mapping for the production training cluster, including batch sizing and optimizer steps.</p>
+<div class="mt-auto pt-4 flex items-center justify-between">
+<span class="text-text-secondary font-label-md text-[12px]">YAML format</span>
+<div class="flex items-center gap-2">
+<button class="p-2 rounded hover:bg-surface-container transition-colors text-text-secondary"><span class="material-symbols-outlined text-[20px]">download</span></button>
+<button class="px-3 py-1 rounded border border-border-subtle text-text-primary font-label-md text-label-md hover:bg-surface-container transition-colors">View</button>
+</div>
+</div>
+</div>
+<!-- Artifact Card 3 -->
+<div class="bg-bg-secondary rounded-xl border border-border-subtle p-6 flex flex-col gap-4 transition-all hover:bg-surface-container-low hover:border-text-secondary/30 group">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">biotech</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-wider">Experiment</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px] text-text-primary leading-tight group-hover:text-ai-presence transition-colors">A/B_Test_Results_Batch_C</h3>
+<p class="text-text-secondary font-label-md text-label-md mt-1">Finished 1d ago • Active</p>
+</div>
+<div class="bg-surface-container rounded p-3 mb-2">
+<div class="flex justify-between items-end">
+<span class="text-[10px] text-text-secondary uppercase">Precision</span>
+<span class="text-success-teal font-bold font-code-md">0.9842</span>
+</div>
+<div class="w-full bg-border-subtle h-1 rounded-full mt-1">
+<div class="bg-success-teal h-1 rounded-full" style="width: 98%"></div>
+</div>
+</div>
+<div class="mt-auto pt-4 flex items-center justify-between">
+<span class="text-text-secondary font-label-md text-[12px]">JSON Summary</span>
+<button class="px-3 py-1 rounded border border-border-subtle text-text-primary font-label-md text-label-md hover:bg-surface-container transition-colors">Details</button>
+</div>
+</div>
+<!-- Artifact Card 4 -->
+<div class="bg-bg-secondary rounded-xl border border-border-subtle p-6 flex flex-col gap-4 transition-all hover:bg-surface-container-low hover:border-text-secondary/30 group">
+<div class="flex justify-between items-start">
+<div class="w-10 h-10 rounded-lg bg-ai-presence/10 flex items-center justify-center text-ai-presence">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">auto_stories</span>
+</div>
+<span class="px-2 py-0.5 rounded bg-ai-presence/10 text-ai-presence text-[10px] font-bold uppercase tracking-wider">Learning</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px] text-text-primary leading-tight group-hover:text-ai-presence transition-colors">Embeddings_Visualizer_Proto</h3>
+<p class="text-text-secondary font-label-md text-label-md mt-1">Shared 2d ago by Researcher</p>
+</div>
+<p class="text-text-secondary font-body-md text-[14px] line-clamp-2">High-dimensional vector space representation projected into 3D using UMAP clustering for semantic drift detection.</p>
+<div class="mt-auto pt-4 flex items-center justify-between">
+<span class="text-text-secondary font-label-md text-[12px]">interactive_canvas.js</span>
+<button class="px-3 py-1 rounded border border-border-subtle text-text-primary font-label-md text-label-md hover:bg-surface-container transition-colors">Launch</button>
+</div>
+</div>
+</div>
+<!-- Interactive Viz Section -->
+<div class="mt-12 p-8 bg-surface-container-low rounded-2xl border border-border-subtle relative overflow-hidden group">
+<div class="relative z-10">
+<h4 class="font-headline-md text-text-primary mb-2">Live Lineage Graph</h4>
+<p class="text-text-secondary max-w-md mb-6">Explore the interconnected dependencies of your current artifact selection.</p>
+<button class="flex items-center gap-2 text-ai-presence font-bold group-hover:translate-x-2 transition-transform">
+                            Open Full Graph <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+<div class="absolute inset-0 opacity-20 pointer-events-none">
+
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Context Panel (Right) -->
+<aside class="w-context-panel-width h-screen sticky top-0 right-0 bg-bg-secondary border-l border-border-subtle flex flex-col z-50 overflow-y-auto shadow-md transition-transform duration-300 ease-in-out">
+<div class="p-6 border-b border-border-subtle bg-surface-container-low">
+<div class="flex items-center justify-between mb-4">
+<span class="px-2 py-1 bg-ai-presence/10 text-ai-presence rounded font-label-md text-[10px] font-bold">INSPECTOR</span>
+<button class="text-text-secondary hover:text-text-primary"><span class="material-symbols-outlined">close</span></button>
+</div>
+<h3 class="font-headline-md text-[20px] text-text-primary">Resource Details</h3>
+<p class="text-text-secondary font-label-md text-label-md">Metadata &amp; Relations</p>
+</div>
+<nav class="flex border-b border-border-subtle bg-bg-secondary sticky top-0 z-10">
+<button class="flex-1 py-3 text-ai-presence border-b-2 border-ai-presence font-label-md text-label-md flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">info</span> Inspector
+            </button>
+<button class="flex-1 py-3 text-text-secondary hover:bg-surface-container transition-colors font-label-md text-label-md flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">history</span> Timeline
+            </button>
+<button class="flex-1 py-3 text-text-secondary hover:bg-surface-container transition-colors font-label-md text-label-md flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">link</span> Links
+            </button>
+</nav>
+<div class="p-6 space-y-8">
+<!-- Metadata Section -->
+<section>
+<h5 class="text-[11px] font-bold text-text-secondary uppercase tracking-widest mb-4">Properties</h5>
+<div class="space-y-4">
+<div class="grid grid-cols-2 gap-2">
+<span class="text-text-secondary font-label-md">Unique ID</span>
+<span class="text-text-primary font-code-md text-[13px] text-right">art_88x_9210</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<span class="text-text-secondary font-label-md">Creator</span>
+<span class="text-text-primary font-label-md text-right">System_Daemon</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<span class="text-text-secondary font-label-md">Created</span>
+<span class="text-text-primary font-label-md text-right">Oct 24, 14:02 UTC</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<span class="text-text-secondary font-label-md">Storage</span>
+<span class="text-text-primary font-label-md text-right">s3://ownops-artifacts/v4</span>
+</div>
+</div>
+</section>
+<!-- Lineage Section -->
+<section>
+<h5 class="text-[11px] font-bold text-text-secondary uppercase tracking-widest mb-4">Lineage Tracing</h5>
+<div class="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-border-subtle">
+<div class="relative">
+<div class="absolute -left-[23px] top-1 w-4 h-4 rounded-full bg-surface-container-high border-2 border-border-subtle"></div>
+<p class="font-label-md text-text-primary">Source: dataset-raw-v2</p>
+<p class="text-[12px] text-text-secondary">Ingested from production firehose</p>
+</div>
+<div class="relative">
+<div class="absolute -left-[23px] top-1 w-4 h-4 rounded-full bg-ai-presence border-2 border-bg-secondary"></div>
+<p class="font-label-md text-text-primary">Transformation: clean_ops</p>
+<p class="text-[12px] text-text-secondary">Normalized using standard scaler</p>
+</div>
+<div class="relative">
+<div class="absolute -left-[23px] top-1 w-4 h-4 rounded-full bg-surface-container-high border-2 border-border-subtle"></div>
+<p class="font-label-md text-text-primary">Current: Model-V4_Drift_Analysis</p>
+<p class="text-[12px] text-text-secondary">This report artifact</p>
+</div>
+</div>
+</section>
+<!-- Tags -->
+<section>
+<h5 class="text-[11px] font-bold text-text-secondary uppercase tracking-widest mb-3">Associations</h5>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 rounded bg-surface-container text-text-secondary font-code-sm text-[12px] border border-border-subtle">#production</span>
+<span class="px-2 py-1 rounded bg-surface-container text-text-secondary font-code-sm text-[12px] border border-border-subtle">#v4-release</span>
+<span class="px-2 py-1 rounded bg-surface-container text-text-secondary font-code-sm text-[12px] border border-border-subtle">#high-priority</span>
+<span class="px-2 py-1 rounded bg-surface-container text-text-secondary font-code-sm text-[12px] border border-border-subtle">#ml-infra</span>
+</div>
+</section>
+<!-- Quick Action Footer -->
+<div class="pt-10">
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-border-subtle">
+<p class="text-label-md font-bold text-text-primary mb-1">Audit Log</p>
+<p class="text-[12px] text-text-secondary mb-4">View security access history for this asset.</p>
+<button class="w-full py-2 bg-bg-tertiary border border-border-subtle rounded-lg text-text-primary font-label-md text-label-md hover:bg-surface-container transition-colors">
+                        Download Manifest
+                    </button>
+</div>
+</div>
+</div>
+</aside>
+<script>
+        // Simple micro-interaction for active states
+        document.querySelectorAll('.artifact-grid > div').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('.artifact-grid > div').forEach(c => {
+                    c.classList.remove('border-ai-presence', 'shadow-lg');
+                    c.classList.add('border-border-subtle');
+                });
+                card.classList.add('border-ai-presence', 'shadow-lg');
+                card.classList.remove('border-border-subtle');
+            });
+        });
+
+        // Search bar focus effect
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.classList.add('w-80');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.classList.remove('w-80');
+        });
+    </script>
+</body></html>

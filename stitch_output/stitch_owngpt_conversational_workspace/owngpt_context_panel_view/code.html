@@ -1,0 +1,456 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>OwnGPT | Enterprise Intelligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline-variant": "#464554",
+                        "tertiary": "#ffb783",
+                        "inverse-surface": "#e4e1ed",
+                        "on-primary-container": "#0d0096",
+                        "error-container": "#93000a",
+                        "outline": "#908fa0",
+                        "on-error-container": "#ffdad6",
+                        "surface-tint": "#c0c1ff",
+                        "slate-gray": "#404040",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "error": "#ffb4ab",
+                        "on-secondary-fixed": "#00201c",
+                        "surface-variant": "#34343d",
+                        "on-tertiary-container": "#452000",
+                        "surface-container-low": "#1b1b23",
+                        "secondary": "#4fdbc8",
+                        "on-secondary": "#003731",
+                        "on-tertiary-fixed-variant": "#703700",
+                        "ai-presence": "#6366F1",
+                        "tertiary-container": "#d97721",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "secondary-fixed": "#71f8e4",
+                        "on-surface": "#e4e1ed",
+                        "background": "#13131b",
+                        "primary": "#c0c1ff",
+                        "bg-primary": "#0A0A0A",
+                        "on-secondary-container": "#003f38",
+                        "surface-container": "#1f1f27",
+                        "on-primary": "#1000a9",
+                        "surface-container-lowest": "#0d0d15",
+                        "surface-container-highest": "#34343d",
+                        "on-tertiary-fixed": "#301400",
+                        "on-tertiary": "#4f2500",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "bg-tertiary": "#262626",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "text-primary": "#F5F5F5",
+                        "inverse-on-surface": "#303038",
+                        "border-subtle": "#262626",
+                        "tertiary-fixed": "#ffdcc5",
+                        "surface-bright": "#393841",
+                        "surface": "#13131b",
+                        "primary-fixed": "#e1e0ff",
+                        "surface-dim": "#13131b",
+                        "surface-container-high": "#292932",
+                        "inverse-primary": "#494bd6",
+                        "on-error": "#690005",
+                        "on-background": "#e4e1ed",
+                        "primary-container": "#8083ff",
+                        "bg-secondary": "#171717",
+                        "text-secondary": "#A3A3A3",
+                        "on-primary-fixed": "#07006c",
+                        "success-teal": "#14B8A6",
+                        "on-surface-variant": "#c7c4d7",
+                        "on-secondary-fixed-variant": "#005048",
+                        "secondary-container": "#04b4a2"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "context-panel-width": "400px",
+                        "stack-md": "16px",
+                        "stack-sm": "8px",
+                        "inset-md": "16px",
+                        "sidebar-width": "280px",
+                        "stack-lg": "24px",
+                        "gutter": "24px",
+                        "max-content-width": "800px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "code-sm": ["JetBrains Mono"],
+                        "label-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-md": ["15px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                        "code-sm": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-md": ["13px", {"lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #0A0A0A;
+            color: #F5F5F5;
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #404040;
+        }
+    </style>
+</head>
+<body class="overflow-hidden">
+<!-- Global Wrapper -->
+<div class="flex h-screen w-full">
+<!-- Sidebar Navigation (JSON Anchor: SideNavBar) -->
+<aside class="w-sidebar-width h-full fixed left-0 top-0 bg-bg-secondary border-r border-border-subtle flex flex-col z-50">
+<div class="p-inset-md flex flex-col h-full gap-stack-md">
+<!-- Brand Header -->
+<div class="flex items-center gap-3 px-2 py-1">
+<div class="w-8 h-8 bg-ai-presence rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-lg" style="font-variation-settings: 'FILL' 1;">terminal</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-text-primary leading-none">OwnGPT</h1>
+<p class="text-[10px] uppercase tracking-widest text-text-secondary mt-1">Enterprise Intelligence</p>
+</div>
+</div>
+<!-- CTA: New Chat -->
+<button class="flex items-center justify-between w-full p-3 bg-surface-container-high border border-border-subtle rounded-lg text-ai-presence hover:bg-surface-variant transition-colors group cursor-pointer active:scale-95">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+<span class="font-label-md text-label-md">New Chat</span>
+</div>
+<span class="text-[10px] bg-bg-primary px-1.5 py-0.5 rounded border border-border-subtle text-text-secondary group-hover:text-text-primary">⌘N</span>
+</button>
+<!-- Navigation List -->
+<nav class="flex flex-col gap-1 mt-2">
+<div class="px-3 py-2 text-ai-presence font-bold bg-surface-container-high rounded-lg cursor-pointer active:scale-95 flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+<span class="font-body-md text-body-md">Workspace</span>
+</div>
+<div class="px-3 py-2 text-text-secondary hover:text-text-primary hover:bg-surface-variant transition-colors rounded-lg cursor-pointer active:scale-95 flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-body-md text-body-md">History</span>
+</div>
+<div class="px-3 py-2 text-text-secondary hover:text-text-primary hover:bg-surface-variant transition-colors rounded-lg cursor-pointer active:scale-95 flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</div>
+</nav>
+<!-- History Grouping (Grouped Chats) -->
+<div class="flex-1 overflow-y-auto custom-scrollbar mt-4">
+<div class="mb-6">
+<h3 class="px-3 text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-2">Today</h3>
+<div class="flex flex-col gap-0.5">
+<div class="px-3 py-2 bg-surface-container-highest/50 border-l-2 border-ai-presence text-text-primary rounded-r-lg text-sm cursor-pointer hover:bg-surface-variant transition-colors">
+                                Platform Analysis
+                            </div>
+<div class="px-3 py-2 text-text-secondary hover:text-text-primary rounded-lg text-sm cursor-pointer hover:bg-surface-variant transition-colors">
+                                R-42 Root Cause Thread
+                            </div>
+</div>
+</div>
+<div>
+<h3 class="px-3 text-[11px] font-bold uppercase tracking-widest text-text-secondary mb-2">Yesterday</h3>
+<div class="flex flex-col gap-0.5">
+<div class="px-3 py-2 text-text-secondary hover:text-text-primary rounded-lg text-sm cursor-pointer hover:bg-surface-variant transition-colors truncate">
+                                Quarterly Deployment Log Review
+                            </div>
+<div class="px-3 py-2 text-text-secondary hover:text-text-primary rounded-lg text-sm cursor-pointer hover:bg-surface-variant transition-colors truncate">
+                                Vector DB Optimization
+                            </div>
+</div>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="pt-4 border-t border-border-subtle flex flex-col gap-1">
+<div class="px-3 py-2 text-text-secondary hover:text-text-primary transition-colors flex items-center gap-3 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-label-md text-label-md">Help</span>
+</div>
+<div class="px-3 py-2 text-text-secondary hover:text-text-primary transition-colors flex items-center gap-3 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-label-md text-label-md">Logout</span>
+</div>
+<div class="mt-4 flex items-center gap-3 p-2 bg-bg-primary rounded-lg border border-border-subtle">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Professional headshot of a senior software engineer in a high-tech dark workspace. The person is wearing a dark navy blazer and has a confident, neutral expression. The background is softly blurred with subtle teal and indigo light trails, suggesting a high-performance compute environment. Minimalist and corporate aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVYJKq2dNjcovOQ90Aa6FYVrS-AmoiB1k_YTumaM3Ugk40ZzkR-AhEc4UBcgNoVwAziH59sJTyNeiLo0LR1BwTC95MuDBOm-uzeV5c8PkX4JTifPzfygMksENIeBbOVluKqAeAlG0PEhM6TdduKKHLUr8sG0Ssklz_ZaPESP8sGmiQzN-ypjOOAW8tm2dfT_2N0Y03-7B1-CpzuzoLeW2pN9KKqpktvzuLBRvnPBFFoj9Qe89VhfI7piNZ5bQU1kWi6KcCulQJbaA">
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-xs font-bold text-text-primary truncate">Alex Chen</p>
+<p class="text-[10px] text-text-secondary truncate">Pro Plan</p>
+</div>
+<button class="text-ai-presence hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area (Thread) -->
+<main class="flex-1 ml-sidebar-width mr-context-panel-width h-full relative bg-bg-primary flex flex-col">
+<!-- Top Navigation (JSON Anchor: TopNavBar) -->
+<header class="h-16 w-full flex items-center justify-between px-gutter border-b border-border-subtle z-40 bg-bg-primary/80 backdrop-blur-md">
+<div class="flex items-center gap-8">
+<h2 class="font-headline-md text-headline-md font-black text-text-primary">Platform Analysis</h2>
+<nav class="hidden md:flex items-center gap-stack-md">
+<span class="font-label-md text-label-md text-primary border-b-2 border-primary pb-1 cursor-pointer">Models</span>
+<span class="font-label-md text-label-md text-text-secondary hover:text-ai-presence transition-all cursor-pointer">Experiments</span>
+<span class="font-label-md text-label-md text-text-secondary hover:text-ai-presence transition-all cursor-pointer">Deployments</span>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="px-4 py-1.5 rounded-lg border border-border-subtle text-text-primary font-label-md text-label-md hover:bg-surface-variant transition-all">Export</button>
+<button class="px-4 py-1.5 rounded-lg bg-ai-presence text-white font-label-md text-label-md hover:brightness-110 transition-all">Share</button>
+<div class="w-px h-6 bg-border-subtle mx-2"></div>
+<span class="material-symbols-outlined text-text-secondary hover:text-white cursor-pointer" data-icon="account_circle">account_circle</span>
+</div>
+</header>
+<!-- Conversation Thread -->
+<div class="flex-1 overflow-y-auto custom-scrollbar pt-stack-lg pb-40">
+<div class="max-w-max-content-width mx-auto px-inset-md space-y-stack-lg">
+<!-- User Message -->
+<div class="flex flex-col items-end gap-stack-sm">
+<div class="text-text-primary font-body-lg text-body-lg max-w-[85%]">
+                            Run a diagnostic on the current production environment for any anomalies in the R-42 cluster. I need to see the cross-service lineage for the last 15 minutes.
+                        </div>
+<div class="text-[10px] text-text-secondary uppercase tracking-widest font-bold">Today 14:22</div>
+</div>
+<!-- AI Message -->
+<div class="flex gap-4 items-start">
+<div class="w-8 h-8 rounded-lg bg-ai-presence flex-shrink-0 flex items-center justify-center mt-1">
+<span class="material-symbols-outlined text-white text-sm" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<div class="flex flex-col gap-stack-sm flex-1">
+<div class="p-inset-md bg-bg-secondary rounded-xl rounded-tl-none border border-border-subtle text-text-primary font-body-md text-body-md">
+<p class="mb-4">Diagnostic complete. I've identified a significant latency spike in the **R-42 cluster** originating from the `auth-gateway` service. The anomaly pattern suggests a recursive token validation loop.</p>
+<!-- Artifact Card -->
+<div class="bg-surface-container-low border border-border-subtle rounded-lg p-4 flex items-center justify-between hover:border-ai-presence/50 cursor-pointer transition-all group">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-error-container/20 border border-error-container/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-error" data-icon="analytics">analytics</span>
+</div>
+<div>
+<h4 class="font-label-md text-label-md text-text-primary">Artifact: Finding R-42</h4>
+<p class="text-xs text-text-secondary flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-success-teal"></span>
+                                                System Telemetry Updated
+                                            </p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-ai-presence opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="text-xs font-bold">Review in Panel</span>
+<span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<p class="mt-4">I've isolated the affected nodes and generated a lineage graph in your context panel. Would you like me to initiate a traffic reroute for the gateway service?</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-1 text-text-secondary hover:text-ai-presence transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="thumb_up">thumb_up</span>
+</button>
+<button class="p-1 text-text-secondary hover:text-error transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="thumb_down">thumb_down</span>
+</button>
+<button class="p-1 text-text-secondary hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Message Composer -->
+<div class="absolute bottom-0 left-0 w-full p-gutter bg-gradient-to-t from-bg-primary via-bg-primary to-transparent">
+<div class="max-w-max-content-width mx-auto">
+<div class="relative bg-surface-container-high border border-border-subtle rounded-xl p-2 shadow-2xl">
+<textarea class="w-full bg-transparent border-none focus:ring-0 text-text-primary placeholder:text-text-secondary font-body-md text-body-md py-3 px-4 resize-none" placeholder="Message OwnGPT..." rows="1"></textarea>
+<div class="flex items-center justify-between px-2 pb-1">
+<div class="flex items-center gap-2">
+<button class="p-2 text-text-secondary hover:text-ai-presence transition-colors rounded-lg hover:bg-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="attach_file">attach_file</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-ai-presence transition-colors rounded-lg hover:bg-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="image">image</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-ai-presence transition-colors rounded-lg hover:bg-surface-variant">
+<span class="material-symbols-outlined text-lg" data-icon="web">web</span>
+</button>
+</div>
+<button class="w-10 h-10 bg-ai-presence text-white rounded-lg flex items-center justify-center hover:brightness-110 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="arrow_upward">arrow_upward</span>
+</button>
+</div>
+</div>
+<p class="text-center text-[10px] text-text-secondary mt-3 uppercase tracking-tighter opacity-50">OwnGPT Enterprise v4.2.0 • Confidential Internal Use Only</p>
+</div>
+</div>
+</main>
+<!-- Right Context Panel (Context Panel Anchor) -->
+<aside class="w-context-panel-width h-full fixed right-0 top-0 bg-bg-secondary border-l border-border-subtle flex flex-col z-40 overflow-hidden shadow-[0px_4px_12px_rgba(0,0,0,0.5)]">
+<!-- Header -->
+<div class="p-inset-md border-b border-border-subtle flex items-center justify-between bg-surface-container-low">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-ai-presence" data-icon="info">info</span>
+<h3 class="font-headline-md text-lg font-bold text-text-primary">Artifact Preview</h3>
+</div>
+<button class="p-1 text-text-secondary hover:text-text-primary">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar">
+<!-- Artifact Details -->
+<div class="p-inset-md space-y-stack-lg">
+<div>
+<h2 class="text-2xl font-black text-text-primary mb-1">Finding R-42</h2>
+<p class="text-text-secondary text-sm">System diagnostic generated at 14:22:45 UTC</p>
+</div>
+<!-- Metadata Grid -->
+<div class="grid grid-cols-2 gap-stack-sm">
+<div class="bg-bg-primary border border-border-subtle rounded-lg p-3">
+<p class="text-[10px] uppercase font-bold text-text-secondary mb-1">Severity</p>
+<p class="text-error font-bold flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+                                High
+                            </p>
+</div>
+<div class="bg-bg-primary border border-border-subtle rounded-lg p-3">
+<p class="text-[10px] uppercase font-bold text-text-secondary mb-1">Status</p>
+<p class="text-tertiary font-bold flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+                                Investigating
+                            </p>
+</div>
+<div class="bg-bg-primary border border-border-subtle rounded-lg p-3">
+<p class="text-[10px] uppercase font-bold text-text-secondary mb-1">Impact</p>
+<p class="text-text-primary font-bold">Cluster-Wide</p>
+</div>
+<div class="bg-bg-primary border border-border-subtle rounded-lg p-3">
+<p class="text-[10px] uppercase font-bold text-text-secondary mb-1">Nodes Affected</p>
+<p class="text-text-primary font-bold">14 / 24</p>
+</div>
+</div>
+<!-- Lineage Graph Visualization -->
+<div class="space-y-stack-sm">
+<div class="flex items-center justify-between">
+<h4 class="font-label-md text-label-md text-text-secondary uppercase">Service Lineage</h4>
+<button class="text-ai-presence text-[10px] font-bold uppercase hover:underline">Expand View</button>
+</div>
+<div class="h-64 bg-bg-primary rounded-xl border border-border-subtle relative overflow-hidden flex items-center justify-center group">
+<!-- Simulated Graph Background -->
+<div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: radial-gradient(#6366F1 0.5px, transparent 0.5px); background-size: 16px 16px;"></div>
+<!-- Graph Nodes Simulation -->
+<div class="relative z-10 w-full h-full p-8 flex flex-col items-center justify-center gap-8">
+<!-- Node 1 -->
+<div class="px-3 py-1.5 bg-surface-container-highest border border-border-subtle rounded-lg text-[10px] font-mono text-text-primary">api-gateway-01</div>
+<!-- Connection -->
+<div class="w-px h-8 bg-gradient-to-b from-ai-presence to-error"></div>
+<!-- Node 2 -->
+<div class="px-4 py-2 bg-error-container/10 border border-error text-error rounded-lg text-xs font-bold animate-pulse flex flex-col items-center gap-1 shadow-[0_0_20px_rgba(239,68,68,0.2)]">
+                                    auth-gateway
+                                    <span class="text-[8px] opacity-60 font-mono">LATENCY: 1450ms</span>
+</div>
+<!-- Connection Split -->
+<div class="flex gap-20">
+<div class="flex flex-col items-center">
+<div class="w-px h-8 bg-border-subtle"></div>
+<div class="px-3 py-1.5 bg-surface-container-highest border border-border-subtle rounded-lg text-[10px] font-mono text-text-secondary">user-db</div>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-px h-8 bg-border-subtle"></div>
+<div class="px-3 py-1.5 bg-surface-container-highest border border-border-subtle rounded-lg text-[10px] font-mono text-text-secondary">token-store</div>
+</div>
+</div>
+</div>
+<!-- Overlay Controls -->
+<div class="absolute bottom-3 right-3 flex gap-2">
+<button class="w-8 h-8 rounded-full bg-surface-container-high border border-border-subtle flex items-center justify-center text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-sm" data-icon="zoom_in">zoom_in</span>
+</button>
+<button class="w-8 h-8 rounded-full bg-surface-container-high border border-border-subtle flex items-center justify-center text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-sm" data-icon="refresh">refresh</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Recommendation Section -->
+<div class="bg-ai-presence/5 border border-ai-presence/20 rounded-xl p-inset-md">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-ai-presence mt-1" data-icon="psychology">psychology</span>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md text-text-primary mb-2">AI Recommendation</h4>
+<p class="text-sm text-text-secondary mb-4 leading-relaxed">The token loop is likely caused by a mismatch in the `auth-gateway` cache expiration. I suggest refreshing the node configs and rerouting traffic to the `auth-secondary` cluster.</p>
+<button class="w-full py-2 bg-ai-presence text-white rounded-lg font-bold text-sm hover:brightness-110 transition-all">Execute Hotfix</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Meta -->
+<div class="p-4 bg-surface-container-lowest border-t border-border-subtle flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-bg-secondary bg-surface-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Avatar of a digital system assistant, minimalist icon design." src="https://lh3.googleusercontent.com/aida-public/AB6AXuACHLuV9KG_o6I7t3oSX-OMHtK4tB0uyEc-G68d3NhM4-ISCA9LfNXxW0SNfq6SNDSjEgXpRNl5el7-LEoEF_qmh9y_JUjiZW50Jns1Utb8dGOssA6xAr187_c8eJFsvossQAiwYbaN_r7SDUh9-kOUow8Z1LeLF3m5U88oE0hzD9Ro5kGx0T6QZPCKXOsAQ7ZcB9oNFxuLcKP9XP2mEIHu5Scpr3wVIusxfLqB2nsRprsW4WPm2DoM5Y5Chcb7HhC28sHb3TkOXn0">
+</div>
+<div class="w-6 h-6 rounded-full border-2 border-bg-secondary bg-primary-container flex items-center justify-center text-[8px] font-bold text-on-primary-container">AI</div>
+</div>
+<span class="text-[10px] text-text-secondary uppercase font-bold">Thread ID: #98X-4221</span>
+</div>
+</aside>
+</div>
+<!-- UI Micro-interactions -->
+<script>
+        // Auto-resize textarea logic
+        const tx = document.getElementsByTagName("textarea");
+        for (let i = 0; i < tx.length; i++) {
+            tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;overflow-y:hidden;");
+            tx[i].addEventListener("input", OnInput, false);
+        }
+
+        function OnInput() {
+            this.style.height = 0;
+            this.style.height = (this.scrollHeight) + "px";
+            if (this.scrollHeight > 200) {
+                this.style.overflowY = "scroll";
+                this.style.height = "200px";
+            } else {
+                this.style.overflowY = "hidden";
+            }
+        }
+    </script>
+</body></html>

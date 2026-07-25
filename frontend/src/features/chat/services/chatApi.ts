@@ -42,11 +42,32 @@ export const api = {
     temperature?: number;
     systemPrompt?: string;
     uploadedFiles?: { name: string; chunks: number; type: string }[];
+    activeTools?: Record<string, boolean>;
   }): Promise<Response> {
-    const { sessionId, message, model, temperature, systemPrompt, uploadedFiles } = params;
-    const prompt = (uploadedFiles?.length ?? 0) > 0
-      ? `${systemPrompt}\n\nIMPORTANT: The user has uploaded custom files. You MUST call the 'search_knowledge_base' tool to query and retrieve facts from these documents to construct your answer. Do not answer from your pre-trained memory. Always provide citations (Sources) in your answer referencing the exact filename.`
-      : systemPrompt;
+    const { sessionId, message, model, temperature, systemPrompt, uploadedFiles, activeTools } = params;
+    let prompt = systemPrompt || '';
+
+    const toolInstructions: string[] = [];
+    const webOn = activeTools?.web;
+    const kbOn = activeTools?.kb;
+
+    if (webOn && !kbOn) {
+      toolInstructions.push('CRITICAL: You MUST use the web search tool to find real-time information. Do NOT answer from your pre-trained knowledge or memory. Do NOT search the knowledge base. Every factual claim MUST be backed by a web search result with a URL citation. If you cannot find information via web search, state that clearly.');
+    } else if (!webOn && kbOn) {
+      toolInstructions.push('CRITICAL: You MUST use the knowledge base tool to retrieve information. Do NOT search the web. Always cite the source filename. Do NOT answer from your pre-trained memory.');
+    } else if (!webOn && !kbOn) {
+      toolInstructions.push('Do not search the knowledge base or the web. Answer from your own knowledge only.');
+    } else if (webOn && kbOn) {
+      toolInstructions.push('You have access to both web search and knowledge base. Use web search for real-time information and the knowledge base for internal documents. Always cite your sources.');
+    }
+
+    if (uploadedFiles?.length) {
+      toolInstructions.push('The user has uploaded custom files. You MUST call the \'search_knowledge_base\' tool to query and retrieve facts from these documents to construct your answer. Do not answer from your pre-trained memory. Always provide citations (Sources) in your answer referencing the exact filename.');
+    }
+
+    if (toolInstructions.length > 0) {
+      prompt = `${prompt}\n\n${toolInstructions.join('\n')}`.trim();
+    }
 
     return fetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
@@ -57,6 +78,7 @@ export const api = {
         model,
         temperature,
         system_prompt: prompt,
+        active_tools: activeTools,
       }),
     });
   },

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OwnOps - Health Monitor</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary": "#1000a9",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "surface-dim": "#13131b",
+                    "primary-container": "#8083ff",
+                    "on-tertiary-container": "#452000",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "bg-secondary": "#171717",
+                    "on-tertiary-fixed-variant": "#703700",
+                    "on-tertiary-fixed": "#301400",
+                    "on-primary-container": "#0d0096",
+                    "slate-gray": "#404040",
+                    "on-secondary-fixed-variant": "#005048",
+                    "surface-container-highest": "#34343d",
+                    "tertiary-container": "#d97721",
+                    "surface-container-low": "#1b1b23",
+                    "secondary-fixed-dim": "#4fdbc8",
+                    "bg-primary": "#0A0A0A",
+                    "surface-tint": "#c0c1ff",
+                    "error-container": "#93000a",
+                    "surface-container": "#1f1f27",
+                    "primary": "#c0c1ff",
+                    "tertiary-fixed": "#ffdcc5",
+                    "on-secondary": "#003731",
+                    "surface-variant": "#34343d",
+                    "inverse-on-surface": "#303038",
+                    "tertiary": "#ffb783",
+                    "primary-fixed": "#e1e0ff",
+                    "on-background": "#e4e1ed",
+                    "on-secondary-fixed": "#00201c",
+                    "surface-container-high": "#292932",
+                    "inverse-surface": "#e4e1ed",
+                    "tertiary-fixed-dim": "#ffb783",
+                    "secondary-container": "#04b4a2",
+                    "on-tertiary": "#4f2500",
+                    "on-error": "#690005",
+                    "inverse-primary": "#494bd6",
+                    "border-subtle": "#262626",
+                    "outline-variant": "#464554",
+                    "on-primary-fixed": "#07006c",
+                    "surface-container-lowest": "#0d0d15",
+                    "outline": "#908fa0",
+                    "on-surface": "#e4e1ed",
+                    "error": "#ffb4ab",
+                    "background": "#13131b",
+                    "secondary-fixed": "#71f8e4",
+                    "bg-tertiary": "#262626",
+                    "success-teal": "#14B8A6",
+                    "secondary": "#4fdbc8",
+                    "surface-bright": "#393841",
+                    "on-secondary-container": "#003f38",
+                    "on-error-container": "#ffdad6",
+                    "ai-presence": "#6366F1",
+                    "text-secondary": "#A3A3A3",
+                    "text-primary": "#F5F5F5",
+                    "on-surface-variant": "#c7c4d7",
+                    "surface": "#13131b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "inset-md": "16px",
+                    "gutter": "24px",
+                    "stack-lg": "24px",
+                    "stack-md": "16px",
+                    "max-content-width": "800px",
+                    "stack-sm": "8px",
+                    "sidebar-width": "280px",
+                    "context-panel-width": "400px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "body-lg": ["Inter"],
+                    "code-sm": ["JetBrains Mono"],
+                    "label-md": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                    "code-sm": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-md": ["13px", {"lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                    "body-md": ["15px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #13131b;
+            color: #e4e1ed;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .health-grid-animate {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .detail-overlay {
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .detail-overlay.active {
+            transform: translateY(0);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="font-body-md text-body-md overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="bg-background dark:bg-background text-primary dark:text-primary fixed top-0 w-full border-b border-border-subtle flex items-center justify-between px-inset-md h-16 w-full z-50 transition-colors duration-200">
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h1 class="font-headline-md text-headline-md-mobile font-bold text-primary">OwnOps</h1>
+</div>
+<div class="flex items-center">
+<button class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined">search</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-20 pb-28 px-inset-md max-w-max-content-width mx-auto">
+<header class="mb-6">
+<h2 class="font-headline-md text-headline-md-mobile text-on-surface mb-1">System Health</h2>
+<p class="text-on-surface-variant font-label-md text-label-md">Real-time status of critical infra layers</p>
+</header>
+<!-- Health Grid (Single Column Stack) -->
+<div class="flex flex-col gap-4">
+<!-- Runtime Card -->
+<div class="health-grid-animate bg-surface-container border border-border-subtle rounded-xl p-5 hover:bg-surface-container-high active:scale-[0.98] transition-all cursor-pointer group" onclick="openDetail('Runtime', 'Operational', '99.98%', 'monitoring')">
+<div class="flex items-start justify-between mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-primary-container/20 flex items-center justify-center text-primary-container">
+<span class="material-symbols-outlined">monitoring</span>
+</div>
+<div>
+<h3 class="font-headline-md text-label-md text-on-surface font-bold">Runtime</h3>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="w-2 h-2 rounded-full bg-success-teal"></span>
+<span class="text-success-teal font-label-md text-label-md">Operational</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">chevron_right</span>
+</div>
+<div class="mt-4 flex items-baseline justify-between">
+<span class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Uptime</span>
+<span class="font-code-md text-headline-md text-primary">99.98%</span>
+</div>
+</div>
+<!-- Ledger Card -->
+<div class="health-grid-animate bg-surface-container border border-border-subtle rounded-xl p-5 hover:bg-surface-container-high active:scale-[0.98] transition-all cursor-pointer group" onclick="openDetail('Ledger', 'Synced', '1.2ms', 'description')" style="animation-delay: 0.1s;">
+<div class="flex items-start justify-between mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined">description</span>
+</div>
+<div>
+<h3 class="font-headline-md text-label-md text-on-surface font-bold">Ledger</h3>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="w-2 h-2 rounded-full bg-success-teal"></span>
+<span class="text-success-teal font-label-md text-label-md">Synced</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">chevron_right</span>
+</div>
+<div class="mt-4 flex items-baseline justify-between">
+<span class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Block Latency</span>
+<span class="font-code-md text-headline-md text-primary">1.2ms</span>
+</div>
+</div>
+<!-- Evidence Card -->
+<div class="health-grid-animate bg-surface-container border border-border-subtle rounded-xl p-5 hover:bg-surface-container-high active:scale-[0.98] transition-all cursor-pointer group" onclick="openDetail('Evidence', 'Verifying', '241/s', 'analytics')" style="animation-delay: 0.2s;">
+<div class="flex items-start justify-between mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-secondary-container/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<div>
+<h3 class="font-headline-md text-label-md text-on-surface font-bold">Evidence</h3>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="w-2 h-2 rounded-full bg-ai-presence"></span>
+<span class="text-ai-presence font-label-md text-label-md">Verifying</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:translate-x-1 transition-transform">chevron_right</span>
+</div>
+<div class="mt-4 flex items-baseline justify-between">
+<span class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">Throughput</span>
+<span class="font-code-md text-headline-md text-primary">241/s</span>
+</div>
+</div>
+</div>
+<!-- Visual Flair: System Graph Placeholder -->
+<div class="mt-10 rounded-2xl overflow-hidden relative h-48 border border-border-subtle bg-surface-container-low">
+
+<div class="absolute inset-0 p-6 flex flex-col justify-end bg-gradient-to-t from-background to-transparent">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest mb-1">Global Traffic</span>
+<div class="flex items-center gap-2">
+<span class="font-headline-md text-primary">2.4m</span>
+<span class="text-success-teal text-label-md font-label-md">+14% vs avg</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Detail Overlay (Bottom Sheet) -->
+<div class="fixed inset-0 bg-black/60 opacity-0 pointer-events-none transition-opacity duration-300 z-[60]" id="scrim" onclick="closeDetail()"></div>
+<div class="detail-overlay fixed bottom-0 left-0 w-full h-[707px] bg-surface-container-highest rounded-t-[2rem] z-[70] flex flex-col overflow-hidden" id="detailOverlay">
+<div class="w-12 h-1 bg-outline-variant rounded-full mx-auto my-4 shrink-0"></div>
+<div class="px-gutter pb-safe flex-1 overflow-y-auto">
+<div class="flex items-center gap-4 mb-6">
+<div class="w-14 h-14 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container" id="detailIcon">
+<span class="material-symbols-outlined !text-3xl" id="detailIconInner">monitoring</span>
+</div>
+<div>
+<h2 class="font-headline-lg text-on-surface" id="detailTitle">Runtime</h2>
+<div class="flex items-center gap-1.5 mt-1">
+<span class="w-2.5 h-2.5 rounded-full bg-success-teal" id="detailStatusDot"></span>
+<span class="text-on-surface-variant font-label-md text-label-md uppercase" id="detailStatusText">Operational</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-8">
+<div class="bg-surface-container-low p-4 rounded-xl border border-border-subtle">
+<span class="block text-on-surface-variant font-label-md text-label-md mb-2">Metric Value</span>
+<span class="block font-code-md text-headline-md text-primary" id="detailMetric">99.98%</span>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl border border-border-subtle">
+<span class="block text-on-surface-variant font-label-md text-label-md mb-2">Trend</span>
+<span class="block font-code-md text-headline-md text-success-teal">Stable</span>
+</div>
+</div>
+<div class="space-y-4">
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest">Recent Events</h3>
+<div class="bg-surface-container-low rounded-xl border border-border-subtle divide-y divide-border-subtle">
+<div class="p-4 flex gap-4">
+<span class="text-on-surface-variant font-code-sm text-code-sm">12:44</span>
+<span class="text-on-surface font-body-md text-body-md">Node 04 health check passed</span>
+</div>
+<div class="p-4 flex gap-4">
+<span class="text-on-surface-variant font-code-sm text-code-sm">11:02</span>
+<span class="text-on-surface font-body-md text-body-md">Load balancer rotated certs</span>
+</div>
+<div class="p-4 flex gap-4">
+<span class="text-on-surface-variant font-code-sm text-code-sm">09:15</span>
+<span class="text-on-surface font-body-md text-body-md">Scheduled maintenance complete</span>
+</div>
+</div>
+</div>
+<div class="mt-8 pb-10">
+<button class="w-full h-14 bg-primary text-on-primary font-bold rounded-xl flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all" onclick="closeDetail()">
+<span>Close Inspector</span>
+</button>
+</div>
+</div>
+</div>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-20 pb-safe px-4 bg-surface dark:bg-surface border-t border-border-subtle z-50">
+<!-- Health: Active -->
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl px-3 py-1 scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">monitoring</span>
+<span class="font-label-md text-label-md">Health</span>
+</a>
+<!-- Docs -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">description</span>
+<span class="font-label-md text-label-md">Docs</span>
+</a>
+<!-- Metrics -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-md text-label-md">Metrics</span>
+</a>
+<!-- Config -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md text-label-md">Config</span>
+</a>
+</nav>
+<script>
+        function openDetail(title, status, metric, icon) {
+            const overlay = document.getElementById('detailOverlay');
+            const scrim = document.getElementById('scrim');
+            
+            document.getElementById('detailTitle').textContent = title;
+            document.getElementById('detailStatusText').textContent = status;
+            document.getElementById('detailMetric').textContent = metric;
+            document.getElementById('detailIconInner').textContent = icon;
+
+            // Change icon colors based on type
+            const iconBg = document.getElementById('detailIcon');
+            if(title === 'Ledger') iconBg.className = "w-14 h-14 rounded-2xl bg-tertiary-container flex items-center justify-center text-on-tertiary-container";
+            else if(title === 'Evidence') iconBg.className = "w-14 h-14 rounded-2xl bg-secondary-container flex items-center justify-center text-on-secondary-container";
+            else iconBg.className = "w-14 h-14 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container";
+
+            overlay.classList.add('active');
+            scrim.classList.remove('pointer-events-none');
+            scrim.classList.add('opacity-100');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeDetail() {
+            const overlay = document.getElementById('detailOverlay');
+            const scrim = document.getElementById('scrim');
+            
+            overlay.classList.remove('active');
+            scrim.classList.add('pointer-events-none');
+            scrim.classList.remove('opacity-100');
+            document.body.style.overflow = '';
+        }
+    </script>
+</body></html>

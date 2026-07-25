@@ -1,0 +1,380 @@
+<!DOCTYPE html><html class="dark" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Finding Detail | Own Platform</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "text-primary": "#F5F5F5",
+                        "on-secondary-container": "#003f38",
+                        "ai-presence": "#6366F1",
+                        "secondary": "#4fdbc8",
+                        "surface-container-lowest": "#0d0d15",
+                        "on-surface": "#e4e1ed",
+                        "inverse-primary": "#494bd6",
+                        "on-surface-variant": "#c7c4d7",
+                        "on-background": "#e4e1ed",
+                        "secondary-fixed": "#71f8e4",
+                        "bg-tertiary": "#262626",
+                        "surface-container-low": "#1b1b23",
+                        "error": "#ffb4ab",
+                        "on-tertiary-fixed": "#301400",
+                        "inverse-surface": "#e4e1ed",
+                        "background": "#13131b",
+                        "on-primary-container": "#0d0096",
+                        "on-primary": "#1000a9",
+                        "primary-fixed": "#e1e0ff",
+                        "on-tertiary-fixed-variant": "#703700",
+                        "slate-gray": "#404040",
+                        "surface-tint": "#c0c1ff",
+                        "inverse-on-surface": "#303038",
+                        "border-subtle": "#262626",
+                        "surface-bright": "#393841",
+                        "outline": "#908fa0",
+                        "surface-container-highest": "#34343d",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-tertiary-container": "#452000",
+                        "error-container": "#93000a",
+                        "primary-container": "#8083ff",
+                        "surface-dim": "#13131b",
+                        "surface-container": "#1f1f27",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "tertiary-fixed": "#ffdcc5",
+                        "text-secondary": "#A3A3A3",
+                        "tertiary-container": "#d97721",
+                        "on-tertiary": "#4f2500",
+                        "on-primary-fixed": "#07006c",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "success-teal": "#14B8A6",
+                        "surface-container-high": "#292932",
+                        "on-error": "#690005",
+                        "tertiary": "#ffb783",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary": "#003731",
+                        "outline-variant": "#464554",
+                        "bg-primary": "#0A0A0A",
+                        "bg-secondary": "#171717",
+                        "secondary-container": "#04b4a2",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "primary": "#c0c1ff",
+                        "surface": "#13131b",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "surface-variant": "#34343d",
+                        "on-secondary-fixed": "#00201c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "context-panel-width": "400px",
+                        "stack-md": "16px",
+                        "stack-lg": "24px",
+                        "max-content-width": "800px",
+                        "stack-sm": "8px",
+                        "gutter": "24px",
+                        "inset-md": "16px",
+                        "sidebar-width": "280px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "code-sm": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #0A0A0A;
+            color: #F5F5F5;
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md overflow-hidden">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 z-50 flex items-center px-gutter w-full gap-stack-lg bg-surface dark:bg-surface border-b border-border-subtle dark:border-border-subtle h-[56px]">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-on-surface dark:text-on-surface">Own Platform</span>
+</div>
+<div class="flex-1 flex items-center bg-surface-container-low px-4 py-1.5 rounded-lg max-w-md ml-8">
+<span class="material-symbols-outlined text-on-surface-variant text-sm mr-2" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-full placeholder-on-surface-variant" placeholder="Search telemetry..." type="text">
+</div>
+<div class="flex items-center gap-4 ml-auto">
+<button class="flex items-center gap-2 px-3 py-1.5 rounded bg-ai-presence text-white font-label-md hover:opacity-90 transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="bolt" style="font-variation-settings: 'FILL' 1;">bolt</span>
+                Quick Action
+            </button>
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high transition-colors rounded">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high transition-colors rounded">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+</div>
+<div class="h-8 w-8 rounded-full bg-surface-container-highest overflow-hidden border border-border-subtle">
+<img class="object-cover w-full h-full" data-alt="Professional corporate headshot of a female software engineer in her late 20s with a focused expression, soft studio lighting on a neutral grey background. The image is crisp, modern, and fits a high-end enterprise dashboard aesthetic with cold blue and neutral tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAh3OaDGXwlRlOsHaFxS6tRGJuXgUE-RJSqfsKIgT9T6UIreWNF_EQKikK6ULdzXOaINkc1UdUM2xCHtwCvpuuIzGsnl68FRdH2_AGDKdZ300uyNf-djSqSrxa7WWCwZKhUVMoWnzL6vMGb3ae5g33W9lvXKSjuIh97NasIr6821F3I00yT8HAb518i8wbBHLwrOvlBJy0wePfCe-g66MYGu3OIF33SxFb3HbDfOvCSVu7x-bi2SytkVmb1swdFYxHII7bK5-HPVPw">
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="hidden md:flex flex-col h-full py-inset-md w-sidebar-width fixed left-0 top-0 border-r border-border-subtle dark:border-border-subtle z-40 mt-[56px] bg-surface-container-low"><div class="px-4 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-ai-presence flex items-center justify-center">
+<span class="material-symbols-outlined text-white" data-icon="terminal">terminal</span>
+</div>
+<div>
+<h2 class="font-headline-md text-sm font-bold text-on-surface leading-tight">OwnOps</h2>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">AI Engineering</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-md">Home</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded transition-all bg-surface-container-highest text-primary border-l-4 border-ai-presence" href="#">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+<span class="font-label-md">Observe</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-md">Analyze</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="gavel">gavel</span>
+<span class="font-label-md">Govern</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="settings_input_component">settings_input_component</span>
+<span class="font-label-md">Operate</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="settings_ethernet">settings_ethernet</span>
+<span class="font-label-md">System</span>
+</a>
+</nav>
+<div class="mt-auto px-2 space-y-1 border-t border-border-subtle pt-4">
+<a class="flex items-center gap-3 px-3 py-2 rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-label-md">History</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-md">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+<span class="font-label-md">Help</span>
+</a>
+</div></aside>
+<!-- Main Canvas -->
+<main class="md:ml-sidebar-width mt-[56px] h-[calc(100vh-56px)] overflow-hidden flex flex-col bg-bg-primary">
+<!-- Command Bar / Breadcrumbs -->
+<div class="flex items-center justify-between px-gutter py-3 border-b border-border-subtle bg-surface-container-lowest">
+<div class="flex items-center gap-2 text-label-md text-on-surface-variant">
+<span class="hover:text-primary cursor-pointer transition-colors">Home</span>
+<span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span>
+<span class="hover:text-primary cursor-pointer transition-colors">Findings</span>
+<span class="material-symbols-outlined text-[14px]" data-icon="chevron_right">chevron_right</span>
+<span class="text-primary font-bold">Finding Detail</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container-high border border-border-subtle rounded text-xs">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="text-on-surface">Investigating</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1 bg-error-container/20 border border-error/30 rounded text-xs">
+<span class="material-symbols-outlined text-error text-[14px]" data-icon="warning" style="font-variation-settings: 'FILL' 1;">warning</span>
+<span class="text-error font-bold">Severity: High</span>
+</div>
+</div>
+</div>
+<!-- Finding Header Area -->
+<div class="px-gutter py-8 bg-gradient-to-b from-surface-container-low to-transparent">
+<div class="flex items-start justify-between">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-text-primary mb-2">Finding R-42: Anomalous Inference Latency</h1>
+<p class="text-on-surface-variant font-body-md max-w-2xl">Detected spike in P99 latency within the production inference engine across regions US-East and EU-West. Possible memory leak in LLM-proxy-v4.2.</p>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-2 bg-surface-container-highest border border-border-subtle rounded-lg font-label-md flex items-center gap-2 hover:bg-surface-bright transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="share">share</span>
+                        Share
+                    </button>
+<button class="px-4 py-2 bg-ai-presence text-white rounded-lg font-label-md flex items-center gap-2 hover:opacity-90 transition-all shadow-lg shadow-ai-presence/20">
+<span class="material-symbols-outlined text-sm" data-icon="assignment_turned_in">assignment_turned_in</span>
+                        Resolve
+                    </button>
+</div>
+</div>
+</div>
+<!-- Split Content Area -->
+<div class="flex-1 flex overflow-hidden px-gutter pb-8 gap-stack-lg">
+<!-- Evidence Panel (Left) -->
+<div class="flex-1 flex flex-col gap-stack-md overflow-y-auto custom-scrollbar pr-2">
+<div class="bg-surface-container rounded-xl border border-border-subtle p-inset-md overflow-hidden">
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-headline-md text-sm text-text-primary uppercase tracking-wider">Telemetry Evidence</h3>
+<span class="text-[11px] text-on-surface-variant font-code-sm">REF: TRACE-99421-B</span>
+</div>
+<!-- Latency Chart Placeholder -->
+<div class="w-full h-48 bg-surface-container-low rounded-lg border border-border-subtle mb-stack-md relative overflow-hidden group">
+<div class="absolute inset-0 flex items-center justify-center">
+
+<div class="relative z-10 text-center px-8">
+<span class="material-symbols-outlined text-secondary mb-2 block" data-icon="insights">insights</span>
+<p class="text-label-md text-on-surface">P99 Latency Distribution</p>
+<p class="text-[10px] text-on-surface-variant">Real-time telemetry streaming from K8s clusters</p>
+</div>
+</div>
+<div class="absolute bottom-4 left-4 right-4 flex justify-between">
+<div class="text-[10px] text-on-surface-variant">00:00 - 04:00 UTC</div>
+<div class="text-[10px] text-secondary font-bold">+240ms spike</div>
+</div>
+</div>
+<!-- Logs Table -->
+<div class="space-y-2">
+<div class="p-3 bg-surface-container-highest/50 rounded border border-border-subtle font-code-sm text-[12px] flex items-center gap-4">
+<span class="text-secondary">03:42:11</span>
+<span class="px-1.5 py-0.5 bg-error-container text-on-error-container rounded text-[10px]">ERR</span>
+<span class="text-on-surface">Worker thread #42 terminated: OutOfMemoryError</span>
+</div>
+<div class="p-3 bg-surface-container-highest/50 rounded border border-border-subtle font-code-sm text-[12px] flex items-center gap-4 opacity-80">
+<span class="text-secondary">03:42:08</span>
+<span class="px-1.5 py-0.5 bg-surface-bright text-on-surface rounded text-[10px]">WRN</span>
+<span class="text-on-surface">High memory pressure detected (94%) on node-af2</span>
+</div>
+<div class="p-3 bg-surface-container-highest/50 rounded border border-border-subtle font-code-sm text-[12px] flex items-center gap-4 opacity-60">
+<span class="text-secondary">03:41:55</span>
+<span class="px-1.5 py-0.5 bg-surface-bright text-on-surface rounded text-[10px]">INF</span>
+<span class="text-on-surface">Garbage collection cycle took 1.2s</span>
+</div>
+</div>
+</div>
+<!-- Attached Artifacts -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container border border-border-subtle rounded-xl p-4 flex items-start gap-4 cursor-pointer hover:border-ai-presence transition-colors">
+<div class="w-10 h-10 bg-surface-container-high rounded flex items-center justify-center text-ai-presence border border-border-subtle">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</div>
+<div class="flex-1">
+<p class="font-label-md text-text-primary">Service Config</p>
+<p class="text-[11px] text-on-surface-variant">llm-proxy-prod.yaml</p>
+</div>
+<span class="material-symbols-outlined text-success-teal text-sm" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="bg-surface-container border border-border-subtle rounded-xl p-4 flex items-start gap-4 cursor-pointer hover:border-ai-presence transition-colors">
+<div class="w-10 h-10 bg-surface-container-high rounded flex items-center justify-center text-ai-presence border border-border-subtle">
+<span class="material-symbols-outlined" data-icon="data_object">data_object</span>
+</div>
+<div class="flex-1">
+<p class="font-label-md text-text-primary">Heap Dump</p>
+<p class="text-[11px] text-on-surface-variant">dump_20231024.bin</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="download">download</span>
+</div>
+</div>
+</div>
+<!-- Decision Panel (Right) -->
+<div class="w-[400px] flex flex-col gap-stack-md shrink-0">
+<div class="bg-surface-container rounded-xl border border-border-subtle p-inset-md flex flex-col h-full">
+<h3 class="font-headline-md text-sm text-text-primary uppercase tracking-wider mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-ai-presence text-sm" data-icon="smart_toy" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+                        AI Decision Panel
+                    </h3>
+<div class="flex-1 space-y-4 overflow-y-auto custom-scrollbar mb-4">
+<div class="bg-surface-container-low p-4 rounded-lg border border-border-subtle">
+<p class="text-label-md text-primary mb-2">Automated Analysis</p>
+<p class="text-body-md text-on-surface-variant leading-relaxed text-sm">
+                                Based on previous incidents (Ref: <span class="text-secondary underline cursor-pointer">INC-772</span>), this pattern strongly suggests a leak in the request-batching buffer. The probability of correlation with yesterday's deployment of <code class="font-code-sm text-[12px] bg-surface-container-highest px-1 rounded">v4.2.1-rc</code> is <span class="text-success-teal font-bold">92%</span>.
+                            </p>
+</div>
+<div class="space-y-3">
+<p class="text-[11px] text-on-surface-variant font-bold uppercase tracking-widest">Recommended Actions</p>
+<button class="w-full flex items-center justify-between p-3 bg-surface-container-highest border border-border-subtle rounded-lg text-sm text-on-surface hover:border-ai-presence group transition-all">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="restart_alt">restart_alt</span>
+<span class="">Restart US-East cluster</span>
+</div>
+<span class="material-symbols-outlined opacity-0 group-hover:opacity-100 transition-opacity" data-icon="chevron_right">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-3 bg-surface-container-highest border border-border-subtle rounded-lg text-sm text-on-surface hover:border-ai-presence group transition-all">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="history">history</span>
+<span class="">Rollback to v4.2.0</span>
+</div>
+<span class="material-symbols-outlined opacity-0 group-hover:opacity-100 transition-opacity" data-icon="chevron_right">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-3 bg-surface-container-highest border border-border-subtle rounded-lg text-sm text-on-surface hover:border-ai-presence group transition-all">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="expand_circle_down">expand_circle_down</span>
+<span class="">Increase heap to 16GB</span>
+</div>
+<span class="material-symbols-outlined opacity-0 group-hover:opacity-100 transition-opacity" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Composer / Interaction -->
+<div class="mt-auto border-t border-border-subtle pt-4">
+<div class="relative">
+<textarea class="w-full bg-surface-container-lowest border border-border-subtle rounded-xl p-4 pr-12 focus:ring-2 focus:ring-ai-presence text-sm resize-none h-24 custom-scrollbar" placeholder="Ask OwnGPT for more details..."></textarea>
+<button class="absolute bottom-4 right-4 p-2 bg-ai-presence text-white rounded-lg hover:scale-105 transition-transform active:scale-95 shadow-lg shadow-ai-presence/20">
+<span class="material-symbols-outlined" data-icon="send">send</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Background Elements -->
+<div class="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
+<div class="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-ai-presence/5 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-[-10%] left-[-5%] w-[30%] h-[30%] bg-secondary/5 rounded-full blur-[100px]"></div>
+</div>
+<script>
+        // Micro-interactions and UI Logic
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mousedown', () => btn.classList.add('scale-95'));
+            btn.addEventListener('mouseup', () => btn.classList.remove('scale-95'));
+        });
+
+        // Simple mock for "Quick Action" dropdown or state
+        const quickAction = document.querySelector('[data-icon="bolt"]').parentElement;
+        quickAction.addEventListener('click', () => {
+            console.log('Opening quick actions panel...');
+        });
+    </script>
+</body></html>

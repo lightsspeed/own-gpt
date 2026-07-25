@@ -58,6 +58,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     system_prompt: Optional[str] = None
+    active_tools: Optional[dict[str, bool]] = None
 
 
 class ResourceItem(BaseModel):
@@ -424,6 +425,21 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
 
         # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
         ctx = _run_pipeline(request.message, request.session_id)
+
+        # Override answer_mode based on active_tools (frontend tool toggles)
+        at = request.active_tools or {}
+        web_on = at.get("web", False)
+        kb_on = at.get("kb", True)
+        if web_on and not kb_on:
+            ctx.answer_mode = "web"
+            ctx.context_text = ""
+            ctx.ranked_chunks = []
+        elif not web_on and kb_on:
+            ctx.answer_mode = "grounded"
+        elif not web_on and not kb_on:
+            ctx.answer_mode = "synthesis"
+            ctx.context_text = ""
+            ctx.ranked_chunks = []
 
         # Short-circuit for clarification
         if ctx.confidence and ctx.confidence.decision == "clarification":

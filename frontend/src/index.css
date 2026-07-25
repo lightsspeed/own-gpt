@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Encode+Sans+Semi+Expanded:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,11 +7,11 @@
 @layer base {
   :root {
     /* ── Surface hierarchy ── */
-    --canvas:  222 50% 7%;
-    --surface: 222 48% 9%;
-    --elevated: 220 40% 14%;
-    --overlay: 222 48% 9%;
-    --hover:   220 40% 18%;
+    --canvas:  0 0% 0%;
+    --surface: 0 0% 2%;
+    --elevated: 0 0% 6%;
+    --overlay: 0 0% 2%;
+    --hover:   0 0% 10%;
 
     /* ── Text hierarchy ── */
     --text-primary:   210 60% 97%;
@@ -44,8 +44,8 @@
     --destructive-foreground: 0 0% 100%;
 
     /* ── Borders & rings ── */
-    --border: 220 35% 16%;
-    --input:  220 35% 16%;
+    --border: 0 0% 14%;
+    --input:  0 0% 14%;
     --ring:   221 90% 55%;
 
     --radius: 0.75rem;
@@ -90,8 +90,8 @@
   }
   body {
     @apply text-foreground antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
-    background: radial-gradient(ellipse at 70% 0%, hsl(221, 80%, 16%) 0%, hsl(222, 50%, 7%) 50%, hsl(222, 55%, 5%) 100%);
+    font-family: 'Encode Sans Semi Expanded', system-ui, sans-serif;
+    background: #000;
     min-height: 100vh;
   }
 }
@@ -110,7 +110,57 @@
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.35), 0 0 60px rgba(59, 130, 246, 0.1);
 }
 
-/* ── Royal blue scrollbar ── */
+/* ── Composer shadow (elevation at bottom) ── */
+.composer-shadow {
+  box-shadow: 0 -10px 40px -10px rgba(0,0,0,0.5);
+}
+
+/* ── Sidebar transition ── */
+.sidebar-transition {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Cursor blink ── */
+.cursor-blink {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background-color: hsl(221 90% 55%);
+  margin-left: 2px;
+  animation: cursor-blink 1s step-end infinite;
+  vertical-align: middle;
+}
+
+/* ── Message stream fade-in ── */
+.message-stream-fade {
+  animation: messageFadeIn 0.4s ease-out forwards;
+}
+@keyframes messageFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Overlay scrim ── */
+.scrim {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+/* ── Custom scrollbar ── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(220 35% 16%);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(220 40% 24%);
+}
+
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -124,4 +174,24 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(221, 90%, 55%);
+}
+
+@keyframes text-shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+.animate-message-in {
+  animation: message-in 0.4s ease-out both;
+}
+
+@keyframes message-in {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

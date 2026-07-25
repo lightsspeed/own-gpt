@@ -11,6 +11,27 @@ export interface ResourceItem {
   snippet?: string;
 }
 
+export interface ArtifactAction {
+  label: string;
+  href?: string;
+}
+
+export type ArtifactType = 'finding' | 'recommendation' | 'evidence' | 'experiment' | 'report' | 'configuration';
+
+export interface Artifact {
+  id: string;
+  type: ArtifactType;
+  title: string;
+  description: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  confidence?: number;
+  status?: string;
+  source?: string;
+  createdAt: string;
+  metadata?: Record<string, string>;
+  actions: ArtifactAction[];
+}
+
 export interface MessageData {
   id: string;
   role: 'user' | 'assistant' | 'tool_event';
@@ -18,6 +39,7 @@ export interface MessageData {
   tool?: ToolCall;
   timestamp?: Date;
   resources?: ResourceItem[];
+  artifacts?: Artifact[];
   images?: string[];
   feedback?: 'liked' | 'disliked' | null;
   answerMode?: 'grounded' | 'hybrid' | 'synthesis' | 'web' | 'no_evidence';

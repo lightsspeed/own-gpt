@@ -84,12 +84,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       if (history.length > 0) {
         setMessages(history);
       } else {
-        setMessages([{
-          id: 'welcome',
-          role: 'assistant',
-          content: `## Welcome to **Own GPT** 👋\n\nI'm your personal AI assistant with:\n- 🧠 **Persistent memory** — I remember our full conversation\n- 📚 **Knowledge Base** — Upload documents and ask me about them\n- 🌐 **Web Search** — I can look up real-time information\n- 🔧 **Tool Calling** — Watch me use tools in real-time\n\nTry asking me anything, or upload a document to get started!`,
-          timestamp: new Date(),
-        }]);
+        setMessages([]);
       }
     };
     load();
@@ -221,6 +216,13 @@ export function useChat(options: UseChatOptions): UseChatReturn {
               setMessages(prev => prev.map(m => {
                 if (m.id === assistantMessageId) {
                   return { ...m, resources: payload.resources, answerMode: payload.answer_mode, answerModeMetadata: payload.answer_mode_metadata };
+                }
+                return m;
+              }));
+            } else if (payload.type === 'artifacts') {
+              setMessages(prev => prev.map(m => {
+                if (m.id === assistantMessageId) {
+                  return { ...m, artifacts: payload.artifacts };
                 }
                 return m;
               }));

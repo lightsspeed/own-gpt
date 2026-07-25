@@ -1,0 +1,362 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>OwnGPT | Enterprise Intelligence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline-variant": "#464554",
+                        "tertiary": "#ffb783",
+                        "inverse-surface": "#e4e1ed",
+                        "on-primary-container": "#0d0096",
+                        "error-container": "#93000a",
+                        "outline": "#908fa0",
+                        "on-error-container": "#ffdad6",
+                        "surface-tint": "#c0c1ff",
+                        "slate-gray": "#404040",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "error": "#ffb4ab",
+                        "on-secondary-fixed": "#00201c",
+                        "surface-variant": "#34343d",
+                        "on-tertiary-container": "#452000",
+                        "surface-container-low": "#1b1b23",
+                        "secondary": "#4fdbc8",
+                        "on-secondary": "#003731",
+                        "on-tertiary-fixed-variant": "#703700",
+                        "ai-presence": "#6366F1",
+                        "tertiary-container": "#d97721",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "secondary-fixed": "#71f8e4",
+                        "on-surface": "#e4e1ed",
+                        "background": "#13131b",
+                        "primary": "#c0c1ff",
+                        "bg-primary": "#0A0A0A",
+                        "on-secondary-container": "#003f38",
+                        "surface-container": "#1f1f27",
+                        "on-primary": "#1000a9",
+                        "surface-container-lowest": "#0d0d15",
+                        "surface-container-highest": "#34343d",
+                        "on-tertiary-fixed": "#301400",
+                        "on-tertiary": "#4f2500",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "bg-tertiary": "#262626",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "text-primary": "#F5F5F5",
+                        "inverse-on-surface": "#303038",
+                        "border-subtle": "#262626",
+                        "tertiary-fixed": "#ffdcc5",
+                        "surface-bright": "#393841",
+                        "surface": "#13131b",
+                        "primary-fixed": "#e1e0ff",
+                        "surface-dim": "#13131b",
+                        "surface-container-high": "#292932",
+                        "inverse-primary": "#494bd6",
+                        "on-error": "#690005",
+                        "on-background": "#e4e1ed",
+                        "primary-container": "#8083ff",
+                        "bg-secondary": "#171717",
+                        "text-secondary": "#A3A3A3",
+                        "on-primary-fixed": "#07006c",
+                        "success-teal": "#14B8A6",
+                        "on-surface-variant": "#c7c4d7",
+                        "on-secondary-fixed-variant": "#005048",
+                        "secondary-container": "#04b4a2"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "context-panel-width": "400px",
+                        "stack-md": "16px",
+                        "stack-sm": "8px",
+                        "inset-md": "16px",
+                        "sidebar-width": "280px",
+                        "stack-lg": "24px",
+                        "gutter": "24px",
+                        "max-content-width": "800px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "code-sm": ["JetBrains Mono"],
+                        "label-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-md": ["15px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                        "code-sm": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-md": ["13px", {"lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #0A0A0A;
+            color: #F5F5F5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+
+        .glass-panel {
+            background: rgba(23, 23, 23, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .sidebar-transition {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .composer-shadow {
+            box-shadow: 0 -10px 40px -10px rgba(0,0,0,0.5);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #34343d;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+<!-- SideNavBar (Anchor Logic) -->
+<aside class="sidebar-transition z-50 bg-bg-secondary dark:bg-bg-secondary w-sidebar-width h-full fixed left-0 top-0 border-r border-border-subtle flex flex-col p-inset-md overflow-y-auto" id="sidebar">
+<div class="flex items-center justify-between mb-8">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md font-bold text-text-primary">OwnGPT</span>
+<span class="font-body-md text-body-md text-text-secondary opacity-70">Enterprise Intelligence</span>
+</div>
+<button class="p-2 hover:bg-surface-variant transition-colors rounded-lg text-text-secondary active:scale-95" onclick="toggleSidebar()">
+<span class="material-symbols-outlined">menu_open</span>
+</button>
+</div>
+<button class="w-full flex items-center gap-3 p-3 text-ai-presence font-bold bg-surface-container-high rounded-lg transition-colors cursor-pointer active:scale-95 mb-6">
+<span class="material-symbols-outlined">add</span>
+<span class="font-body-md text-body-md">New Chat</span>
+</button>
+<nav class="flex-1 space-y-1">
+<div class="text-text-secondary font-label-md text-[11px] uppercase tracking-wider mb-2 px-3">Main</div>
+<a class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-variant transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<span class="font-body-md text-body-md">Workspace</span>
+</a>
+<a class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-variant transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-body-md text-body-md">History</span>
+</a>
+<a class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-variant transition-colors cursor-pointer active:scale-95" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+<div class="pt-6">
+<div class="text-text-secondary font-label-md text-[11px] uppercase tracking-wider mb-2 px-3">Recent Projects</div>
+<div class="space-y-1">
+<div class="p-3 text-body-md text-text-secondary hover:bg-surface-variant rounded-lg cursor-pointer truncate">Platform Latency Investigation</div>
+<div class="p-3 text-body-md text-text-secondary hover:bg-surface-variant rounded-lg cursor-pointer truncate">Q3 Deployment Audit</div>
+<div class="p-3 text-body-md text-text-secondary hover:bg-surface-variant rounded-lg cursor-pointer truncate">K8s Cluster Opts</div>
+</div>
+</div>
+</nav>
+<div class="mt-auto space-y-1">
+<button class="w-full text-left p-3 rounded-lg font-body-md text-body-md text-ai-presence hover:bg-surface-variant transition-colors">
+                Upgrade Plan
+            </button>
+<a class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-variant transition-colors" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-body-md text-body-md">Help</span>
+</a>
+<a class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-variant transition-colors" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-body-md text-body-md">Logout</span>
+</a>
+<div class="flex items-center gap-3 p-3 mt-4 border-t border-border-subtle pt-6">
+<div class="w-8 h-8 rounded-full bg-ai-presence flex items-center justify-center text-white text-[12px] font-bold">JD</div>
+<div class="flex flex-col">
+<span class="text-body-md font-bold leading-tight">Jane Doe</span>
+<span class="text-[11px] text-text-secondary">Engineering Lead</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Sidebar Collapsed State Placeholder Button -->
+<button class="fixed top-6 left-6 z-[60] p-2 hover:bg-surface-variant transition-colors rounded-lg text-text-secondary active:scale-95 hidden" id="sidebar-toggle-collapsed" onclick="toggleSidebar()">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<!-- Main Content Canvas -->
+<main class="flex-1 ml-sidebar-width transition-all duration-300 relative flex flex-col h-full bg-bg-primary" id="main-content">
+<!-- TopNavBar (Anchor Logic) -->
+<header class="fixed top-0 right-0 w-[calc(100%-280px)] h-16 glass-panel z-40 px-gutter flex justify-between items-center transition-all duration-300" id="top-nav">
+<div class="flex items-center gap-6">
+<span class="font-headline-md text-headline-md font-black text-text-primary">OwnGPT</span>
+<nav class="hidden md:flex items-center gap-stack-lg">
+<a class="font-label-md text-label-md text-text-secondary hover:text-ai-presence transition-all" href="#">Models</a>
+<a class="font-label-md text-label-md text-text-secondary hover:text-ai-presence transition-all" href="#">Experiments</a>
+<a class="font-label-md text-label-md text-text-secondary hover:text-ai-presence transition-all" href="#">Deployments</a>
+</nav>
+</div>
+<div class="flex items-center gap-stack-md">
+<button class="p-2 text-text-secondary hover:text-ai-presence transition-all flex items-center gap-2">
+<span class="material-symbols-outlined">share</span>
+<span class="font-label-md text-label-md">Share</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-ai-presence transition-all flex items-center gap-2">
+<span class="material-symbols-outlined">ios_share</span>
+<span class="font-label-md text-label-md">Export</span>
+</button>
+<div class="w-px h-4 bg-border-subtle mx-2"></div>
+<button class="p-1 hover:text-ai-presence transition-all">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Centered Empty State -->
+<div class="flex-1 flex flex-col items-center justify-center px-gutter pt-16 pb-40 overflow-y-auto">
+<div class="max-w-[800px] w-full text-center space-y-12">
+<!-- Welcome Branding -->
+<div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+<div class="inline-flex items-center justify-center p-4 rounded-2xl bg-surface-container-high border border-border-subtle mb-4">
+<span class="material-symbols-outlined text-ai-presence text-4xl" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-text-primary tracking-tight">Welcome to OwnGPT</h1>
+<p class="font-body-lg text-body-lg text-text-secondary leading-relaxed max-w-2xl mx-auto">
+                        I'm your AI engineering assistant. I can help you monitor your platform, investigate findings, run experiments, and manage configurations.
+                    </p>
+</div>
+<!-- Suggestion Chips / Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
+<button class="group p-5 rounded-xl border border-border-subtle bg-bg-secondary hover:bg-surface-container-high hover:border-ai-presence transition-all text-left flex flex-col gap-3">
+<span class="material-symbols-outlined text-ai-presence group-hover:scale-110 transition-transform">monitoring</span>
+<span class="font-body-md text-body-md text-text-primary font-medium">How is the platform doing?</span>
+<span class="text-[12px] text-text-secondary">Analyze real-time health metrics and uptime.</span>
+</button>
+<button class="group p-5 rounded-xl border border-border-subtle bg-bg-secondary hover:bg-surface-container-high hover:border-ai-presence transition-all text-left flex flex-col gap-3">
+<span class="material-symbols-outlined text-tertiary group-hover:scale-110 transition-transform">search_insights</span>
+<span class="font-body-md text-body-md text-text-primary font-medium">Show me recent findings</span>
+<span class="text-[12px] text-text-secondary">Review recent anomalies and log exceptions.</span>
+</button>
+<button class="group p-5 rounded-xl border border-border-subtle bg-bg-secondary hover:bg-surface-container-high hover:border-ai-presence transition-all text-left flex flex-col gap-3">
+<span class="material-symbols-outlined text-secondary group-hover:scale-110 transition-transform">science</span>
+<span class="font-body-md text-body-md text-text-primary font-medium">What experiments are running?</span>
+<span class="text-[12px] text-text-secondary">Check active A/B tests and rollout status.</span>
+</button>
+</div>
+<!-- Atmospheric Visual (WebGL Background or Abstract) -->
+<div class="relative w-full h-32 opacity-20 pointer-events-none">
+<!-- This would be where a shader could sit if needed, placeholder for spacing -->
+</div>
+</div>
+</div>
+<!-- Composer Component (Fixed Bottom) -->
+<div class="fixed bottom-0 left-0 w-full md:left-auto md:right-0 md:w-[calc(100%-280px)] p-6 glass-panel border-t border-border-subtle composer-shadow transition-all duration-300" id="composer-container">
+<div class="max-w-max-content-width mx-auto relative group">
+<div class="relative flex flex-col bg-surface-container-low border border-border-subtle rounded-xl focus-within:border-ai-presence focus-within:ring-2 focus-within:ring-ai-presence focus-within:ring-offset-2 focus-within:ring-offset-bg-primary transition-all p-2">
+<textarea class="w-full bg-transparent border-none focus:ring-0 text-text-primary font-body-md text-body-md p-3 min-h-[56px] max-h-[200px] resize-none" id="message-input" oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'" placeholder="Ask anything about the platform..." rows="1"></textarea>
+<div class="flex items-center justify-between px-2 pb-2 pt-1 border-t border-border-subtle mt-1 opacity-80 group-focus-within:opacity-100">
+<div class="flex items-center gap-1">
+<button class="p-2 text-text-secondary hover:text-text-primary hover:bg-surface-variant rounded-lg transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">attach_file</span>
+<span class="font-label-md text-label-md">Attach</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-text-primary hover:bg-surface-variant rounded-lg transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">construction</span>
+<span class="font-label-md text-label-md">Tools</span>
+</button>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-[11px] text-text-secondary font-code-sm hidden sm:inline">Press ⌘ + Enter to send</span>
+<button class="bg-ai-presence text-white p-2 px-4 rounded-lg font-label-md text-label-md flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all">
+<span>Send</span>
+<span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Tooltips / Status -->
+<div class="absolute -top-10 left-0 right-0 flex justify-center pointer-events-none opacity-0 group-focus-within:opacity-100 transition-opacity">
+<div class="bg-surface-container-high border border-border-subtle px-3 py-1 rounded-full text-[11px] text-text-secondary flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-success-teal animate-pulse"></span>
+                        AI Model: GPT-4 Omni (Connected)
+                    </div>
+</div>
+</div>
+</div>
+</main>
+<script>
+        let sidebarCollapsed = false;
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('main-content');
+            const topNav = document.getElementById('top-nav');
+            const composer = document.getElementById('composer-container');
+            const collapsedBtn = document.getElementById('sidebar-toggle-collapsed');
+
+            sidebarCollapsed = !sidebarCollapsed;
+
+            if (sidebarCollapsed) {
+                sidebar.classList.add('-translate-x-full');
+                mainContent.classList.remove('ml-sidebar-width');
+                topNav.style.width = '100%';
+                composer.style.width = '100%';
+                collapsedBtn.classList.remove('hidden');
+            } else {
+                sidebar.classList.remove('-translate-x-full');
+                mainContent.classList.add('ml-sidebar-width');
+                topNav.style.width = 'calc(100% - 280px)';
+                composer.style.width = 'calc(100% - 280px)';
+                collapsedBtn.classList.add('hidden');
+            }
+        }
+
+        // Auto-expand textarea
+        const tx = document.getElementsByTagName("textarea");
+        for (let i = 0; i < tx.length; i++) {
+            tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;overflow-y:hidden;");
+            tx[i].addEventListener("input", OnInput, false);
+        }
+
+        function OnInput() {
+            this.style.height = 0;
+            this.style.height = (this.scrollHeight) + "px";
+        }
+        
+        // Initial state logic (default closed per prompt)
+        window.addEventListener('DOMContentLoaded', () => {
+           // If we want to start closed as per prompt request:
+           // toggleSidebar();
+        });
+    </script>
+</body></html>
