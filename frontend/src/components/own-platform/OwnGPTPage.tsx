@@ -119,12 +119,22 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
 
     return (
     <div className="flex flex-col h-full">
-      <div className="relative flex-1">
-        {/* Draggable scroll rail */}
+      <div className="relative flex-1 min-h-0">
         {hasMessages && (
           <ScrollRail scrollRef={scrollRef} progress={scrollProgress} />
         )}
-
+        <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none" style={{ transform: 'translateY(-22px)' }}>
+          <div className="max-w-[920px] mx-auto px-6 flex justify-end">
+            <div className="pointer-events-auto">
+              <ScrollToBottom
+                visible={showScrollBtn}
+                onClick={scrollToBottom}
+                newMessages={newMsgCount || undefined}
+                isLoading={isLoading}
+              />
+            </div>
+          </div>
+        </div>
         <div
           ref={scrollRef}
           onScroll={handleScroll}
@@ -217,24 +227,10 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
             )}
 
             <div ref={bottomRef} />
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Scroll-to-bottom FAB — right-aligned with message column, 22px above composer */}
-      <div className="absolute bottom-0 left-0 right-0 pointer-events-none" style={{ transform: 'translateY(-22px)' }}>
-        <div className="max-w-[920px] mx-auto px-6 flex justify-end">
-          <div className="pointer-events-auto">
-            <ScrollToBottom
-              visible={showScrollBtn}
-              onClick={scrollToBottom}
-              newMessages={newMsgCount || undefined}
-              isLoading={isLoading}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
 
       <div className="pb-4">
         <ContextBar

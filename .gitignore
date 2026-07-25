@@ -52,6 +52,8 @@ Thumbs.db
 # Data / artifacts
 data/whoosh/
 data/learning.db
+data/learning.db-shm
+data/learning.db-wal
 data/ingestion/
 reports/
 *.whoosh
