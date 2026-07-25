@@ -103,6 +103,23 @@ class SessionListResponse(BaseModel):
     sessions: List[SessionListItem]
 
 
+class SearchResultItem(BaseModel):
+    session_id: str
+    session_title: str
+    match_type: str  # 'title' | 'message'
+    preview: str
+    timestamp: datetime
+
+
+class SearchResponse(BaseModel):
+    query: str
+    results: List[SearchResultItem]
+    total: int
+
+
+search_logger = logging.getLogger("search")
+
+
 def _flatten_content(content) -> str:
     """Convert structured content (list of content blocks) to plain text."""
     if isinstance(content, str):
@@ -298,6 +315,84 @@ async def list_sessions(db: AsyncSession = Depends(get_db)):
         )
     except Exception as e:
         logger.error(f"Failed to list sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# GET /chat/search  – search sessions and messages
+# ---------------------------------------------------------------------------
+@router.get("/chat/search", response_model=SearchResponse)
+async def search_conversations(q: str = "", type: str = "all", limit: int = 20, db: AsyncSession = Depends(get_db)):
+    try:
+        query = q.strip()
+        if not query:
+            return SearchResponse(query="", results=[], total=0)
+
+        results: List[SearchResultItem] = []
+
+        # Search session titles
+        stmt = (
+            select(ChatSession)
+            .where(ChatSession.title.ilike(f"%{query}%"))
+            .order_by(ChatSession.updated_at.desc())
+            .limit(limit)
+        )
+        res = await db.execute(stmt)
+        for s in res.scalars().all():
+            preview = s.title[:120]
+            if query.lower() in preview.lower():
+                idx = preview.lower().index(query.lower())
+                start = max(0, idx - 30)
+                end = min(len(preview), idx + len(query) + 30)
+                preview = ("…" if start > 0 else "") + preview[start:end] + ("…" if end < len(preview) else "")
+            results.append(SearchResultItem(
+                session_id=s.id,
+                session_title=s.title,
+                match_type="title",
+                preview=preview,
+                timestamp=s.updated_at or s.created_at,
+            ))
+
+        # Search message content via history endpoint per session
+        if len(results) < limit:
+            msg_stmt = (
+                select(ChatSession)
+                .order_by(ChatSession.updated_at.desc())
+                .limit(limit * 2)
+            )
+            msg_res = await db.execute(msg_stmt)
+            for s in msg_res.scalars().all():
+                if len(results) >= limit:
+                    break
+                if any(r.session_id == s.id for r in results):
+                    continue
+                try:
+                    config = {"configurable": {"thread_id": s.id}}
+                    state = graph.get_state(config)
+                    if not state or not state.values:
+                        continue
+                    for msg in state.values.get("messages", []):
+                        content = msg.content if isinstance(msg.content, str) else ""
+                        if query.lower() in content.lower():
+                            idx = content.lower().index(query.lower())
+                            start = max(0, idx - 60)
+                            end = min(len(content), idx + len(query) + 60)
+                            preview = ("…" if start > 0 else "") + content[start:end] + ("…" if end < len(content) else "")
+                            results.append(SearchResultItem(
+                                session_id=s.id,
+                                session_title=s.title,
+                                match_type="message",
+                                preview=preview,
+                                timestamp=s.updated_at or s.created_at,
+                            ))
+                            break
+                except Exception:
+                    continue
+
+        search_logger.info("search query=%q hits=%d", query, len(results))
+        return SearchResponse(query=query, results=results[:limit], total=len(results))
+    except Exception as e:
+        logger.error("Search endpoint error: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 

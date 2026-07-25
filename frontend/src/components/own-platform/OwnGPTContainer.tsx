@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ConversationSidebar } from './ConversationSidebar'
 import { OwnGPTPage } from './OwnGPTPage'
+import { SearchPalette } from './SearchPalette'
 import { SettingsPanel } from './SettingsPanel'
 import { Menu, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -14,6 +15,7 @@ export function OwnGPTContainer() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     const list = await api.fetchSessions()
@@ -52,6 +54,21 @@ export function OwnGPTContainer() {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, title } : s))
   }, [])
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
+
+  const handleSearchSelect = useCallback((sessionId: string) => {
+    setActiveId(sessionId)
+  }, [])
+
   const handleTogglePin = useCallback(async (id: string) => {
     const session = sessions.find(s => s.id === id)
     if (!session) return
@@ -62,13 +79,21 @@ export function OwnGPTContainer() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
+      <SearchPalette
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelect={handleSearchSelect}
+        onNewChat={handleNewChat}
+      />
+
       <ConversationSidebar
         sessions={sessions}
         activeId={activeId}
         loading={loading}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onSelect={setActiveId}
+        onSearchFocus={() => setSearchOpen(true)}
+        onSelect={handleSearchSelect}
         onNewChat={handleNewChat}
         onRename={handleRename}
         onDelete={handleDelete}

@@ -16,6 +16,14 @@ export const api = {
     return [];
   },
 
+  async search(query: string, type: string = 'all', limit: number = 20): Promise<{ results: any[]; total: number }> {
+    try {
+      const res = await fetch(`${API_BASE}/chat/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}`);
+      if (res.ok) return await res.json();
+    } catch { /* ignore */ }
+    return { results: [], total: 0 };
+  },
+
   async fetchHistory(sessionId: string): Promise<MessageData[]> {
     try {
       const res = await fetch(`${API_BASE}/chat/${sessionId}/history`);

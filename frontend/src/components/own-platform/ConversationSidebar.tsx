@@ -12,6 +12,7 @@ interface ConversationSidebarProps {
   loading?: boolean
   searchQuery?: string
   onSearchChange?: (q: string) => void
+  onSearchFocus?: () => void
   onSelect: (id: string) => void
   onNewChat: () => void
   onRename: (id: string, title: string) => void
@@ -42,6 +43,7 @@ export function ConversationSidebar({
   loading,
   searchQuery = '',
   onSearchChange,
+  onSearchFocus,
   onSelect,
   onNewChat,
   onRename,
@@ -133,6 +135,10 @@ export function ConversationSidebar({
             type="text"
             value={searchQuery}
             onChange={e => onSearchChange?.(e.target.value)}
+            onFocus={() => onSearchFocus?.()}
+            onKeyDown={e => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); onSearchFocus?.() }
+            }}
             placeholder="Search conversations..."
             className="w-full rounded-lg border border-border/50 bg-background/30 py-1.5 pl-8 pr-10 text-small text-foreground placeholder:text-muted-foreground/30 outline-none transition-colors focus:border-primary/30 focus:bg-background/50"
           />
