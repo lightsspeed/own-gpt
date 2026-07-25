@@ -9,7 +9,7 @@ import { ContextPanel } from './ContextPanel'
 import { ArtifactCard } from './ArtifactCard'
 import { ToolChips } from './ToolChips'
 import { ScrollToBottom } from './ScrollToBottom'
-import { ConversationNavigator } from './ConversationNavigator'
+import { ConversationOutline } from './ConversationNavigator'
 import type { ResourceItem } from '@/features/chat/types'
 import type { NavigatorAnchor } from './ConversationNavigator'
 
@@ -53,7 +53,6 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
   const isNearBottom = useRef(true)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [newMsgCount, setNewMsgCount] = useState(0)
-  const [scrollProgress, setScrollProgress] = useState(0)
   const prevMsgLen = useRef(visibleMessages.length)
 
   const scrollToBottom = useCallback(() => {
@@ -61,19 +60,12 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     setNewMsgCount(0)
   }, [bottomRef])
 
-  const [minimapVisible, setMinimapVisible] = useState(false)
-
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     isNearBottom.current = distFromBottom < 120
     setShowScrollBtn(distFromBottom > 150)
-    setMinimapVisible(el.scrollHeight > el.clientHeight)
-    const progress = el.scrollHeight > el.clientHeight
-      ? el.scrollTop / (el.scrollHeight - el.clientHeight)
-      : 0
-    setScrollProgress(progress)
   }, [])
 
   useEffect(() => {
@@ -85,14 +77,6 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     }
     prevMsgLen.current = visibleMessages.length
   }, [messages, isLoading, bottomRef, visibleMessages.length])
-
-  const newMsgLabel: string | undefined = newMsgCount > 0
-    ? isLoading
-      ? undefined  // handled by ScrollToBottom
-      : newMsgCount > 1
-        ? `${newMsgCount} new messages`
-        : undefined
-    : undefined
 
   const streamingMsg = messages.find(m => m.id === streamingId)
   const showSpinner = isLoading && streamingId !== null && streamingMsg && !streamingMsg.content
@@ -124,112 +108,58 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
   const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const handleNavigatorClick = useCallback((_anchorId: string, targetMsgId: string) => {
+  const handleChapterClick = useCallback((_anchorId: string, targetMsgId: string) => {
     setHighlightedMsgId(targetMsgId)
     if (highlightTimer.current) clearTimeout(highlightTimer.current)
     highlightTimer.current = setTimeout(() => setHighlightedMsgId(null), 2000)
   }, [])
 
-  function extractHeadings(content: string): string[] {
-    const headings: string[] = []
-    const lines = content.split('\n')
-    for (const line of lines) {
-      const match = line.match(/^(#{1,3})\s+(.+)$/)
-      if (match) headings.push(match[2].trim())
-    }
-    return headings.slice(0, 5)
-  }
+  const chapters: NavigatorAnchor[] = useMemo(() => {
+    const userMessages = messages.filter(m => m.role === 'user')
+    if (userMessages.length === 0) return []
 
-  const anchors: NavigatorAnchor[] = useMemo(() => {
-    const result: NavigatorAnchor[] = []
-    let sectionResponseCount = 0
-    let sectionArtifactCount = 0
-    let sectionToolCount = 0
-    let lastUserIdx = -1
-
-    for (const msg of messages) {
-      if (msg.role === 'tool_event') continue
-
-      if (msg.role === 'user') {
-        if (lastUserIdx >= 0) {
-          const prev = result[lastUserIdx]
-          prev.responseCount = sectionResponseCount
-          prev.artifactCount = sectionArtifactCount
-          prev.toolCount = sectionToolCount
-        }
-        sectionResponseCount = 0
-        sectionArtifactCount = 0
-        sectionToolCount = 0
-        lastUserIdx = result.length
-        const label = msg.content.length > 48 ? msg.content.slice(0, 48).replace(/\s+\S*$/, '') + '…' : msg.content
-        result.push({
-          id: `user-${msg.id}`,
-          targetMsgId: msg.id,
-          type: 'user',
-          label,
-        })
+    const MAX_CHAPTERS = 15
+    let selectedUsers: typeof userMessages
+    if (userMessages.length > MAX_CHAPTERS) {
+      const step = (userMessages.length - 1) / (MAX_CHAPTERS - 1)
+      selectedUsers = []
+      for (let i = 0; i < MAX_CHAPTERS; i++) {
+        selectedUsers.push(userMessages[Math.round(i * step)])
       }
+    } else {
+      selectedUsers = userMessages
+    }
 
-      if (msg.role === 'assistant') {
-        sectionResponseCount++
-        if (msg.usedTools?.length) sectionToolCount += msg.usedTools.length
-        if (msg.artifacts?.length) {
-          sectionArtifactCount += msg.artifacts.length
-          for (const art of msg.artifacts) {
-            result.push({
-              id: `artifact-${art.id}`,
-              targetMsgId: msg.id,
-              type: 'artifact',
-              label: art.title.length > 48 ? art.title.slice(0, 48).replace(/\s+\S*$/, '') + '…' : art.title,
-              artifactCount: 1,
-            })
+    return selectedUsers.map((msg) => {
+      const msgIdx = messages.indexOf(msg)
+      let responseCount = 0
+      let artifactCount = 0
+      let toolCount = 0
+      if (msgIdx >= 0) {
+        for (let j = msgIdx + 1; j < messages.length; j++) {
+          const m = messages[j]
+          if (!m || m.role === 'user') break
+          if (m.role === 'assistant') {
+            responseCount++
+            if (m.usedTools) toolCount += m.usedTools.length
+            if (m.artifacts) artifactCount += m.artifacts.length
           }
         }
-        const headings = extractHeadings(msg.content)
-        for (const h of headings) {
-          result.push({
-            id: `heading-${msg.id}-${h.slice(0, 16)}`,
-            targetMsgId: msg.id,
-            type: 'section',
-            label: h.length > 48 ? h.slice(0, 48).replace(/\s+\S*$/, '') + '…' : h,
-          })
-        }
       }
-    }
-
-    if (lastUserIdx >= 0) {
-      const prev = result[lastUserIdx]
-      prev.responseCount = sectionResponseCount
-      prev.artifactCount = sectionArtifactCount
-      prev.toolCount = sectionToolCount
-    }
-
-    const MAX_ANCHORS = 25
-    if (result.length > MAX_ANCHORS) {
-      const step = (result.length - 1) / (MAX_ANCHORS - 1)
-      const sampled: NavigatorAnchor[] = [result[0]]
-      for (let i = 1; i < MAX_ANCHORS - 1; i++) {
-        sampled.push(result[Math.round(i * step)])
+      return {
+        id: `chapter-${msg.id}`,
+        targetMsgId: msg.id,
+        type: 'user' as const,
+        label: msg.content.length > 50 ? msg.content.slice(0, 50).replace(/\s+\S*$/, '') + '…' : msg.content,
+        responseCount,
+        artifactCount,
+        toolCount,
       }
-      sampled.push(result[result.length - 1])
-      return sampled
-    }
-
-    return result
+    })
   }, [messages])
 
     return (
     <div className="flex flex-col h-full">
-      {hasMessages && (
-        <ConversationNavigator
-          scrollRef={scrollRef}
-          progress={scrollProgress}
-          visible={minimapVisible}
-          anchors={anchors}
-          streamingId={streamingId}
-          onAnchorClick={handleNavigatorClick}
-        />
-      )}
       <ScrollToBottom
         show={showScrollBtn}
         onClick={scrollToBottom}
@@ -244,6 +174,16 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
         >
           <div className="pt-6 pb-4 px-6">
             <div className="max-w-[920px] mx-auto space-y-6">
+            {hasMessages && (
+              <div className="flex items-center gap-3 pb-2 border-b border-border/10">
+                <ConversationOutline
+                  chapters={chapters}
+                  streamingId={streamingId}
+                  onAnchorClick={handleChapterClick}
+                />
+              </div>
+            )}
+
             {messages.map((msg, idx) => {
               if (msg.role === 'tool_event') return null
               return (
