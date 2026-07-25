@@ -687,7 +687,13 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                         loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "trace", "trace": trace_dict}))
             except Exception as thread_err:
                 logger.error(f"Stream thread error: {thread_err}", exc_info=True)
-                loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "error", "message": str(thread_err)}))
+                err_msg = str(thread_err)
+                # Friendly message for image-incompatible models
+                if "does not support image" in err_msg.lower() or "cannot read" in err_msg.lower():
+                    friendly = "This model doesn't support image analysis. Try using a different model (like gpt-4o) for image tasks, or describe the image in text."
+                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": friendly}))
+                else:
+                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "error", "message": err_msg}))
             finally:
                 loop.call_soon_threadsafe(q.put_nowait, "[DONE]")
 
