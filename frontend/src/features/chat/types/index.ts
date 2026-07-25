@@ -42,6 +42,7 @@ export interface MessageData {
   artifacts?: Artifact[];
   images?: string[];
   feedback?: 'liked' | 'disliked' | null;
+  usedTools?: string[];
   answerMode?: 'grounded' | 'hybrid' | 'synthesis' | 'web' | 'no_evidence';
   answerModeMetadata?: {
     chunk_count: number;
@@ -93,13 +94,27 @@ export interface ChatSession {
   last_answer_mode?: 'grounded' | 'hybrid' | 'synthesis' | 'web' | 'no_evidence';
 }
 
+export type ToolMode = 'auto' | 'manual' | 'disabled';
+
 export interface ToolInfo {
   name: string;
   label: string;
   icon: React.ReactNode;
   color: string;
   desc: string;
+  category: 'knowledge' | 'analysis' | 'generation' | 'external';
+  enabled: boolean;
+  mode: ToolMode;
 }
+
+export const DEFAULT_TOOLS: ToolInfo[] = [
+  { name: 'web_search', label: 'Web Search', icon: '🌐', color: 'text-sky-400', desc: 'Search the web for real-time information', category: 'knowledge', enabled: true, mode: 'auto' },
+  { name: 'knowledge_base', label: 'Knowledge Base', icon: '📚', color: 'text-blue-400', desc: 'Retrieve information from connected corpora', category: 'knowledge', enabled: true, mode: 'auto' },
+  { name: 'calculator', label: 'Calculator', icon: '🧮', color: 'text-emerald-400', desc: 'Perform mathematical calculations', category: 'analysis', enabled: false, mode: 'manual' },
+  { name: 'code_interpreter', label: 'Code Interpreter', icon: '💻', color: 'text-purple-400', desc: 'Execute code snippets for analysis', category: 'analysis', enabled: false, mode: 'manual' },
+  { name: 'image_analysis', label: 'Image Analysis', icon: '📷', color: 'text-amber-400', desc: 'Analyze uploaded images', category: 'analysis', enabled: false, mode: 'manual' },
+  { name: 'memory', label: 'Memory', icon: '🧠', color: 'text-rose-400', desc: 'Recall information from past conversations', category: 'knowledge', enabled: false, mode: 'auto' },
+]
 
 export type PipelineStageStatus = 'waiting' | 'active' | 'done';
 

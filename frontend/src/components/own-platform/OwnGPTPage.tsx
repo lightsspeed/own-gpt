@@ -7,6 +7,7 @@ import { GenerationSpinner } from './GenerationSpinner'
 import { ContextPanel } from './ContextPanel'
 import { ContextBar } from './ContextBar'
 import { ArtifactCard } from './ArtifactCard'
+import { ToolChips } from './ToolChips'
 import type { ResourceItem } from '@/features/chat/types'
 
 interface OwnGPTPageProps {
@@ -32,6 +33,9 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     addContextItem,
     removeContextItem,
     clearContext,
+    tools,
+    toggleTool,
+    setToolMode,
   } = useChat({
     sessionId,
     model: 'gpt-4o-mini',
@@ -106,6 +110,9 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
                     onEdit={msg.role === 'user' ? handleEdit : undefined}
                     onRegenerate={msg.role === 'assistant' && idx === visibleMessages.length - 1 && !isLoading ? handleRegenerate : undefined}
                   />
+                  {msg.role === 'assistant' && msg.usedTools && msg.usedTools.length > 0 && msg.id !== streamingId && (
+                    <ToolChips tools={msg.usedTools} />
+                  )}
                   {msg.id !== streamingId && msg.artifacts && msg.artifacts.length > 0 && (
                     <div className="space-y-2">
                       {msg.artifacts.map(artifact => (
@@ -191,6 +198,9 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
           onSend={send}
           onStop={stop}
           isLoading={isLoading}
+          tools={tools}
+          onToggleTool={toggleTool}
+          onToolModeChange={setToolMode}
         />
       </div>
 

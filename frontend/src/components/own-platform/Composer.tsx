@@ -1,9 +1,10 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { ArrowUp, Paperclip, Mic, X, Upload } from 'lucide-react'
+import { ArrowUp, Paperclip, Mic, X, Upload, Wrench } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './FilePreview'
+import { ToolPicker } from './ToolPicker'
 import { uploadService } from '@/features/chat/services/uploadService'
-import type { AttachmentFile } from '@/features/chat/types'
+import type { AttachmentFile, ToolInfo, ToolMode } from '@/features/chat/types'
 
 interface ComposerProps {
   input: string
@@ -13,6 +14,9 @@ interface ComposerProps {
   isLoading?: boolean
   disabled?: boolean
   placeholder?: string
+  tools?: ToolInfo[]
+  onToggleTool?: (name: string) => void
+  onToolModeChange?: (name: string, mode: ToolMode) => void
 }
 
 export function Composer({
@@ -23,6 +27,9 @@ export function Composer({
   isLoading = false,
   disabled = false,
   placeholder = 'Ask anything...',
+  tools,
+  onToggleTool,
+  onToolModeChange,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -30,6 +37,7 @@ export function Composer({
   const [files, setFiles] = useState<AttachmentFile[]>([])
   const [focused, setFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
 
   const autoResize = () => {
     const ta = textareaRef.current
@@ -170,6 +178,30 @@ export function Composer({
         )}
       >
         <div className="flex items-end px-2 py-1.5">
+          {tools && onToggleTool && (
+            <div className="relative">
+              <button
+                onClick={() => setToolsOpen(!toolsOpen)}
+                className={cn(
+                  'p-2 mb-[3px] rounded-lg transition-all shrink-0',
+                  toolsOpen || tools.some(t => t.enabled)
+                    ? 'text-primary hover:bg-primary/10'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                title="Toggle tools"
+              >
+                <Wrench size={18} />
+              </button>
+              {toolsOpen && (
+                <ToolPicker
+                  tools={tools}
+                  onToggle={onToggleTool}
+                  onModeChange={onToolModeChange || (() => {})}
+                  onClose={() => setToolsOpen(false)}
+                />
+              )}
+            </div>
+          )}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-2 mb-[3px] text-muted-foreground hover:text-foreground rounded-lg transition-all shrink-0"

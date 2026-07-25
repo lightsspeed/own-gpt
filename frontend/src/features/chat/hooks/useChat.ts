@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { MessageData, UploadedFile, PipelineStage, ContextItem, ConversationContext } from '../types';
+import type { MessageData, UploadedFile, PipelineStage, ContextItem, ConversationContext, ToolInfo, ToolMode } from '../types';
+import { DEFAULT_TOOLS } from '../types';
 import { api } from '../services/chatApi';
 
 export interface UseChatOptions {
@@ -27,6 +28,9 @@ export interface UseChatReturn {
   addContextItem: (item: ContextItem) => void;
   removeContextItem: (id: string) => void;
   clearContext: () => void;
+  tools: ToolInfo[];
+  toggleTool: (name: string) => void;
+  setToolMode: (name: string, mode: ToolMode) => void;
 }
 
 const INITIAL_STAGES: PipelineStage[] = [
@@ -72,6 +76,15 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(INITIAL_STAGES);
   const [error, setError] = useState<string | null>(null);
   const [context, setContext] = useState<ConversationContext>({ items: [] });
+  const [tools, setTools] = useState<ToolInfo[]>(DEFAULT_TOOLS);
+
+  const toggleTool = useCallback((name: string) => {
+    setTools(prev => prev.map(t => t.name === name ? { ...t, enabled: !t.enabled } : t));
+  }, []);
+
+  const setToolMode = useCallback((name: string, mode: ToolMode) => {
+    setTools(prev => prev.map(t => t.name === name ? { ...t, mode } : t));
+  }, []);
 
   const addContextItem = useCallback((item: ContextItem) => {
     setContext(prev => ({
@@ -95,6 +108,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const hasContent = useRef(false);
   const contextRef = useRef(context);
   contextRef.current = context;
+  const toolsRef = useRef(tools);
+  toolsRef.current = tools;
 
   /* Load history on mount / session change */
   useEffect(() => {
@@ -153,6 +168,10 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         ? `\n\nCurrent context:\n${ctx.map(i => `- ${i.label} (${i.category})`).join('\n')}`
         : '';
 
+      const enabledTools = toolsRef.current
+        .filter(t => t.enabled)
+        .reduce((acc, t) => ({ ...acc, [t.name]: t.mode }), {} as Record<string, string>);
+
       const response = await api.sendMessage({
         sessionId,
         message: userMsg.content,
@@ -161,6 +180,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         systemPrompt: systemPrompt ? systemPrompt + contextStr : contextStr,
         uploadedFiles,
         context: ctx,
+        activeTools: enabledTools,
       });
 
       if (!response.ok) {
@@ -239,6 +259,14 @@ export function useChat(options: UseChatOptions): UseChatReturn {
                 }
                 return m;
               }));
+            } else if (payload.type === 'tool_used') {
+              setMessages(prev => prev.map(m => {
+                if (m.id === assistantMessageId) {
+                  const existing = m.usedTools || [];
+                  return { ...m, usedTools: existing.includes(payload.tool) ? existing : [...existing, payload.tool] };
+                }
+                return m;
+              }));
             } else if (payload.type === 'resources') {
               setMessages(prev => prev.map(m => {
                 if (m.id === assistantMessageId) {
@@ -309,5 +337,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     addContextItem,
     removeContextItem,
     clearContext,
+    tools,
+    toggleTool,
+    setToolMode,
   };
 }
