@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { MessageData, UploadedFile, PipelineStage } from '../types';
+import type { MessageData, UploadedFile, PipelineStage, ContextItem, ConversationContext } from '../types';
 import { api } from '../services/chatApi';
 
 export interface UseChatOptions {
@@ -23,6 +23,10 @@ export interface UseChatReturn {
   stop: () => void;
   clear: () => void;
   bottomRef: React.RefObject<HTMLDivElement | null>;
+  context: ConversationContext;
+  addContextItem: (item: ContextItem) => void;
+  removeContextItem: (id: string) => void;
+  clearContext: () => void;
 }
 
 const INITIAL_STAGES: PipelineStage[] = [
@@ -67,6 +71,21 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>(INITIAL_STAGES);
   const [error, setError] = useState<string | null>(null);
+  const [context, setContext] = useState<ConversationContext>({ items: [] });
+
+  const addContextItem = useCallback((item: ContextItem) => {
+    setContext(prev => ({
+      items: [...prev.items.filter(i => !(i.category === item.category && i.value === item.value)), item],
+    }));
+  }, []);
+
+  const removeContextItem = useCallback((id: string) => {
+    setContext(prev => ({ items: prev.items.filter(i => i.id !== id) }));
+  }, []);
+
+  const clearContext = useCallback(() => {
+    setContext({ items: [] });
+  }, []);
 
   const contentBuffer = useRef('');
   const rafPending = useRef(false);
@@ -74,6 +93,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const hasContent = useRef(false);
+  const contextRef = useRef(context);
+  contextRef.current = context;
 
   /* Load history on mount / session change */
   useEffect(() => {
@@ -127,13 +148,19 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     abortRef.current = controller;
 
     try {
+      const ctx = contextRef.current.items;
+      const contextStr = ctx.length > 0
+        ? `\n\nCurrent context:\n${ctx.map(i => `- ${i.label} (${i.category})`).join('\n')}`
+        : '';
+
       const response = await api.sendMessage({
         sessionId,
         message: userMsg.content,
         model,
         temperature,
-        systemPrompt,
+        systemPrompt: systemPrompt ? systemPrompt + contextStr : contextStr,
         uploadedFiles,
+        context: ctx,
       });
 
       if (!response.ok) {
@@ -278,5 +305,9 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     stop,
     clear,
     bottomRef,
+    context,
+    addContextItem,
+    removeContextItem,
+    clearContext,
   };
 }

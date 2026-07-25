@@ -51,6 +51,20 @@ export interface MessageData {
   };
 }
 
+export type ContextCategory = 'environment' | 'service' | 'artifact' | 'experiment' | 'knowledge' | 'custom' | 'timeframe';
+
+export interface ContextItem {
+  id: string;
+  category: ContextCategory;
+  label: string;
+  value: string;
+  color?: string;
+}
+
+export interface ConversationContext {
+  items: ContextItem[];
+}
+
 export interface UploadedFile {
   name: string;
   chunks: number;

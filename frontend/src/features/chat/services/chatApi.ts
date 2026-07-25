@@ -1,4 +1,4 @@
-import type { ChatSession, MessageData } from '../types';
+import type { ChatSession, MessageData, ContextItem } from '../types';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
@@ -43,8 +43,9 @@ export const api = {
     systemPrompt?: string;
     uploadedFiles?: { name: string; chunks: number; type: string }[];
     activeTools?: Record<string, boolean>;
+    context?: ContextItem[];
   }): Promise<Response> {
-    const { sessionId, message, model, temperature, systemPrompt, uploadedFiles, activeTools } = params;
+    const { sessionId, message, model, temperature, systemPrompt, uploadedFiles, activeTools, context } = params;
     let prompt = systemPrompt || '';
 
     const toolInstructions: string[] = [];
@@ -79,6 +80,7 @@ export const api = {
         temperature,
         system_prompt: prompt,
         active_tools: activeTools,
+        context: context?.map(c => ({ category: c.category, label: c.label, value: c.value })),
       }),
     });
   },

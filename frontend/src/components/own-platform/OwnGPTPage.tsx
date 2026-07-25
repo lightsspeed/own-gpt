@@ -5,6 +5,7 @@ import { Composer } from './Composer'
 import { MessageBubble } from './MessageBubble'
 import { GenerationSpinner } from './GenerationSpinner'
 import { ContextPanel } from './ContextPanel'
+import { ContextBar } from './ContextBar'
 import { ArtifactCard } from './ArtifactCard'
 import type { ResourceItem } from '@/features/chat/types'
 
@@ -27,6 +28,10 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     send,
     stop,
     bottomRef,
+    context,
+    addContextItem,
+    removeContextItem,
+    clearContext,
   } = useChat({
     sessionId,
     model: 'gpt-4o-mini',
@@ -174,6 +179,12 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
       </div>
 
       <div className="pb-4">
+        <ContextBar
+          items={context.items}
+          onAdd={addContextItem}
+          onRemove={removeContextItem}
+          onClear={clearContext}
+        />
         <Composer
           input={input}
           setInput={setInput}
