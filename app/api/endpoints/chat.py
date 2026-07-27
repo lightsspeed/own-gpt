@@ -16,7 +16,6 @@ from app.agent.pipeline import RAGPipeline, PipelineContext, load_pipeline_confi
 from app.services.vector_store import vector_store
 from app.core.config import settings
 from app.learning.telemetry.collector import learning_collector
-from app.models.evidence import EvidenceItem, ConfidenceLabel, RetrievalMethod, confidence_from_score
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from datetime import datetime
@@ -272,13 +271,18 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         last_message = final_state["messages"][-1]
         response = last_message.content
 
-        # Filter resources based on answer mode
-        if ctx.answer_mode in ("grounded", "hybrid"):
-            resources = _extract_resources(new_messages)
-        elif ctx.answer_mode == "web":
-            resources = [r for r in _extract_resources(new_messages) if r.type == "web"]
-        else:
-            resources = []
+        # Filter resources based on answer mode and evidence builder
+        evidence_result = _pipeline._evidence_builder.build(
+            response_text=response,
+            ranked_chunks=ctx.ranked_chunks,
+            source_policy=ctx.source_policy,
+            answer_mode=ctx.answer_mode,
+            answer_mode_metadata=ctx.answer_mode_metadata,
+        )
+        resources = [
+            ResourceItem(type=e.source_type, title=e.title, url=e.url, snippet=e.chunk[:180] if e.chunk else None)
+            for e in evidence_result.evidence
+        ]
 
         # ── Stages 8-9: Validate response + store trace ───────────────────────
         _post_process(ctx, response, new_messages)
@@ -598,45 +602,19 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                 if final_state and final_state.values:
                     new_msgs = final_state.values.get("messages", [])[existing_len:]
 
-                    # Build evidence items from pipeline results
-                    evidence_items: list[EvidenceItem] = []
-                    seen_doc_ids: set[str] = set()
+                    # Extract response text from the last assistant message
+                    last_msg = new_msgs[-1] if new_msgs else None
+                    response_text = str(last_msg.content) if last_msg and hasattr(last_msg, "content") else ""
 
-                    if ctx.answer_mode in ("grounded", "hybrid"):
-                        total = len(ctx.ranked_chunks)
-                        for i, rc in enumerate(ctx.ranked_chunks):
-                            doc_id = getattr(rc.chunk, "chunk_id", None) or f"chunk-{i}"
-                            if doc_id in seen_doc_ids:
-                                continue
-                            seen_doc_ids.add(doc_id)
-                            src = getattr(rc.chunk, "source", None) or getattr(rc.chunk, "filename", None) or "unknown"
-                            method = ctx.answer_mode_metadata.get("retrieval_method", "hybrid")
-                            confidence = confidence_from_score(ctx.answer_mode_metadata.get("confidence", 0.0))
-                            evidence_items.append(EvidenceItem(
-                                id=doc_id,
-                                title=src,
-                                source_type="knowledge",
-                                chunk=rc.chunk.document.page_content[:300] if hasattr(rc.chunk, "document") else "",
-                                confidence_label=confidence,
-                                retrieval_method=RetrievalMethod(method) if method in ("vector", "bm25", "hybrid") else RetrievalMethod.hybrid,
-                                chunk_index=i,
-                                total_chunks=total,
-                                document_id=src,
-                                raw_score=rc.chunk.score if hasattr(rc.chunk, "score") else None,
-                                reranker_score=rc.reranker_score if hasattr(rc, "reranker_score") else None,
-                            ))
-                    elif ctx.answer_mode == "web":
-                        for tr in _extract_resources(new_msgs):
-                            if tr.type == "web":
-                                evidence_items.append(EvidenceItem(
-                                    id=f"web-{len(evidence_items)}",
-                                    title=tr.title,
-                                    source_type="web",
-                                    url=tr.url,
-                                    chunk=tr.snippet,
-                                    confidence_label=ConfidenceLabel.medium,
-                                    retrieval_method=RetrievalMethod.web,
-                                ))
+                    # Build evidence items from what the LLM actually cited
+                    evidence_result = _pipeline._evidence_builder.build(
+                        response_text=response_text,
+                        ranked_chunks=ctx.ranked_chunks,
+                        source_policy=ctx.source_policy,
+                        answer_mode=ctx.answer_mode,
+                        answer_mode_metadata=ctx.answer_mode_metadata,
+                    )
+                    evidence_items = evidence_result.evidence
 
                     serialized = [e.model_dump(exclude={"raw_score", "reranker_score", "retrieval_latency_ms", "embedding_model"}) for e in evidence_items]
                     loop.call_soon_threadsafe(q.put_nowait, json.dumps({
@@ -653,9 +631,7 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                     }))
 
                     # Stages 8-9: Validate + trace
-                    last_msg = new_msgs[-1] if new_msgs else None
-                    if last_msg and hasattr(last_msg, "content"):
-                        response_text = str(last_msg.content)
+                    if response_text:
                         _post_process(ctx, response_text, new_msgs)
 
                     # Emit trace metadata as final SSE event before [DONE]

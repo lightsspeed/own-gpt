@@ -61,6 +61,9 @@ class PipelineTrace:
     # Stage 2: Routing
     route_decision: str = ""
 
+    # Stage 2b: Planner
+    source_policy: str = ""
+
     # Stage 3: Query Rewriting
     rewritten_query: str = ""
     expanded_queries: List[str] = field(default_factory=list)

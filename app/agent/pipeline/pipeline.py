@@ -34,6 +34,8 @@ from typing import List, Optional
 from app.core.langsmith import traceable
 from .confidence import ConfidenceEvaluator, ConfidenceResult
 from .intent import Intent, IntentClassifier, IntentResult
+from .planner import Planner, SourcePolicyResult
+from .evidence_builder import EvidenceBuilder, EvidenceBuilderResult
 from .reranker import CrossEncoderReranker, RankedChunk
 from .retriever import Retriever, RetrievedChunk
 from .rewrite import QueryRewriter, RewriteResult
@@ -62,6 +64,7 @@ class PipelineContext:
     # Stage outputs (populated as pipeline runs)
     intent: Optional[IntentResult] = None
     route: Optional[RouterResult] = None
+    source_policy: Optional[SourcePolicyResult] = None
     rewrite: Optional[RewriteResult] = None
     retrieved_chunks: List[RetrievedChunk] = field(default_factory=list)
     ranked_chunks: List[RankedChunk] = field(default_factory=list)
@@ -122,6 +125,7 @@ class RAGPipeline:
             model_name=cfg.get("intent_model", "gpt-4o-mini"),
         )
         self._router = RequestRouter()
+        self._planner = Planner()
         self._rewriter = QueryRewriter(
             model_name=cfg.get("rewrite_model", "gpt-4o-mini"),
         )
@@ -159,6 +163,9 @@ class RAGPipeline:
         )
         self._validator = ResponseValidator(
             model_name=cfg.get("validation_model", "gpt-4o-mini"),
+        )
+        self._evidence_builder = EvidenceBuilder(
+            min_overlap=cfg.get("evidence", {}).get("min_overlap", 0.15),
         )
         self._tracer = TracingService(
             redis_url=redis_url,
@@ -217,6 +224,10 @@ class RAGPipeline:
         t2 = time.monotonic()
         ctx.route = self._router.route(ctx.intent)
         trace.route_decision = ctx.route.decision.value
+
+        # ── Stage 2b: Planner (determines what sources are needed) ────────────
+        ctx.source_policy = self._planner.plan(ctx.intent, ctx.route)
+        trace.source_policy = ctx.source_policy.policy.value
 
         # ── Stage 3: Query Rewriting ─────────────────────────────────────────
         t3 = time.monotonic()

@@ -6,6 +6,8 @@ import yaml
 from .pipeline import RAGPipeline, PipelineContext
 from .intent import IntentClassifier, IntentResult, Intent
 from .router import RequestRouter, RouterResult, RouteDecision
+from .planner import Planner, SourcePolicyResult
+from .evidence_builder import EvidenceBuilder, EvidenceBuilderResult
 from .rewrite import QueryRewriter, RewriteResult
 from .retriever import Retriever, RetrievedChunk
 from .reranker import CrossEncoderReranker, RankedChunk
@@ -41,6 +43,10 @@ __all__ = [
     "RequestRouter",
     "RouterResult",
     "RouteDecision",
+    "Planner",
+    "SourcePolicyResult",
+    "EvidenceBuilder",
+    "EvidenceBuilderResult",
     "QueryRewriter",
     "RewriteResult",
     "Retriever",

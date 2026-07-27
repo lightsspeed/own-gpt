@@ -145,6 +145,11 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     const i = visibleMessages.length - 1
     if (i >= 0) {
       rowVirtualizer.scrollToIndex(i, { align: 'start', behavior: 'smooth' })
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = Math.max(0, scrollRef.current.scrollTop - 120)
+        }
+      })
     }
     setNewMsgCount(0)
     setTimeout(() => {
@@ -162,32 +167,37 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
   }, [])
 
   const msgCount = visibleMessages.length
-  const justScrolled = useRef(false)
 
   useEffect(() => {
     handleScroll()
   }, [msgCount, handleScroll])
 
   useEffect(() => {
-    if (justScrolled.current) return
     const len = msgCount
     const prevLen = prevMsgLen.current
     prevMsgLen.current = len
 
     if (len <= prevLen) return
 
-    justScrolled.current = true
-    requestAnimationFrame(() => { justScrolled.current = false })
-
     const lastMsg = visibleMessages[len - 1]
-    const isNewQuery = lastMsg?.role === 'user'
+    if (!lastMsg) return
 
-    if (isNewQuery || isNearBottom.current) {
+    /* User just sent a query — position it ~120px below viewport top */
+    if (lastMsg.role === 'user') {
       setNewMsgCount(0)
-      const idx = isNewQuery ? len - 1 : len
-      const align = isNewQuery ? 'start' : 'end'
-      rowVirtualizer.scrollToIndex(idx, { align })
-    } else if (isLoading) {
+      requestAnimationFrame(() => {
+        rowVirtualizer.scrollToIndex(len - 1, { align: 'start' })
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = Math.max(0, scrollRef.current.scrollTop - 120)
+          }
+        })
+      })
+      return
+    }
+
+    /* Assistant started — track but don't auto-scroll (user msg is already in view) */
+    if (isLoading) {
       setNewMsgCount(c => c + 1)
     }
   }, [msgCount, isLoading, rowVirtualizer])
