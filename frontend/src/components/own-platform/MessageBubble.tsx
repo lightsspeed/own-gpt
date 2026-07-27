@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, ExternalLink, RefreshCw } from 'lucide-react'
+import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, ExternalLink, RefreshCw, FileText } from 'lucide-react'
 import type { ResourceItem } from '@/features/chat/types'
 import {
   DropdownMenu,
@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { EvidencePanel } from '@/components/evidence'
 
 interface MessageBubbleProps {
   role: 'user' | 'assistant' | 'system'
@@ -16,11 +17,18 @@ interface MessageBubbleProps {
   isStreaming?: boolean
   resources?: ResourceItem[]
   answerMode?: string
+  answerModeMetadata?: {
+    chunk_count: number
+    doc_count: number
+    confidence: number
+    retrieval_method: string
+  }
   onEdit?: (content: string) => void
   onRegenerate?: () => void
+  onShowSources?: (sources: ResourceItem[]) => void
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, resources, answerMode, onEdit, onRegenerate }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, resources, answerMode, answerModeMetadata, onEdit, onRegenerate, onShowSources }: MessageBubbleProps) {
   const isUser = role === 'user'
   const [showActions, setShowActions] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -49,25 +57,6 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
 
   return (
     <div className={cn('flex flex-col group', isUser ? 'items-end' : 'items-start')}>
-      {/* Answer mode badge */}
-      {!isUser && answerMode && !isStreaming && (
-        <div className="flex items-center gap-2 px-1 mb-2">
-          <span className={cn(
-            'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider',
-            answerMode === 'web' && 'bg-info/10 text-info/80',
-            answerMode === 'grounded' && 'bg-success/10 text-success/80',
-            answerMode === 'hybrid' && 'bg-warning/10 text-warning/80',
-            answerMode === 'synthesis' && 'bg-primary/10 text-primary/80',
-            !['web', 'grounded', 'hybrid', 'synthesis'].includes(answerMode) && 'bg-muted/10 text-muted-foreground/60',
-          )}>
-            {answerMode === 'web' && '🌐'}
-            {answerMode === 'grounded' && '📚'}
-            {answerMode === 'hybrid' && '🔀'}
-            {answerMode === 'synthesis' && '✨'}
-            {answerMode === 'web' ? 'Web Search' : answerMode === 'grounded' ? 'Grounded' : answerMode === 'hybrid' ? 'Hybrid' : answerMode === 'synthesis' ? 'Synthesis' : answerMode}
-          </span>
-        </div>
-      )}
 
       {/* Message content */}
       <div
@@ -87,7 +76,12 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
           {isUser ? (
             <UserActions content={content} onEdit={onEdit} />
           ) : (
-            <AssistantActions content={content} onRegenerate={onRegenerate} />
+            <AssistantActions
+              content={content}
+              onRegenerate={onRegenerate}
+              resources={resources}
+              onShowSources={onShowSources}
+            />
           )}
         </div>
       )}
@@ -118,7 +112,14 @@ function UserActions({ content, onEdit }: { content: string; onEdit?: (content: 
   )
 }
 
-function AssistantActions({ content, onRegenerate }: { content: string; onRegenerate?: () => void }) {
+interface AssistantActionsProps {
+  content: string
+  onRegenerate?: () => void
+  resources?: ResourceItem[]
+  onShowSources?: (sources: ResourceItem[]) => void
+}
+
+function AssistantActions({ content, onRegenerate, resources, onShowSources }: AssistantActionsProps) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
 
@@ -127,6 +128,8 @@ function AssistantActions({ content, onRegenerate }: { content: string; onRegene
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
+
+  const hasResources = resources && resources.length > 0
 
   return (
     <>
@@ -159,6 +162,11 @@ function AssistantActions({ content, onRegenerate }: { content: string; onRegene
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="bg-popover w-[180px] rounded-xl border p-1.5 shadow-xl">
+          {hasResources && onShowSources && (
+            <DropdownMenuItem onClick={() => onShowSources(resources)} className="flex items-center gap-2.5 rounded-lg p-2 text-small cursor-pointer">
+              <FileText size={14} /> Sources
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem className="flex items-center gap-2.5 rounded-lg p-2 text-small cursor-pointer">
             <ExternalLink size={14} /> Share
           </DropdownMenuItem>

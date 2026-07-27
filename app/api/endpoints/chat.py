@@ -13,7 +13,9 @@ from app.evaluation.models import build_evaluation_result
 from app.core.database import get_db
 from app.models.chat import ChatSession
 from app.agent.pipeline import RAGPipeline, PipelineContext, load_pipeline_config
-from app.services.vector_store import vector_store
+from app.agent.pipeline.evidence_builder import _parse_chunk_references
+from app.agent.pipeline.source_validator import SourceValidator
+from app.services.vector_store import vector_store, embeddings as _embeddings
 from app.core.config import settings
 from app.learning.telemetry.collector import learning_collector
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +44,7 @@ _pipeline = RAGPipeline(
     bm25_retriever=_bm25,
     redis_url=settings.REDIS_URL,
     config=_pipeline_config,
+    embed_fn=_embeddings.embed_documents,
 )
 
 
@@ -260,6 +263,7 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         initial_state = {
             "messages": [HumanMessage(content=request.message)],
             "system_prompt": request.system_prompt or "",
+            "answer_mode_directive": ctx.source_policy.contract.system_directive if ctx.source_policy else "",
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
@@ -283,6 +287,34 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
             ResourceItem(type=e.source_type, title=e.title, url=e.url, snippet=e.chunk[:180] if e.chunk else None)
             for e in evidence_result.evidence
         ]
+
+        # Citation contract check
+        ref_indices = _parse_chunk_references(response)
+        validator = SourceValidator()
+        validation_result = validator.validate(
+            ref_indices=ref_indices,
+            total_chunks=len(ctx.ranked_chunks),
+            mode=ctx.source_policy,
+        )
+        logger.info(
+            "citation_check valid=%s cited=%d required=%d reason=%s",
+            validation_result.valid,
+            validation_result.cited_count,
+            validation_result.required_count,
+            validation_result.reason,
+        )
+
+        # Grounding validation (claim-level)
+        if ctx.ranked_chunks and ctx.source_policy and ctx.source_policy.contract.requires_evidence:
+            grounding = _pipeline.run_grounding(response, ctx)
+            if not grounding.all_supported:
+                logger.warning(
+                    "grounding_unsupported session_id=%s unsupported=%d total=%d threshold=%.2f",
+                    request.session_id,
+                    grounding.unsupported_count,
+                    grounding.total_count,
+                    grounding.validations[0].threshold if grounding.validations else 0,
+                )
 
         # ── Stages 8-9: Validate response + store trace ───────────────────────
         _post_process(ctx, response, new_messages)
@@ -565,6 +597,7 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
         initial_state = {
             "messages": [human_message],
             "system_prompt": request.system_prompt or "",
+            "answer_mode_directive": ctx.source_policy.contract.system_directive if ctx.source_policy else "",
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
@@ -629,6 +662,55 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                         "answer_mode": ctx.answer_mode,
                         "answer_mode_metadata": ctx.answer_mode_metadata,
                     }))
+
+# Citation contract check
+                    ref_indices = _parse_chunk_references(response_text)
+                    validator = SourceValidator()
+                    validation_result = validator.validate(
+                        ref_indices=ref_indices,
+                        total_chunks=len(ctx.ranked_chunks),
+                        mode=ctx.source_policy,
+                    )
+                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                        "type": "citation_check",
+                        "valid": validation_result.valid,
+                        "cited": validation_result.cited_count,
+                        "required": validation_result.required_count,
+                        "unique_chunks": validation_result.unique_chunks_cited,
+                        "total_uses": validation_result.total_citation_uses,
+                        "warnings": validation_result.warnings,
+                        "reason": validation_result.reason,
+                    }))
+
+                    # Grounding validation (claim-level)
+                    if ctx.ranked_chunks and ctx.source_policy and ctx.source_policy.contract.requires_evidence:
+                        grounding = _pipeline.run_grounding(response_text, ctx)
+                        claim_data = []
+                        for v in grounding.validations:
+                            claim_data.append({
+                                "id": v.claim.id,
+                                "text": v.claim.text,
+                                "supported": v.supported,
+                                "best_score": v.best_score,
+                                "threshold": v.threshold,
+                                "best_chunk_idx": v.best_chunk_idx,
+                                "document": v.document_name,
+                            })
+                        loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                            "type": "claim_validation",
+                            "valid": grounding.all_supported,
+                            "total": grounding.total_count,
+                            "unsupported": grounding.unsupported_count,
+                            "claims": claim_data,
+                        }))
+                        if not grounding.all_supported:
+                            logger.warning(
+                                "grounding_unsupported session_id=%s unsupported=%d/%d threshold=%.2f",
+                                request.session_id,
+                                grounding.unsupported_count,
+                                grounding.total_count,
+                                grounding.validations[0].threshold if grounding.validations else 0,
+                            )
 
                     # Stages 8-9: Validate + trace
                     if response_text:
@@ -731,6 +813,7 @@ async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = De
         initial_state = {
             "messages": [HumanMessage(content=request.message)],
             "system_prompt": "",
+            "answer_mode_directive": ctx.source_policy.contract.system_directive if ctx.source_policy else "",
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,

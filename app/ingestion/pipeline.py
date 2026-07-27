@@ -38,7 +38,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _make_splitter(config: IngestionConfig):
-    """Lazy-import RecursiveCharacterTextSplitter to avoid DLL conflicts on import."""
+    """Create a document splitter based on the configured strategy."""
+    if config.chunk_strategy == "semantic":
+        from .semantic_chunker import SemanticChunker
+        return SemanticChunker(
+            max_chars=config.chunk_size,
+            overlap_chars=config.chunk_overlap,
+        )
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     return RecursiveCharacterTextSplitter(
         chunk_size=config.chunk_size,

@@ -1,14 +1,3 @@
-"""
-Evidence Builder: Produces evidence items from chunks that were ACTUALLY CITED
-in the final response, not from all retrieved chunks.
-
-Phase 1: N-gram overlap matching (deterministic, zero cost)
-Phase 2: (Future) LLM-based citation verification
-
-Design principle:
-  Never cite what was retrieved. Only cite what was actually used.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -19,7 +8,7 @@ from typing import List, Optional
 from app.core.langsmith import traceable
 from app.models.evidence import EvidenceItem, ConfidenceLabel, RetrievalMethod, confidence_from_score
 from .reranker import RankedChunk
-from .source_policy import SourcePolicy, SourcePolicyResult
+from .source_policy import SourcePolicy, AnswerMode
 
 logger = logging.getLogger(__name__)
 
@@ -30,45 +19,39 @@ class EvidenceBuilderResult:
     source_policy: Optional[SourcePolicy] = None
     total_candidates: int = 0
     total_cited: int = 0
+    total_validated: int = 0
+
+    @property
+    def debug_dict(self) -> dict:
+        return {
+            "total_candidates": self.total_candidates,
+            "total_cited": self.total_cited,
+            "total_validated": self.total_validated,
+        }
 
 
-def _extract_ngrams(text: str, n: int = 5) -> set[str]:
-    """Extract character n-grams from normalized text for overlap matching."""
-    cleaned = re.sub(r'\s+', ' ', text.lower().strip())
-    if len(cleaned) < n:
-        return {cleaned}
-    return {cleaned[i:i+n] for i in range(len(cleaned) - n + 1)}
+_CHUNK_REF_RE = re.compile(r'\[Chunk\s+(\d+)\]', re.IGNORECASE)
 
 
-def _compute_overlap(response_text: str, chunk_text: str, threshold: float = 0.15) -> float:
-    """Compute character n-gram overlap between response and chunk."""
-    response_ngrams = _extract_ngrams(response_text)
-    chunk_ngrams = _extract_ngrams(chunk_text)
-    if not chunk_ngrams:
-        return 0.0
-    intersection = response_ngrams & chunk_ngrams
-    return len(intersection) / len(chunk_ngrams)
-
-
-def _find_cited_chunks(
-    response_text: str,
-    ranked_chunks: list[RankedChunk],
-    min_overlap: float = 0.15,
-) -> list[tuple[RankedChunk, float]]:
-    """Return chunks whose content overlaps significantly with the response."""
-    cited: list[tuple[RankedChunk, float]] = []
-    for rc in ranked_chunks:
-        chunk_text = rc.chunk.document.page_content
-        overlap = _compute_overlap(response_text, chunk_text, min_overlap)
-        if overlap >= min_overlap:
-            cited.append((rc, overlap))
-    return cited
+def _parse_chunk_references(response_text: str) -> list[int]:
+    """Parse explicit [Chunk N] references from the LLM response."""
+    indices = set()
+    for match in _CHUNK_REF_RE.finditer(response_text):
+        try:
+            idx = int(match.group(1))
+            if idx >= 0:
+                indices.add(idx)
+        except ValueError:
+            continue
+    return sorted(indices)
 
 
 class EvidenceBuilder:
     """
-    Builds evidence from chunks that were actually cited in the LLM response.
-    Uses n-gram overlap matching to determine citation.
+    Builds evidence from chunks explicitly referenced by the LLM via [Chunk N] notation.
+
+    Phase 2: Explicit citation parsing (replaces n-gram overlap Phase 1).
+    Fallback: If no explicit references found, falls back to overlap matching.
     """
 
     def __init__(self, min_overlap: float = 0.15) -> None:
@@ -79,7 +62,7 @@ class EvidenceBuilder:
         self,
         response_text: str,
         ranked_chunks: list[RankedChunk],
-        source_policy: SourcePolicyResult,
+        source_policy: AnswerMode,
         answer_mode: str = "grounded",
         answer_mode_metadata: dict | None = None,
     ) -> EvidenceBuilderResult:
@@ -97,8 +80,27 @@ class EvidenceBuilder:
         candidates = ranked_chunks
         total_candidates = len(candidates)
 
-        cited = _find_cited_chunks(response_text, candidates, self._min_overlap)
-        total_cited = len(cited)
+        # Phase 2: Parse explicit [Chunk N] references
+        ref_indices = _parse_chunk_references(response_text)
+        total_explicit = len(ref_indices)
+
+        if ref_indices:
+            logger.info(
+                "stage=evidence_builder found %d explicit chunk references: %s",
+                total_explicit, ref_indices,
+            )
+            cited_chunks: list[tuple[RankedChunk, int]] = []
+            seen: set[int] = set()
+            for idx in ref_indices:
+                if idx < len(candidates) and idx not in seen:
+                    seen.add(idx)
+                    cited_chunks.append((candidates[idx], idx))
+            total_cited = len(cited_chunks)
+        else:
+            # Fallback: n-gram overlap matching
+            logger.info("stage=evidence_builder no explicit references — falling back to n-gram overlap")
+            cited_chunks = self._find_cited_chunks_overlap(response_text, candidates)
+            total_cited = len(cited_chunks)
 
         method = RetrievalMethod(meta.get("retrieval_method", "hybrid")) \
             if meta.get("retrieval_method") in ("vector", "bm25", "hybrid") \
@@ -110,7 +112,7 @@ class EvidenceBuilder:
         confidence = meta.get("confidence", 0.0)
         confidence_label = confidence_from_score(confidence)
 
-        for rc, overlap in cited:
+        for rc, _ in cited_chunks:
             chunk = rc.chunk
             doc_id = getattr(chunk, "chunk_id", None) or f"cited-{len(evidence_items)}"
             if doc_id in seen_doc_ids:
@@ -134,9 +136,10 @@ class EvidenceBuilder:
             ))
 
         logger.info(
-            "stage=evidence_builder policy=%s candidates=%d cited=%d evidence=%d",
+            "stage=evidence_builder policy=%s candidates=%d explicit=%d cited=%d evidence=%d",
             source_policy.policy.value,
             total_candidates,
+            total_explicit,
             total_cited,
             len(evidence_items),
         )
@@ -147,3 +150,40 @@ class EvidenceBuilder:
             total_candidates=total_candidates,
             total_cited=total_cited,
         )
+
+    # ── Fallback: n-gram overlap ──────────────────────────────────────────────
+
+    def _extract_ngrams(self, text: str, n: int = 5) -> set[str]:
+        cleaned = re.sub(r'\s+', ' ', text.lower().strip())
+        if len(cleaned) < n:
+            return {cleaned}
+        return {cleaned[i:i+n] for i in range(len(cleaned) - n + 1)}
+
+    def _compute_overlap(self, response_text: str, chunk_text: str, threshold: float = 0.15) -> float:
+        response_ngrams = self._extract_ngrams(response_text)
+        chunk_ngrams = self._extract_ngrams(chunk_text)
+        if not chunk_ngrams:
+            return 0.0
+        intersection = response_ngrams & chunk_ngrams
+        return len(intersection) / len(chunk_ngrams)
+
+    def _find_cited_chunks_overlap(
+        self,
+        response_text: str,
+        ranked_chunks: list[RankedChunk],
+    ) -> list[tuple[RankedChunk, float]]:
+        cited: list[tuple[RankedChunk, float]] = []
+        for rc in ranked_chunks:
+            # Skip chunks with negative reranker scores (FlashRank scores < 0 mean cross-encoder evaluated chunk as irrelevant)
+            score = getattr(rc, "reranker_score", None)
+            if score is not None and score < 0.0:
+                logger.info(
+                    "skipping_irrelevant_evidence_chunk score=%.4f source=%s",
+                    score, getattr(rc.chunk, "source", "unknown"),
+                )
+                continue
+            chunk_text = rc.chunk.document.page_content
+            overlap = self._compute_overlap(response_text, chunk_text, self._min_overlap)
+            if overlap >= self._min_overlap:
+                cited.append((rc, overlap))
+        return cited

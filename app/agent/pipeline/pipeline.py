@@ -34,7 +34,7 @@ from typing import List, Optional
 from app.core.langsmith import traceable
 from .confidence import ConfidenceEvaluator, ConfidenceResult
 from .intent import Intent, IntentClassifier, IntentResult
-from .planner import Planner, SourcePolicyResult
+from .planner import Planner, AnswerMode
 from .evidence_builder import EvidenceBuilder, EvidenceBuilderResult
 from .reranker import CrossEncoderReranker, RankedChunk
 from .retriever import Retriever, RetrievedChunk
@@ -42,6 +42,8 @@ from .rewrite import QueryRewriter, RewriteResult
 from .router import RequestRouter, RouterResult, RouteDecision
 from .tracing import PipelineTrace, TracingService
 from .validation import ResponseValidator, ValidationResult
+from .claim_extractor import ClaimExtractor, Claim
+from .grounding_validator import GroundingValidator, GroundingResult
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +66,7 @@ class PipelineContext:
     # Stage outputs (populated as pipeline runs)
     intent: Optional[IntentResult] = None
     route: Optional[RouterResult] = None
-    source_policy: Optional[SourcePolicyResult] = None
+    source_policy: Optional[AnswerMode] = None
     rewrite: Optional[RewriteResult] = None
     retrieved_chunks: List[RetrievedChunk] = field(default_factory=list)
     ranked_chunks: List[RankedChunk] = field(default_factory=list)
@@ -83,6 +85,9 @@ class PipelineContext:
         "doc_count": 0,
         "confidence": 0.0,
     })
+
+    # Grounding (claim-level validation)
+    grounding_result: Optional[GroundingResult] = None
 
     # Tracing
     trace: Optional[PipelineTrace] = None
@@ -118,6 +123,7 @@ class RAGPipeline:
         bm25_retriever=None,
         redis_url: Optional[str] = None,
         config: Optional[dict] = None,
+        embed_fn = None,
     ) -> None:
         cfg = config or {}
 
@@ -166,6 +172,10 @@ class RAGPipeline:
         )
         self._evidence_builder = EvidenceBuilder(
             min_overlap=cfg.get("evidence", {}).get("min_overlap", 0.15),
+        )
+        self._claim_extractor = ClaimExtractor()
+        self._grounding_validator = GroundingValidator(
+            embed_fn=embed_fn or (lambda texts: [[0.0] * 1536 for _ in texts]),
         )
         self._tracer = TracingService(
             redis_url=redis_url,
@@ -228,6 +238,9 @@ class RAGPipeline:
         # ── Stage 2b: Planner (determines what sources are needed) ────────────
         ctx.source_policy = self._planner.plan(ctx.intent, ctx.route)
         trace.source_policy = ctx.source_policy.policy.value
+        trace.answer_mode = ctx.source_policy.policy.value
+        trace.requires_evidence = ctx.source_policy.contract.requires_evidence
+        trace.min_evidence = ctx.source_policy.contract.min_evidence
 
         # ── Stage 3: Query Rewriting ─────────────────────────────────────────
         t3 = time.monotonic()
@@ -308,12 +321,18 @@ class RAGPipeline:
         elif not ctx.ranked_chunks:
             ctx.answer_mode = "no_evidence"
         else:
-            # ── Filter out chunks with low entity overlap with the question ──
+            # ── Filter out chunks with low reranker score or zero token overlap ──
             question_tokens = set(ctx.question.lower().split())
             filtered: list = []
             for rc in ctx.ranked_chunks:
+                # Exclude chunks evaluated as irrelevant by cross-encoder
+                if rc.reranker_score is not None and rc.reranker_score < 0.0:
+                    logger.info(
+                        "filtering_negative_reranker_chunk session_id=%s score=%.4f source=%s",
+                        session_id, rc.reranker_score, rc.chunk.source,
+                    )
+                    continue
                 chunk_text = rc.chunk.document.page_content.lower()
-                # Skip chunks that share almost no tokens with the question
                 chunk_tokens = set(chunk_text.split())
                 overlap = len(question_tokens & chunk_tokens)
                 if overlap >= 1 or len(question_tokens) <= 2:
@@ -366,7 +385,33 @@ class RAGPipeline:
         )
         return ctx
 
-    # ── Post-processing: Validation + Tracing ────────────────────────────────
+    # ── Post-processing: Validation + Grounding + Tracing ──────────────────
+
+    def run_grounding(
+        self,
+        response: str,
+        ctx: PipelineContext,
+    ) -> GroundingResult:
+        """Extract claims and validate grounding. Stores result in ctx."""
+        claims = self._claim_extractor.extract(response)
+        threshold = None
+        strict = True
+        if ctx.source_policy:
+            threshold = {
+                "remove": GroundingValidator.STRICT_THRESHOLD,
+                "mark": GroundingValidator.HYBRID_THRESHOLD,
+                "flag": GroundingValidator.STRICT_THRESHOLD,
+                "keep": None,
+            }.get(ctx.source_policy.contract.on_unsupported, None)
+            strict = ctx.source_policy.contract.on_unsupported in ("remove", "flag")
+        result = self._grounding_validator.validate(
+            claims=claims,
+            chunks=ctx.ranked_chunks,
+            threshold=threshold,
+            strict=strict,
+        )
+        ctx.grounding_result = result
+        return result
 
     @traceable(name="pipeline_validate", metadata={"stage": "8-9"})
     def validate_response(
@@ -377,6 +422,7 @@ class RAGPipeline:
     ) -> ValidationResult:
         """
         Stage 8: Validate the LLM response.
+        Stage 8b: Grounding validation (claim-level).
         Stage 9: Store the completed trace to Redis.
         """
         t8 = time.monotonic()
@@ -384,6 +430,15 @@ class RAGPipeline:
             result = self._validator.validate(question, response)
         else:
             result = ValidationResult(valid=True, reason="disabled", used_llm=False, latency_ms=0.0)
+
+        # Stage 8b: Grounding validation
+        if ctx.ranked_chunks and ctx.source_policy and ctx.source_policy.contract.requires_evidence:
+            grounding_start = time.monotonic()
+            grounding = self.run_grounding(response, ctx)
+            ctx.trace.grounding_ms = round((time.monotonic() - grounding_start) * 1000, 2)
+            ctx.trace.grounding_total_claims = grounding.total_count
+            ctx.trace.grounding_unsupported = grounding.unsupported_count
+            ctx.trace.grounding_all_supported = grounding.all_supported
 
         # Finalize trace
         if ctx.trace:
@@ -409,16 +464,17 @@ class RAGPipeline:
     def _build_context(self, ctx: PipelineContext) -> str:
         """
         Format reranked chunks into a context string for the LLM system prompt.
-        Each chunk is annotated with its source, retrieval score, and reranker score
-        so the LLM can reason about source quality.
+        Each chunk is annotated with a unique [Chunk N] ID, source, retrieval
+        score, and reranker score so the LLM can cite specific chunks.
         """
         if not ctx.ranked_chunks:
             return ""
 
         parts: List[str] = []
         for i, rc in enumerate(ctx.ranked_chunks):
+            chunk_id = getattr(rc.chunk, "chunk_id", None) or f"chunk-{i}"
             parts.append(
-                f"[Context {i + 1} | Source: {rc.chunk.source} | "
+                f"[Chunk {i} | id={chunk_id} | Source: {rc.chunk.source} | "
                 f"Retrieval: {rc.chunk.score:.2f} | Reranker: {rc.reranker_score:.2f}]\n"
                 f"{rc.chunk.document.page_content}"
             )

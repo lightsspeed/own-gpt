@@ -20,22 +20,23 @@ def search_knowledge_base(query: str) -> str:
         return f"Error searching knowledge base: {str(e)}"
 
 
-@tool
-def search_web(query: str) -> str:
-    """Searches the web for current information, news, or real-time data."""
-    try:
-        from tavily import TavilyClient
-        client = TavilyClient(api_key=settings.TAVILY_API_KEY)
-        response = client.search(query=query, max_results=3)
-        results = response.get("results", [])
-        if not results:
-            return "No web results found."
-        formatted = "\n\n".join(
-            [f"**{r['title']}**\n{r['content']}\nSource: {r['url']}" for r in results]
-        )
-        return f"Web search results:\n\n{formatted}"
-    except Exception as e:
-        return f"Web search error: {str(e)}"
+
+# @tool
+# def search_web(query: str) -> str:
+#     """Searches the web for current information, news, or real-time data."""
+#     try:
+#         from tavily import TavilyClient
+#         client = TavilyClient(api_key=settings.TAVILY_API_KEY)
+#         response = client.search(query=query, max_results=3)
+#         results = response.get("results", [])
+#         if not results:
+#             return "No web results found."
+#         formatted = "\n\n".join(
+#             [f"**{r['title']}**\n{r['content']}\nSource: {r['url']}" for r in results]
+#         )
+#         return f"Web search results:\n\n{formatted}"
+#     except Exception as e:
+#         return f"Web search error: {str(e)}"
 
 
 @tool
@@ -62,5 +63,6 @@ def remember_user_fact(fact: str) -> str:
         return f"Failed to save fact: {str(e)}"
 
 
-# All tools available to the agent
-tools = [search_knowledge_base, search_web, sm_integration, remember_user_fact]
+# All tools available to the agent (web search disabled)
+tools = [search_knowledge_base, sm_integration, remember_user_fact]
+

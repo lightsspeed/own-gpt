@@ -1,20 +1,11 @@
-"""
-Planner: Determines what information sources are needed to answer the user's question.
-
-Runs after Intent Classification and before any retrieval.
-Produces a SourcePolicy that drives tool selection and retrieval strategy.
-
-The planner is intentionally lightweight — it translates the already-computed
-intent + route into an explicit SourcePolicy. No LLM calls.
-"""
-
 from __future__ import annotations
 
 import logging
+
 from app.core.langsmith import traceable
 from .intent import Intent, IntentResult
 from .router import RouterResult, RouteDecision
-from .source_policy import SourcePolicy, SourcePolicyResult
+from .source_policy import SourcePolicy, AnswerMode
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +14,8 @@ _POLICY_MAP: dict[Intent, SourcePolicy] = {
     Intent.KNOWLEDGE: SourcePolicy.KB,
     Intent.WEB:       SourcePolicy.WEB,
     Intent.MEMORY:    SourcePolicy.MEMORY,
-    Intent.CODING:    SourcePolicy.NONE,
-    Intent.REASONING: SourcePolicy.NONE,
+    Intent.CODING:    SourcePolicy.REASONING,
+    Intent.REASONING: SourcePolicy.REASONING,
     Intent.TOOL:      SourcePolicy.NONE,
     Intent.UNKNOWN:   SourcePolicy.KB,
 }
@@ -32,14 +23,14 @@ _POLICY_MAP: dict[Intent, SourcePolicy] = {
 
 class Planner:
     """
-    Maps intent + route decision to an explicit SourcePolicy.
+    Maps intent + route decision to an explicit SourcePolicy + CitationContract.
 
     The planner is stateless and synchronous — it simply translates
-    the pipeline's existing intent/route analysis into a policy declaration.
+    the pipeline's existing intent/route analysis into an AnswerMode.
     """
 
     @traceable(name="planner", metadata={"stage": "planner"})
-    def plan(self, intent: IntentResult, route: RouterResult) -> SourcePolicyResult:
+    def plan(self, intent: IntentResult, route: RouterResult) -> AnswerMode:
         policy = _POLICY_MAP.get(intent.intent, SourcePolicy.NONE)
 
         sources_required: list[str] = []
@@ -65,17 +56,18 @@ class Planner:
 
         reason = f"intent={intent.intent.value} route={route.decision.value} policy={policy.value}"
 
-        result = SourcePolicyResult(
+        mode = AnswerMode.from_policy(
             policy=policy,
             reason=reason,
             sources_required=sources_required,
         )
 
         logger.info(
-            "stage=planner policy=%s intent=%s route=%s sources=%s",
+            "stage=planner policy=%s intent=%s route=%s sources=%s requires_evidence=%s",
             policy.value,
             intent.intent.value,
             route.decision.value,
             sources_required,
+            mode.contract.requires_evidence,
         )
-        return result
+        return mode

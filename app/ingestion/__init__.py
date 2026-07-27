@@ -27,10 +27,12 @@ from .models import (
 from .pipeline import IngestionPipeline
 from .scanner import Manifest, Scanner
 from .parsers import list_available, parse, register_parser
+from .semantic_chunker import SemanticChunker
 
 __all__ = [
     "IngestionConfig",
     "IngestionPipeline",
+    "SemanticChunker",
     "Scanner",
     "Manifest",
     "FileLock",

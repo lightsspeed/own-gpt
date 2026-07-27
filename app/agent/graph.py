@@ -41,9 +41,13 @@ def call_model(state: AgentState) -> dict:
     base_prompt = state.get("system_prompt") or "You are a helpful AI assistant."
     intent = state.get("intent", "")
     pipeline_context = state.get("pipeline_context", "")
+    answer_mode_directive = state.get("answer_mode_directive", "")
 
     # Build context sections
     sections = [base_prompt]
+
+    if answer_mode_directive:
+        sections.append(f"\n--- Answer Mode ---\n{answer_mode_directive}")
 
     if intent:
         sections.append(f"\nRequest Type: {intent}")

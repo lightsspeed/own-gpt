@@ -69,6 +69,11 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     if (action.href) navigate(action.href)
   }, [navigate])
 
+  const handleShowSources = useCallback((sources: ResourceItem[]) => {
+    setSourcesData(sources)
+    setContextPanelOpen(true)
+  }, [])
+
   const handleChapterClick = useCallback((_anchorId: string, targetMsgId: string) => {
     setHighlightedMsgId(targetMsgId)
     if (highlightTimer.current) clearTimeout(highlightTimer.current)
@@ -141,16 +146,8 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
   const streamingMsg = messages.find(m => m.id === streamingId)
   const showSpinner = isLoading && streamingId !== null && streamingMsg && !streamingMsg.content
 
-  const scrollToNewQuery = useCallback(() => {
-    const i = visibleMessages.length - 1
-    if (i >= 0) {
-      rowVirtualizer.scrollToIndex(i, { align: 'start', behavior: 'smooth' })
-      requestAnimationFrame(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = Math.max(0, scrollRef.current.scrollTop - 120)
-        }
-      })
-    }
+  const scrollToBottom = useCallback(() => {
+    rowVirtualizer.scrollToIndex(visibleMessages.length, { align: 'end', behavior: 'smooth' })
     setNewMsgCount(0)
     setTimeout(() => {
       const ta = document.querySelector('textarea')
@@ -179,28 +176,28 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
 
     if (len <= prevLen) return
 
-    const lastMsg = visibleMessages[len - 1]
-    if (!lastMsg) return
+    // React 18 batches both the user AND assistant setMessages calls into a single
+    // render, so lastMsg.role is always 'assistant' by the time this runs.
+    // The fix: always scroll to bottom when new messages arrive.
+    setNewMsgCount(0)
+    setTimeout(() => {
+      const el = scrollRef.current
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+      }
+    }, 30)
+  }, [msgCount])
 
-    /* User just sent a query — position it ~120px below viewport top */
-    if (lastMsg.role === 'user') {
-      setNewMsgCount(0)
-      requestAnimationFrame(() => {
-        rowVirtualizer.scrollToIndex(len - 1, { align: 'start' })
-        requestAnimationFrame(() => {
-          if (scrollRef.current) {
-            scrollRef.current.scrollTop = Math.max(0, scrollRef.current.scrollTop - 120)
-          }
-        })
-      })
-      return
-    }
+  const lastMessageContent = visibleMessages[visibleMessages.length - 1]?.content || ''
 
-    /* Assistant started — track but don't auto-scroll (user msg is already in view) */
-    if (isLoading) {
-      setNewMsgCount(c => c + 1)
+  // While streaming: keep the view pinned to the bottom as new tokens arrive
+  useEffect(() => {
+    if (!isLoading || !isNearBottom.current) return
+    const el = scrollRef.current
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
     }
-  }, [msgCount, isLoading, rowVirtualizer])
+  }, [lastMessageContent, isLoading])
 
   // ── Render ───────────────────────────────────────────────────────────────
   const totalSize = rowVirtualizer.getTotalSize()
@@ -215,7 +212,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
           className="overflow-y-auto custom-scrollbar h-full"
           style={{ overflowAnchor: 'none' }}
         >
-          <div className="pt-4 pb-4 px-6">
+          <div className="pt-4 pb-20 px-6">
             <div className="max-w-[920px] mx-auto">
               {/* Outline — pinned above virtual list */}
               {hasMessages && (
@@ -260,8 +257,10 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
                         isStreaming={isStreamingMsg}
                         resources={msg.resources}
                         answerMode={msg.answerMode}
+                        answerModeMetadata={msg.answerModeMetadata}
                         onEdit={msg.role === 'user' ? handleEdit : undefined}
                         onRegenerate={msg.role === 'assistant' && virtualRow.index === visibleMessages.length - 1 && !isLoading ? handleRegenerate : undefined}
+                        onShowSources={handleShowSources}
                       />
                       {msg.role === 'assistant' && msg.usedTools && msg.usedTools.length > 0 && !isStreamingMsg && (
                         <ToolChips tools={msg.usedTools} />
@@ -280,7 +279,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
               </div>
 
               {showSpinner && (
-                <div className="animate-fade-in mt-5" style={{ animationDuration: '0.3s' }}>
+                <div className="animate-fade-in mt-5 mb-6" style={{ animationDuration: '0.3s' }}>
                   <GenerationSpinner stages={pipelineStages} />
                 </div>
               )}
@@ -322,7 +321,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
 
       <div className="pb-4">
         <div className="max-w-[920px] mx-auto relative">
-          <ScrollToBottom show={showScrollBtn} onClick={scrollToNewQuery} newMessages={newMsgCount || undefined} isLoading={isLoading} />
+          <ScrollToBottom show={showScrollBtn} onClick={scrollToBottom} newMessages={newMsgCount || undefined} isLoading={isLoading} />
           <Composer input={input} setInput={setInput} onSend={send} onStop={stop} isLoading={isLoading} tools={tools} onToggleTool={toggleTool} onToolModeChange={setToolMode} contextItems={context.items} onContextRemove={removeContextItem} />
         </div>
       </div>

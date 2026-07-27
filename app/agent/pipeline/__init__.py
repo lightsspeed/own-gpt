@@ -6,8 +6,12 @@ import yaml
 from .pipeline import RAGPipeline, PipelineContext
 from .intent import IntentClassifier, IntentResult, Intent
 from .router import RequestRouter, RouterResult, RouteDecision
-from .planner import Planner, SourcePolicyResult
+from .planner import Planner
+from .source_policy import SourcePolicy, CitationContract, AnswerMode
 from .evidence_builder import EvidenceBuilder, EvidenceBuilderResult
+from .source_validator import SourceValidator, SourceValidationResult
+from .claim_extractor import ClaimExtractor, Claim
+from .grounding_validator import GroundingValidator, GroundingResult, ClaimValidation
 from .rewrite import QueryRewriter, RewriteResult
 from .retriever import Retriever, RetrievedChunk
 from .reranker import CrossEncoderReranker, RankedChunk
@@ -44,9 +48,18 @@ __all__ = [
     "RouterResult",
     "RouteDecision",
     "Planner",
-    "SourcePolicyResult",
+    "SourcePolicy",
+    "CitationContract",
+    "AnswerMode",
     "EvidenceBuilder",
     "EvidenceBuilderResult",
+    "SourceValidator",
+    "SourceValidationResult",
+    "ClaimExtractor",
+    "Claim",
+    "GroundingValidator",
+    "GroundingResult",
+    "ClaimValidation",
     "QueryRewriter",
     "RewriteResult",
     "Retriever",

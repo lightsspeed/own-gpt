@@ -63,6 +63,9 @@ class PipelineTrace:
 
     # Stage 2b: Planner
     source_policy: str = ""
+    answer_mode: str = ""
+    requires_evidence: bool = False
+    min_evidence: int = 0
 
     # Stage 3: Query Rewriting
     rewritten_query: str = ""
@@ -108,6 +111,12 @@ class PipelineTrace:
     # Stage 8: Validation
     validation_valid: bool = True
     validation_used_llm: bool = False
+
+    # Stage 8b: Grounding validation
+    grounding_ms: float = 0.0
+    grounding_total_claims: int = 0
+    grounding_unsupported: int = 0
+    grounding_all_supported: bool = True
 
     # Response
     final_response_len: int = 0
