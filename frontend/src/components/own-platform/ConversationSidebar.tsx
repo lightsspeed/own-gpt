@@ -95,8 +95,8 @@ export function ConversationSidebar({
       className={cn(
         'sidebar-transition z-50 fixed top-2 flex flex-col',
         'rounded-2xl shadow-xl border border-border bg-surface',
-        'h-[calc(100vh-16px)] w-[250px]',
-        sidebarOpen ? 'left-2' : '-left-[296px]',
+        'h-[calc(100vh-16px)] w-[315px]',
+        sidebarOpen ? 'left-2' : '-left-[361px]',
       )}
     >
       {/* Logo + collapse */}

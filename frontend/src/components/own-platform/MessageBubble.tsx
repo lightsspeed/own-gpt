@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, Globe, ExternalLink, RefreshCw, ChevronDown } from 'lucide-react'
-import type { EvidenceItem, ResourceItem } from '@/features/chat/types'
+import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, ExternalLink, RefreshCw } from 'lucide-react'
+import type { ResourceItem } from '@/features/chat/types'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,32 +9,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MarkdownRenderer } from './MarkdownRenderer'
-import { EvidenceDrawer } from './EvidenceDrawer'
-
-const COLLAPSE_THRESHOLD = 600
 
 interface MessageBubbleProps {
   role: 'user' | 'assistant' | 'system'
   content: string
   isStreaming?: boolean
-  evidence?: EvidenceItem[]
   resources?: ResourceItem[]
   answerMode?: string
   onEdit?: (content: string) => void
   onRegenerate?: () => void
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, evidence, resources, answerMode, onEdit, onRegenerate }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, resources, answerMode, onEdit, onRegenerate }: MessageBubbleProps) {
   const isUser = role === 'user'
   const [showActions, setShowActions] = useState(false)
-  const [collapsed, setCollapsed] = useState(true)
-  const [drawerItem, setDrawerItem] = useState<EvidenceItem | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
-
-  const isLong = !isStreaming && content.length > COLLAPSE_THRESHOLD
-  const evidenceItems = evidence || []
-  const hasSources = evidenceItems.length > 0 || (resources && resources.length > 0)
-  const drawerIndex = drawerItem ? evidenceItems.indexOf(drawerItem) : -1
 
   useEffect(() => {
     if (isUser) {
@@ -89,23 +78,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
             : 'px-1',
         )}
       >
-        <div className={cn('relative overflow-hidden transition-all duration-300', isLong && collapsed ? 'max-h-[300px]' : 'max-h-[99999px]')}>
-          <MarkdownRenderer content={content} />
-
-          {isLong && collapsed && (
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#000] to-transparent pointer-events-none" />
-          )}
-        </div>
-        {isLong && (
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="flex items-center gap-1 text-caption text-muted-foreground/50 hover:text-muted-foreground transition-colors mt-1"
-          >
-            <ChevronDown size={12} className={cn('transition-transform', !collapsed && 'rotate-180')} />
-            {collapsed ? 'Show more' : 'Show less'}
-          </button>
-        )}
-
+        <MarkdownRenderer content={content} />
       </div>
 
       {/* Actions */}
@@ -114,25 +87,10 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
           {isUser ? (
             <UserActions content={content} onEdit={onEdit} />
           ) : (
-            <AssistantActions content={content} hasSources={hasSources} onOpenEvidence={() => setDrawerItem(evidenceItems[0] || null)} onRegenerate={onRegenerate} />
+            <AssistantActions content={content} onRegenerate={onRegenerate} />
           )}
         </div>
       )}
-
-      {/* Evidence Drawer */}
-      <EvidenceDrawer
-        item={drawerItem}
-        onClose={() => setDrawerItem(null)}
-        onNavigate={(dir) => {
-          const idx = evidenceItems.indexOf(drawerItem!)
-          const next = dir === 'next' ? idx + 1 : idx - 1
-          if (next >= 0 && next < evidenceItems.length) {
-            setDrawerItem(evidenceItems[next])
-          }
-        }}
-        hasPrev={drawerIndex > 0}
-        hasNext={drawerIndex < evidenceItems.length - 1}
-      />
     </div>
   )
 })
@@ -160,12 +118,7 @@ function UserActions({ content, onEdit }: { content: string; onEdit?: (content: 
   )
 }
 
-function AssistantActions({ content, hasSources, onOpenEvidence, onRegenerate }: {
-  content: string
-  hasSources: boolean
-  onOpenEvidence?: () => void
-  onRegenerate?: () => void
-}) {
+function AssistantActions({ content, onRegenerate }: { content: string; onRegenerate?: () => void }) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
 
@@ -206,11 +159,6 @@ function AssistantActions({ content, hasSources, onOpenEvidence, onRegenerate }:
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="bg-popover w-[180px] rounded-xl border p-1.5 shadow-xl">
-          {hasSources && (
-            <DropdownMenuItem className="flex items-center gap-2.5 rounded-lg p-2 text-small cursor-pointer" onSelect={() => onOpenEvidence?.()}>
-              <Globe size={14} /> Sources
-            </DropdownMenuItem>
-          )}
           <DropdownMenuItem className="flex items-center gap-2.5 rounded-lg p-2 text-small cursor-pointer">
             <ExternalLink size={14} /> Share
           </DropdownMenuItem>

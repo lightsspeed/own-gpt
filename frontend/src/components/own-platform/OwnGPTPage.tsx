@@ -120,17 +120,32 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
   const isNearBottom = useRef(true)
 
   const rowVirtualizer = useVirtualizer({
-    count: visibleMessages.length + 1, // +1 for the bottom anchor row
+    count: visibleMessages.length + 1,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 120,
+    estimateSize: (index) => {
+      if (index === visibleMessages.length) return 1
+      const msg = visibleMessages[index]
+      if (!msg) return 120
+      const len = msg.content?.length || 0
+      const lines = Math.max(1, Math.ceil(len / 80))
+      const textH = lines * 24
+      const toolsH = (msg.usedTools?.length || 0) * 28
+      const artH = (msg.artifacts?.length || 0) * 80
+      const extra = msg.role === 'user' ? 40 : 60
+      return Math.min(textH + toolsH + artH + extra, 5000)
+    },
+    getItemKey: (index) => visibleMessages[index]?.id ?? `anchor-${index}`,
     overscan: 10,
   })
 
   const streamingMsg = messages.find(m => m.id === streamingId)
   const showSpinner = isLoading && streamingId !== null && streamingMsg && !streamingMsg.content
 
-  const scrollToBottom = useCallback(() => {
-    rowVirtualizer.scrollToIndex(visibleMessages.length, { align: 'end', behavior: 'smooth' })
+  const scrollToNewQuery = useCallback(() => {
+    const i = visibleMessages.length - 1
+    if (i >= 0) {
+      rowVirtualizer.scrollToIndex(i, { align: 'start', behavior: 'smooth' })
+    }
     setNewMsgCount(0)
     setTimeout(() => {
       const ta = document.querySelector('textarea')
@@ -146,25 +161,40 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     setShowScrollBtn(distFromBottom > 140)
   }, [])
 
-  useEffect(() => {
-    handleScroll()
-  }, [messages, handleScroll])
+  const msgCount = visibleMessages.length
+  const justScrolled = useRef(false)
 
   useEffect(() => {
-    if (isNearBottom.current) {
-      rowVirtualizer.scrollToIndex(visibleMessages.length, { align: 'end' })
+    handleScroll()
+  }, [msgCount, handleScroll])
+
+  useEffect(() => {
+    if (justScrolled.current) return
+    const len = msgCount
+    const prevLen = prevMsgLen.current
+    prevMsgLen.current = len
+
+    if (len <= prevLen) return
+
+    justScrolled.current = true
+    requestAnimationFrame(() => { justScrolled.current = false })
+
+    const lastMsg = visibleMessages[len - 1]
+    const isNewQuery = lastMsg?.role === 'user'
+
+    if (isNewQuery || isNearBottom.current) {
       setNewMsgCount(0)
-    } else if (isLoading && visibleMessages.length > prevMsgLen.current) {
+      const idx = isNewQuery ? len - 1 : len
+      const align = isNewQuery ? 'start' : 'end'
+      rowVirtualizer.scrollToIndex(idx, { align })
+    } else if (isLoading) {
       setNewMsgCount(c => c + 1)
     }
-    prevMsgLen.current = visibleMessages.length
-  }, [messages, isLoading, rowVirtualizer, visibleMessages.length])
+  }, [msgCount, isLoading, rowVirtualizer])
 
   // ── Render ───────────────────────────────────────────────────────────────
   const totalSize = rowVirtualizer.getTotalSize()
   const virtualRows = rowVirtualizer.getVirtualItems()
-  const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0
-  const paddingBottom = totalSize - (virtualRows.length > 0 ? virtualRows[virtualRows.length - 1].end : 0)
 
   return (
     <div className="flex flex-col h-full">
@@ -173,6 +203,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
           ref={scrollRef}
           onScroll={handleScroll}
           className="overflow-y-auto custom-scrollbar h-full"
+          style={{ overflowAnchor: 'none' }}
         >
           <div className="pt-4 pb-4 px-6">
             <div className="max-w-[920px] mx-auto">
@@ -189,7 +220,6 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
 
               {/* Virtual message list */}
               <div style={{ height: totalSize, position: 'relative' }}>
-                {paddingTop > 0 && <div style={{ height: paddingTop }} />}
                 {virtualRows.map(virtualRow => {
                   const isAnchor = virtualRow.index === visibleMessages.length
                   if (isAnchor) {
@@ -212,14 +242,13 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
                         width: '100%',
                         transform: `translateY(${virtualRow.start}px)`,
                       }}
-                      className={cn('animate-message-in', highlightedMsgId === msg.id && 'animate-highlight-fade')}
                     >
+                      <div className={cn('animate-message-in', highlightedMsgId === msg.id && 'animate-highlight-fade')}>
                       <MessageBubble
                         role={msg.role}
                         content={msg.content}
                         isStreaming={isStreamingMsg}
                         resources={msg.resources}
-                        evidence={msg.evidence}
                         answerMode={msg.answerMode}
                         onEdit={msg.role === 'user' ? handleEdit : undefined}
                         onRegenerate={msg.role === 'assistant' && virtualRow.index === visibleMessages.length - 1 && !isLoading ? handleRegenerate : undefined}
@@ -235,9 +264,9 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
                         </div>
                       )}
                     </div>
+                    </div>
                   )
                 })}
-                {paddingBottom > 0 && <div style={{ height: paddingBottom }} />}
               </div>
 
               {showSpinner && (
@@ -283,7 +312,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
 
       <div className="pb-4">
         <div className="max-w-[920px] mx-auto relative">
-          <ScrollToBottom show={showScrollBtn} onClick={scrollToBottom} newMessages={newMsgCount || undefined} isLoading={isLoading} />
+          <ScrollToBottom show={showScrollBtn} onClick={scrollToNewQuery} newMessages={newMsgCount || undefined} isLoading={isLoading} />
           <Composer input={input} setInput={setInput} onSend={send} onStop={stop} isLoading={isLoading} tools={tools} onToggleTool={toggleTool} onToolModeChange={setToolMode} contextItems={context.items} onContextRemove={removeContextItem} />
         </div>
       </div>

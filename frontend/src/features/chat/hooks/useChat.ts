@@ -136,11 +136,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     return () => { cancelled = true; };
   }, [sessionId]);
 
-  /* Auto-scroll to bottom — only after initial load, on new messages */
-  useEffect(() => {
-    if (!initialLoadDone.current) return;
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  /* Scroll is managed by the virtualizer in OwnGPTPage */
 
   const send = useCallback(async () => {
     if (!input.trim() || isLoading) return;

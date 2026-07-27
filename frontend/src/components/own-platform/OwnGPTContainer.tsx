@@ -115,7 +115,7 @@ export function OwnGPTContainer() {
 
       <main className={cn(
         'flex-1 flex flex-col h-full transition-all duration-300 min-w-0',
-        sidebarOpen ? 'ml-[266px]' : 'ml-0',
+        sidebarOpen ? 'ml-[331px]' : 'ml-0',
       )}>
         <div className="flex-1 min-h-0">
           {activeId ? (
