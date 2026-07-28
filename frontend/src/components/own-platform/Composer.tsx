@@ -8,6 +8,13 @@ import { SlashCommands, type SlashCommand } from './SlashCommands'
 import { uploadService } from '@/features/chat/services/uploadService'
 import type { AttachmentFile, ToolInfo, ToolMode, ContextItem, ContextCategory } from '@/features/chat/types'
 
+declare global {
+  interface Window {
+    SpeechRecognition: any
+    webkitSpeechRecognition: any
+  }
+}
+
 const CATEGORY_META: Record<ContextCategory, { color: string }> = {
   environment: { color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' },
   service: { color: 'bg-sky-500/15 text-sky-400 border-sky-500/20' },
@@ -57,6 +64,79 @@ export function Composer({
   const [toolsOpen, setToolsOpen] = useState(false)
   const [slashOpen, setSlashOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const [speechError, setSpeechError] = useState<string | null>(null)
+  const recognitionRef = useRef<any>(null)
+  const baseInputRef = useRef<string>('')
+
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+      setIsListening(false)
+      return
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setSpeechError('Voice input is not supported in this browser.')
+      setTimeout(() => setSpeechError(null), 3500)
+      return
+    }
+
+    try {
+      const recognition = new SpeechRecognition()
+      recognition.continuous = true
+      recognition.interimResults = true
+      recognition.lang = navigator.language || 'en-US'
+
+      baseInputRef.current = input
+
+      recognition.onresult = (event: any) => {
+        let transcript = ''
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript
+        }
+        if (transcript) {
+          const base = baseInputRef.current
+          const prefix = base ? (base.endsWith(' ') ? base : base + ' ') : ''
+          setInput(prefix + transcript)
+        }
+      }
+
+      recognition.onerror = (event: any) => {
+        setIsListening(false)
+        if (event.error === 'not-allowed') {
+          setSpeechError('Microphone access denied by browser.')
+        } else if (event.error !== 'no-speech') {
+          setSpeechError(`Voice recognition error: ${event.error}`)
+        }
+        setTimeout(() => setSpeechError(null), 3500)
+      }
+
+      recognition.onend = () => {
+        setIsListening(false)
+      }
+
+      recognition.start()
+      recognitionRef.current = recognition
+      setIsListening(true)
+      setSpeechError(null)
+    } catch (err: any) {
+      setIsListening(false)
+      setSpeechError('Could not start voice recognition.')
+      setTimeout(() => setSpeechError(null), 3500)
+    }
+  }, [input, isListening, setInput])
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+    }
+  }, [])
 
   const autoResize = () => {
     const ta = textareaRef.current
@@ -290,13 +370,30 @@ export function Composer({
 
           {/* Right actions */}
           <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
-            <button
-              disabled={disabled || isLoading}
-              className="flex items-center justify-center w-9 h-9 rounded-[10px] transition-all duration-160 text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.05]"
-              title="Voice input"
-            >
-              <Mic size={18} />
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={toggleListening}
+                disabled={disabled || isLoading}
+                className={cn(
+                  'flex items-center justify-center w-9 h-9 rounded-[10px] transition-all duration-160 relative',
+                  isListening
+                    ? 'bg-red-500/15 text-red-400 border border-red-500/30 animate-pulse'
+                    : 'text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.05]',
+                )}
+                title={isListening ? 'Listening... (Click to stop)' : 'Voice input (Click to speak)'}
+              >
+                <Mic size={18} className={isListening ? 'text-red-400' : ''} />
+                {isListening && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                )}
+              </button>
+              {speechError && (
+                <div className="absolute bottom-full right-0 mb-2 whitespace-nowrap text-xs bg-red-950/90 text-red-200 border border-red-800/50 px-2.5 py-1 rounded-md shadow-lg z-50 animate-in fade-in">
+                  {speechError}
+                </div>
+              )}
+            </div>
 
             <div className="w-px h-6 bg-foreground/[0.18] mx-0.5" />
 

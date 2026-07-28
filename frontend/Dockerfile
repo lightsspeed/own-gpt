@@ -12,7 +12,7 @@ CMD ["npm", "run", "dev", "--", "--host"]
 
 # Production build stage
 FROM base AS builder
-RUN npm run build
+RUN npx vite build
 
 # Production run stage (Nginx)
 FROM nginx:stable-alpine AS production
