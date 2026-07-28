@@ -1,109 +1,129 @@
-# OwnGPT — Market Analysis & Platform Upgrade Roadmap
+# OwnGPT — Enterprise Platform Upgrade Roadmap
 
-This document outlines a market analysis comparing **OwnGPT** against modern enterprise RAG and AI Engineering Platforms (e.g., Cohere Coral, Glean, Dify, LangSmith, AnythingLLM, Open WebUI), along with concrete recommendations for future platform upgrades across Frontend UX, Backend RAG Architecture, Security & Governance, and Operational Intelligence.
-
----
-
-## 1. Executive Summary & Market Landscape
-
-In the 2026 enterprise landscape, RAG applications have transitioned from naive "vector search + prompt template" setups into **evidence-driven, agentic, evaluation-bound AI engineering platforms**.
-
-Modern benchmark platforms succeed by excelling in 4 core pillars:
-1. **User Experience (UX)**: Zero-latency interactive feedback, rich source attribution, inline citation highlighting, voice/multimodal interaction, and split-screen document previewers.
-2. **Backend & Retrieval Pipeline**: Hybrid retrieval (Dense Vectors + BM25 Sparse), GraphRAG (Knowledge Graph context), Agentic query planning, cross-encoder reranking, and semantic caching.
-3. **Security & Governance**: In-pipeline Attribute-Based Access Control (ABAC), PII redactors, prompt injection firewalls, and immutable lineage auditing.
-4. **Continuous Evaluation & Telemetry**: RAG Triad measurement (Context Relevance, Groundedness, Answer Relevance), LLM-as-a-Judge benchmarking, offline counterfactual replay, and automated regression gates.
+This document defines the comprehensive architecture and feature roadmap for expanding **OwnGPT** into an enterprise-grade AI Engineering and RAG Platform.
 
 ---
 
-## 2. Recommended Upgrades for OwnGPT
+## 1. Executive Summary & Market Architecture
 
-### Pillar A: Frontend & User Experience (UX)
+In 2026, enterprise Retrieval-Augmented Generation (RAG) platforms must satisfy strict requirements across **Data Governance**, **Identity & Access Management (IAM)**, **Agentic Tool Execution**, and **Operational Auditability**.
 
-#### 1. Interactive Source Citation Inspector & Split View
-- **Current State**: Sources are rendered as text cards in the Evidence Panel.
-- **Market Standard**: Hovering over inline citation badges (`[1]`, `[2]`) in the chat bubble highlights the exact sentence in the source document. Clicking a citation opens a side-by-side split-view document viewer with target chunk highlighting.
-- **Action Item**: Enhance `MessageBubble.tsx` and `ContextPanel.tsx` with deep-linking chunk highlights (`file://...#L12-L35`).
-
-#### 2. Bi-Directional Voice & Multimodal Workspace
-- **Current State**: Web Speech API speech-to-text voice input in `Composer.tsx`.
-- **Market Standard**: Bi-directional audio streaming (WebRTC / WebSockets) with real-time text-to-speech (TTS) playback and client-side audio visualizer waves.
-- **Action Item**: Add WebSockets audio streaming and optional browser SpeechSynthesis / ElevenLabs / OpenAI TTS voice response toggling in `MessageBubble.tsx`.
-
-#### 3. Inline Thinking & Step-by-Step Reasoner Timeline
-- **Current State**: Basic status indicator during streaming.
-- **Market Standard**: Collapsible step-by-step agent execution timeline (e.g. `Intent Classified` → `BM25 & Vector Retrieved` → `Reranked Top 5` → `Confidence Calibrated`).
-- **Action Item**: Upgrade `GenerationSpinner.tsx` and pipeline stage rendering into an interactive accordion timeline.
-
----
-
-### Pillar B: Backend & Retrieval Engine
-
-#### 1. GraphRAG (Hybrid Vector + Knowledge Graph Fusion)
-- **Current State**: BM25 (Whoosh) + Dense vector retrieval (pgvector).
-- **Market Standard**: Combining vector search with entity-relationship Knowledge Graphs (GraphRAG). This allows OwnGPT to answer high-level multi-document analytical questions (e.g., *"How do services X and Y interact across deployments?"*).
-- **Action Item**: Integrate lightweight NetworkX / SQLite entity graph index alongside pgvector.
-
-#### 2. Semantic Caching & Model Routing
-- **Current State**: Direct execution per request.
-- **Market Standard**: 
-  - **Semantic Cache**: Store query embeddings in Redis (`REDIS_URL`). If incoming query similarity > 0.95, return cached verified response instantly (reducing cost by up to 60% and latency to <50ms).
-  - **Dynamic Model Router**: Use fast, cheap models (e.g. `gpt-4o-mini` or local LLM) for intent classification and query rewriting, reserving larger reasoning models for generation.
-- **Action Item**: Implement `SemanticCache` middleware in `app/agent/pipeline/`.
-
-#### 3. Agentic Multi-Step Iterative Retrieval (Self-RAG)
-- **Current State**: Single pass classification → retrieval → rerank → generation.
-- **Market Standard**: Self-RAG agent loop: if reranker confidence score is below threshold (e.g. `< 0.65`), the agent automatically reformulates the search query and performs a secondary retrieval pass before answering.
-- **Action Item**: Implement query reformulation loop in `app/agent/pipeline/pipeline.py`.
-
----
-
-### Pillar C: Security, Privacy & Governance
-
-#### 1. Document-Level Access Control (ACL / ABAC)
-- **Current State**: Global retrieval across all indexed documents.
-- **Market Standard**: In-retrieval filtering based on user roles and document permissions (ABAC). Vectors and BM25 docs contain `read_roles` metadata (`['admin', 'engineering']`).
-- **Action Item**: Add role metadata filtering in `app/retrievers/hybrid.py` and `app/services/pgvector.py`.
-
-#### 2. Prompt Injection & PII Firewall (Guardrails)
-- **Current State**: Basic PII sanitization.
-- **Market Standard**: Inbound prompt guardrails (detecting indirect prompt injections, jailbreaks, system prompt extraction attempts) and outbound hallucination guards.
-- **Action Item**: Add input/output guardrail checks in `app/agent/pipeline/validation.py`.
-
-#### 3. Lineage Export & Compliance Reporting
-- **Current State**: LearningLedger and ConfigurationSnapshot stored internally.
-- **Market Standard**: One-click PDF/JSON audit log export for compliance (EU AI Act, SOC2) showing complete lineage: `Query → Retrieved Chunks → Confidence Score → Evaluated Output`.
-- **Action Item**: Expose `/api/v1/operations/audit/export` endpoint.
-
----
-
-### Pillar D: Operational Intelligence & Continuous Evaluation
-
-#### 1. RAG Triad Real-Time Monitoring Panel
-- **Current State**: Offline RAGAS benchmark runner.
-- **Market Standard**: Live monitoring dashboard measuring the RAG Triad (**Context Relevance**, **Groundedness**, **Answer Relevance**) for every user interaction.
-- **Action Item**: Surface live RAG Triad scores in `DashboardPage.tsx` and `PerformanceMetrics.tsx`.
-
-#### 2. Automated Regression Gates in CI/CD
-- **Current State**: Manual benchmark trigger script.
-- **Market Standard**: GitHub Actions gate that automatically runs benchmark tests on pull requests and blocks deployment if groundedness or retrieval recall drops below baseline.
-- **Action Item**: Connect `k8s/` manifests and `.github/workflows/rag-benchmark.yml` with strict gate policies.
-
----
-
-## 3. Prioritized Implementation Roadmap
-
-```mermaid
-timeline
-    title OwnGPT Platform Evolution Roadmap
-    Phase 1 (Immediate) : Voice Input in Composer : Docker Hub Release v1.0.1 : Citation Split-View
-    Phase 2 (Short-Term) : Semantic Caching in Redis : Multi-Step Self-RAG Loop : Inbound Injection Guardrails
-    Phase 3 (Medium-Term) : GraphRAG Entity Retrieval : Document ACL Filtering : Live RAG Triad Dashboard
-    Phase 4 (Long-Term) : Bi-Directional WebRTC Voice : SOC2 Compliance Audit Exporter : Automated CI/CD Gates
+```
+                       +-----------------------------------+
+                       |    Enterprise IdP (Okta / OIDC)   |
+                       +-----------------------------------+
+                                         | (JWT Claims)
+                                         v
++------------------+   +-----------------------------------+   +--------------------+
+|  Agentic Tool    | < |      OwnGPT Control Plane         | > |   Pre-Retrieval    |
+|  Execution &     |   |   (SSO, ABAC, Guardrails, Lineage)|   |   ABAC Filtering   |
+|  Sandbox Engine  |   +-----------------------------------+   |   (pgvector / BM25)|
++------------------+                                           +--------------------+
 ```
 
 ---
 
-## 4. Conclusion & Next Steps
+## 2. Enterprise Identity & User Access Mapping (IAM)
 
-OwnGPT is already exceptionally architected with its 10-pillar structure and constitution (`AGENTS.md`). Implementing these recommendations will elevate OwnGPT to a top-tier, enterprise-grade AI Engineering Platform.
+### 2.1 Single Sign-On (SSO) & Identity Propagation
+- **Identity Provider (IdP) Integration**: Native support for **SAML 2.0** and **OAuth 2.0 / OpenID Connect (OIDC)** (supporting Azure AD, Okta, Keycloak, PingIdentity).
+- **JWT Claim Propagation**: User identity claims (e.g. `sub`, `tenant_id`, `department`, `groups`, `clearance_level`) are attached to every incoming API request and propagated downward through the RAG pipeline.
+- **OAuth 2.0 Token Exchange (RFC 8693)**: When an AI agent executes tools on behalf of a user, it requests short-lived scoped tokens using RFC 8693 delegation, ensuring the model never holds elevated global credentials.
+
+### 2.2 Multi-Tenancy & Access Control (RBAC, ABAC, ReBAC)
+
+| Access Level | Model | Mechanism & Enforcement | Example Use Case |
+| :--- | :--- | :--- | :--- |
+| **Tenant Isolation** | Multi-Tenancy | Namespace / Partition ID in Vector DB (`pgvector`) & SQLite store. | Complete data segregation between orgs or customers. |
+| **Role-Based (RBAC)** | Coarse-Grained | System roles: `Admin`, `AI Engineer`, `Operator`, `Auditor`, `Viewer`. | Restricting configuration snapshots or prompt edits to Admins. |
+| **Attribute-Based (ABAC)** | Fine-Grained | Pre-Retrieval Vector Filter: `WHERE tenant_id = :t AND read_roles && :user_groups AND clearance <= :user_level`. | Engineering team members cannot retrieve HR compensation files. |
+| **Relationship-Based (ReBAC)** | Dynamic | Policy Engine (Open Policy Agent / Cerbos) checking user-to-resource ownership graphs. | Only document owners and their explicit assignees can search private drafts. |
+
+---
+
+## 3. Enterprise Tool Calling & Execution Framework
+
+### 3.1 Dynamic Tool Registry & OAuth Delegation
+- **Enterprise Integrations**: Native integrations for Jira, GitHub, Confluence, Slack, Datadog, Salesforce, and PostgreSQL / Snowflake.
+- **Per-User Authorization**: Users connect their personal accounts via OAuth 2.0 PKCE. Tools run under the logged-in user's API context rather than a generic bot key.
+
+### 3.2 Security Sandboxing & Human-in-the-Loop (HITL)
+
+```
+LLM Tool Request -> Pre-Call Guardrail -> Side-Effect Check -> [HITL Approval if Mutating] -> Sandboxed Execution (WASM/Docker) -> Audit Log
+```
+
+1. **Dry-Run & Human Approval Gates**:
+   - Read-only tools (`get_issue`, `search_docs`) execute automatically.
+   - Side-effect tools (`create_pull_request`, `delete_database`, `trigger_deployment`) pause execution and require explicit UI button approval from an authorized human operator.
+2. **Containerized Tool Sandboxing**:
+   - Code execution tools (Python interpreter, SQL runner) run inside ephemeral isolated WebAssembly (WASM) or Docker containers with memory limit caps, runtime timeouts (max 10s), and restricted outbound network access.
+3. **Tool Rate Limiting & Quota Management**:
+   - Per-tool and per-user rate limiters to prevent API quota exhaustion or run-away loop executions.
+
+---
+
+## 4. Advanced Platform Capabilities & UX Enhancements
+
+### 4.1 Frontend & User Experience (UX)
+
+#### 1. Interactive Source Citation Inspector & Split View
+- Hovering over inline citation badges (`[1]`, `[2]`) in chat responses highlights the exact sentence in the source text.
+- Clicking a source card opens a side-by-side split-view document previewer with target chunk text highlighting.
+
+#### 2. Bi-Directional Streaming Voice & Multimodal Inputs
+- Real-time speech-to-text (Web Speech API + OpenAI Whisper API fallback).
+- Streaming Text-to-Speech (TTS) response playback with client-side audio visualizer waves.
+- Multimodal drag-and-drop support for images, architectural diagrams, PDFs, and spreadsheets.
+
+#### 3. Step-by-Step Agent Execution Inspector
+- Collapsible interactive timeline showing real-time agent execution stages (`Intent Classified` → `BM25 & Vector Search` → `Reranker Filter` → `Confidence Calibration` → `Guardrail Validation`).
+
+---
+
+### 4.2 Backend & Retrieval Engine
+
+#### 1. GraphRAG (Knowledge Graph + Hybrid Vector Fusion)
+- Combines pgvector dense embeddings and BM25 sparse keyword search with an entity-relationship Knowledge Graph (GraphRAG).
+- Enables complex relationship reasoning across multiple system components (e.g. *"Which services depend on Postgres database X and are affected by deployment Y?"*).
+
+#### 2. Semantic Caching & Dynamic Model Routing
+- **Semantic Cache**: Query embeddings checked in Redis. Similarity scores `> 0.95` return pre-verified responses instantly, reducing API latency to `<50ms` and cutting LLM token costs by up to 60%.
+- **Dynamic Router**: Routes low-complexity queries (summaries, classifications) to fast lightweight models (`gpt-4o-mini`), and high-complexity queries to reasoning models.
+
+#### 3. Self-RAG Iterative Query Reformulation
+- If reranker confidence score falls below threshold (`< 0.65`), the agent automatically reformulates the search query and performs a secondary multi-step retrieval pass before answering.
+
+---
+
+### 4.3 Security, Privacy & Governance
+
+#### 1. Prompt Injection & PII Firewall (Guardrails)
+- Inbound prompt guardrails detecting jailbreaks, system prompt extraction, and indirect malicious instructions embedded within retrieved documents.
+- Automatic PII redactor (redacting credit cards, SSNs, tokens, internal IP addresses) before sending prompts to external LLMs.
+
+#### 2. SOC2 & EU AI Act Compliance Exporter
+- One-click export of immutable JSON / PDF audit logs showing full lineage: `User Claim → Raw Prompt → Retrieved Chunks → Security Filter → Model Reasoning → Response`.
+
+---
+
+## 5. Prioritized Implementation Roadmap
+
+```mermaid
+timeline
+    title OwnGPT Enterprise Evolution Roadmap
+    Phase 1 (Completed) : Voice Input in Composer : Docker Hub Release v1.0.1 : Citation Inspector
+    Phase 2 (Immediate) : SAML/OIDC SSO Integration : ABAC Pre-Retrieval Vector Filtering : Redis Semantic Cache
+    Phase 3 (Short-Term) : OAuth Tool Delegation : HITL Human Approval Gates : Sandbox Tool Container
+    Phase 4 (Medium-Term): GraphRAG Knowledge Graph : Multi-Modal PDF/Vision Pipeline : Live RAG Triad Panel
+    Phase 5 (Long-Term) : SOC2 Compliance Audit Exporter : Bi-Directional WebRTC Voice : Automated DPO Fine-Tuning
+```
+
+---
+
+## 6. Architecture Invariants Check (Constitution Compliance)
+
+All proposed enterprise capabilities preserve the invariants defined in [AGENTS.md](file:///e:/NWCOURSE/High/High-Priority/own_gpt/AGENTS.md):
+- **Lifecycle Preserved**: `Observe → Measure → Explain → Propose → Validate → Apply → Operate`
+- **Downward Dependency**: Operations & User Management depend on Evidence, Evidence depends on Analytics, Analytics depends on Learning.
+- **Immutable Lineage**: Every tool execution, access decision, and vector query generates an append-only `LearningRecord` and `AuditArtifact`.
