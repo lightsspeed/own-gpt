@@ -12,6 +12,27 @@ import redis
 
 logger = logging.getLogger(__name__)
 
+
+def _strip_images(content) -> str:
+    """Convert structured content blocks to plain text, removing image_url blocks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+                elif block.get("type") == "image_url":
+                    parts.append("[Image removed — model does not support image input]")
+                else:
+                    parts.append(str(block))
+            else:
+                parts.append(str(block))
+        return "\n".join(p.strip() for p in parts if p.strip())
+    return str(content)
+
+
 DB_CONNINFO = f"host={settings.PG_HOST} port=5432 dbname=owngpt user=postgres password=postgres"
 
 pool = ConnectionPool(
@@ -23,7 +44,7 @@ pool = ConnectionPool(
 checkpointer = PostgresSaver(pool)
 checkpointer.setup()
 
-model = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=settings.OPENAI_API_KEY)
+model = ChatOpenAI(model="gpt-4o-mini", temperature=0.4, openai_api_key=settings.OPENAI_API_KEY)
 model_with_tools = model.bind_tools(tools)
 
 tool_node = ToolNode(tools)
@@ -38,22 +59,57 @@ def should_continue(state: AgentState) -> str:
 
 def call_model(state: AgentState) -> dict:
     """Invoke the LLM with pipeline context, conversation history, and long-term memory."""
-    base_prompt = state.get("system_prompt") or "You are a helpful AI assistant."
+    base_prompt = state.get("system_prompt") or "You are an intelligent, critical-thinking AI assistant. Answer queries with high depth, natural reasoning, and clarity."
     intent = state.get("intent", "")
     pipeline_context = state.get("pipeline_context", "")
     answer_mode_directive = state.get("answer_mode_directive", "")
 
-    # Build context sections
-    sections = [base_prompt]
+    RETRIEVAL_INTENTS = {"knowledge", "unknown", "memory"}
 
-    if answer_mode_directive:
-        sections.append(f"\n--- Answer Mode ---\n{answer_mode_directive}")
+    if intent in RETRIEVAL_INTENTS and not pipeline_context:
+        # STRICT KNOWLEDGE BASE BOUNDARY
+        # When retrieval ran but 0 relevant documents matched, replace prompt sections completely
+        # to eliminate conflicting directives asking for detailed/comprehensive answers.
+        sections = [
+            "You are a strict document-based AI assistant.",
+            "\n=== STRICT KNOWLEDGE BASE BOUNDARY ===\n"
+            "No relevant documents were found in the Knowledge Base for this query.\n"
+            "State clearly and concisely in 1-2 short sentences that this topic is not covered in your Knowledge Base.\n"
+            "Suggest uploading relevant documents or rephrasing the question.\n"
+            "CRITICAL: DO NOT use general pre-training knowledge, world knowledge, or general memory under any circumstances. "
+            "DO NOT provide any factual details about unmentioned entities."
+        ]
+    else:
+        sections = [base_prompt]
 
-    if intent:
-        sections.append(f"\nRequest Type: {intent}")
+        if answer_mode_directive:
+            sections.append(f"\n--- Answer Mode ---\n{answer_mode_directive}")
 
-    if pipeline_context:
-        sections.append(f"\nRetrieved Knowledge:\n{pipeline_context}")
+        if intent:
+            sections.append(f"\nRequest Type: {intent}")
+
+        if pipeline_context:
+            sections.append(f"\nRetrieved Knowledge:\n{pipeline_context}")
+        else:
+            # general / reasoning / coding / tool — bypass retrieval intentionally
+            if intent == "reasoning":
+                sections.append(
+                    "\n=== REASONING & ANALYTICAL GUIDELINES ===\n"
+                    "1. DO NOT GENERATE FORMULAIC COMPARISON TEMPLATES OR REPETITIVE NUMBERED SCHEMES "
+                    "(e.g., '1. Nature of Subject, 2. Functionality, 3. Speed, 4. Training, 5. Outcome').\n"
+                    "2. CATEGORY MISMATCHES: If comparing entities from different categories (e.g., a psychological framework like System 1 vs an individual athlete like Ronaldo):\n"
+                    "   - Explicitly point out the category distinction in natural, conversational prose.\n"
+                    "   - Do NOT force an artificial side-by-side comparative table.\n"
+                    "   - Bridge the concepts fluidly (e.g., explain how fast, intuitive System 1 thinking enables split-second athletic execution on the pitch).\n"
+                    "3. Write in articulate, insightful, fluid Markdown prose with natural paragraph transitions and meaningful subheadings."
+                )
+            else:
+                sections.append(
+                    "\n[Retrieval skipped for this request type — respond using natural reasoning.]\n"
+                    "Think critically, be thorough, articulate, and avoid rigid templates."
+                )
+            # Strip KB directive to avoid confusing the model
+            sections = [s for s in sections if "Answer Mode" not in s]
 
     # Long-term memory from Redis
     memories_str = ""
@@ -74,6 +130,9 @@ def call_model(state: AgentState) -> dict:
     full_prompt = "\n".join(sections)
 
     safe_messages = [m for m in state["messages"] if type(m).__name__ != "SystemMessage"]
+    for m in safe_messages:
+        if isinstance(m.content, list):
+            m.content = _strip_images(m.content)
     payload = [SystemMessage(content=full_prompt)] + safe_messages
 
     response = model_with_tools.invoke(payload)

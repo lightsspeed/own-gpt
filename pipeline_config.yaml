@@ -32,7 +32,7 @@ reranker_cache_dir: "/app/.cache/flashrank"
 
 # ── Stage 6: Confidence Evaluation ───────────────────────────────────────────
 # Composite score combines: retrieval, reranker, intent confidence, source agreement
-confidence_high: 0.70    # >= 0.70 → answer directly
+confidence_high: 0.55    # >= 0.55 → answer directly
 confidence_medium: 0.45  # >= 0.45 → fallback to web search
 # < 0.45 → ask for clarification
 

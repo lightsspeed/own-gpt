@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from app.agent.pipeline.retriever import RetrievedChunk
 from .bm25 import BM25Retriever, BM25Result
@@ -127,16 +127,20 @@ class HybridRetriever:
         self._rrf_k = rrf_k
         self._similarity_threshold = similarity_threshold
 
-    def retrieve(self, query: str) -> tuple[List[RetrievedChunk], dict]:
+    def retrieve(self, query: str, filename: Optional[str] = None) -> tuple[List[RetrievedChunk], dict]:
         """
         Hybrid retrieval: vector search + BM25 → RRF fusion.
         Returns (chunks, timing_dict) with per-stage latency breakdown.
+
+        Args:
+            query: Search query.
+            filename: If set, vector search is restricted to this document.
         """
         t_total = time.monotonic()
 
         # Stage 1: Vector search
         t_vs = time.monotonic()
-        vector_chunks, _ = self._vector.retrieve(query)
+        vector_chunks, _ = self._vector.retrieve(query, filename=filename)
         vector_ms = round((time.monotonic() - t_vs) * 1000, 2)
 
         logger.debug(

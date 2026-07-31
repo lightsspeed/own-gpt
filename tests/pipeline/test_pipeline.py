@@ -1,11 +1,14 @@
 """Tests for RAGPipeline orchestration (Stages 1-9)"""
 import pytest
+from langchain_core.documents import Document
 from app.agent.pipeline.pipeline import RAGPipeline, PipelineContext
 from app.agent.pipeline.intent import Intent, IntentResult
 from app.agent.pipeline.router import RouterResult, RouteDecision
 from app.agent.pipeline.rewrite import RewriteResult
 from app.agent.pipeline.confidence import ConfidenceResult
 from app.agent.pipeline.validation import ValidationResult
+from app.agent.pipeline.retriever import RetrievedChunk
+from app.agent.pipeline.reranker import RankedChunk
 
 
 class TestRAGPipeline:
@@ -44,7 +47,7 @@ class TestRAGPipeline:
             from app.agent.pipeline import intent as intent_mod
             mp.setattr(
                 intent_mod.IntentClassifier, "classify",
-                lambda self, q: IntentResult(Intent.RAG, 0.95, "test", 0.0, False),
+                lambda self, q: IntentResult(Intent.KNOWLEDGE, 0.95, "test", 0.0, False),
             )
             ctx = pipeline.process("test docs", "s1")
             # May or may not retrieve depending on mock store setup
@@ -77,7 +80,52 @@ class TestRAGPipeline:
         assert len(msg) > 10
         assert "rephrase" in msg.lower()
 
+    def test_document_scoped_keeps_chunks_without_token_overlap(self):
+        """Referential follow-ups ("what topic does it cover?") must not be
+        filtered out by the token-overlap filter when scoped to a document."""
+        store = _MockVectorStore(results=[
+            (
+                Document(
+                    page_content="The assessment contains fifty multiple choice items "
+                                 "and eighteen challenging questions requiring in depth analysis.",
+                    metadata={"filename": "quiz.pdf", "source": "quiz.pdf"},
+                ),
+                0.42,
+            )
+        ])
+        pipe = RAGPipeline(
+            vector_store=store,
+            redis_url=None,
+            config={"intent_enabled": False, "rewrite_enabled": False,
+                    "validation_enabled": False, "trace_enabled": False},
+        )
+        with pytest.MonkeyPatch.context() as mp:
+            from app.agent.pipeline import intent as intent_mod
+            mp.setattr(
+                intent_mod.IntentClassifier, "classify",
+                lambda self, q: IntentResult(Intent.KNOWLEDGE, 0.95, "test", 0.0, False),
+            )
+            mp.setattr(
+                pipe._reranker, "rerank",
+                lambda query, chunks: [
+                    RankedChunk(chunk=c, reranker_score=1.0, original_rank=i, reranked_rank=i)
+                    for i, c in enumerate(chunks)
+                ],
+            )
+
+            scoped = pipe.process("what topic does it cover?", "s1", filename="quiz.pdf")
+            assert len(scoped.ranked_chunks) == 1
+            assert scoped.context_text != ""
+
+            unscoped = pipe.process("what topic does it cover?", "s1")
+            assert len(unscoped.ranked_chunks) == 0
+
 
 class _MockVectorStore:
-    def similarity_search_with_score(self, query, k):
+    def __init__(self, results=None):
+        self._results = results
+
+    def similarity_search_with_score(self, query, k, filter=None):
+        if self._results is not None:
+            return self._results
         return []

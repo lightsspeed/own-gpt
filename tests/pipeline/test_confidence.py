@@ -10,7 +10,7 @@ class TestConfidenceEvaluator:
         return ConfidenceEvaluator(high_threshold=0.70, medium_threshold=0.45)
 
     def _intent(self, confidence=0.95):
-        return IntentResult(intent=Intent.RAG, confidence=confidence, reason="test",
+        return IntentResult(intent=Intent.KNOWLEDGE, confidence=confidence, reason="test",
                             latency_ms=0.0, used_llm=False)
 
     def test_no_chunks_returns_clarification(self, evaluator):
@@ -23,14 +23,14 @@ class TestConfidenceEvaluator:
         assert result.decision == "answer"
         assert result.overall >= 0.70
 
-    def test_medium_confidence_returns_web_search(self, evaluator, sample_ranked_chunks):
+    def test_medium_confidence_returns_clarification(self, evaluator, sample_ranked_chunks):
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("app.agent.pipeline.confidence._W_RETRIEVAL", 0.0)
             mp.setattr("app.agent.pipeline.confidence._W_RERANKER", 0.0)
             mp.setattr("app.agent.pipeline.confidence._W_INTENT", 1.0)
             mp.setattr("app.agent.pipeline.confidence._W_AGREEMENT", 0.0)
             result = evaluator.evaluate(sample_ranked_chunks, self._intent(0.50))
-            assert result.decision == "web_search"
+            assert result.decision == "clarification"
 
     def test_overall_score_bounded(self, evaluator, sample_ranked_chunks):
         result = evaluator.evaluate(sample_ranked_chunks, self._intent(0.95))

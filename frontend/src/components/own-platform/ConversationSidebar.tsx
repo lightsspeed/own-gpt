@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Search, Pin, Trash2, Edit2, Check, X, LogOut, Settings, PanelLeftClose, Plus,
-  MoreHorizontal, Copy, Share2, Archive,
+  MoreHorizontal, Copy, Share2, Archive, BookOpen,
 } from 'lucide-react'
 import type { ChatSession } from '@/features/chat/types'
 
@@ -21,6 +21,7 @@ interface ConversationSidebarProps {
   sidebarOpen: boolean
   onToggleSidebar: () => void
   onOpenSettings: () => void
+  onOpenKnowledgeBase?: () => void
 }
 
 function dateGroup(dateStr?: string): string {
@@ -52,6 +53,7 @@ export function ConversationSidebar({
   sidebarOpen,
   onToggleSidebar,
   onOpenSettings,
+  onOpenKnowledgeBase,
 }: ConversationSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -91,14 +93,21 @@ export function ConversationSidebar({
   }, [openMenuId])
 
   return (
-    <aside
-      className={cn(
-        'sidebar-transition z-50 fixed top-2 flex flex-col',
-        'rounded-2xl shadow-xl border border-border bg-surface',
-        'h-[calc(100vh-16px)] w-[315px]',
-        sidebarOpen ? 'left-2' : '-left-[361px]',
+    <>
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40"
+          onClick={onToggleSidebar}
+        />
       )}
-    >
+      <aside
+        className={cn(
+          'sidebar-transition z-50 fixed top-0 left-0 flex flex-col h-screen',
+          'shadow-2xl bg-surface/95 backdrop-blur-xl',
+          'w-[315px]',
+          sidebarOpen ? 'left-0' : '-left-[361px]',
+        )}
+      >
       {/* Logo + collapse */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
         <div className="flex items-center gap-3">
@@ -140,9 +149,9 @@ export function ConversationSidebar({
               if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); onSearchFocus?.() }
             }}
             placeholder="Search conversations..."
-            className="w-full rounded-lg border border-border/50 bg-background/30 py-1.5 pl-8 pr-10 text-small text-foreground placeholder:text-muted-foreground/30 outline-none transition-colors focus:border-primary/30 focus:bg-background/50"
+            className="w-full rounded-lg bg-background/30 py-1.5 pl-8 pr-10 text-small text-foreground placeholder:text-muted-foreground/30 outline-none transition-colors focus:bg-background/50"
           />
-          <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground/25 bg-muted/20 px-1.5 py-0.5 rounded border border-border/30 pointer-events-none">⌘K</kbd>
+          <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground/25 bg-muted/20 px-1.5 py-0.5 rounded pointer-events-none">⌘K</kbd>
         </div>
       </div>
 
@@ -190,7 +199,7 @@ export function ConversationSidebar({
                     onOpenMenu={setOpenMenuId}
                   />
                 ))}
-                <div className="my-2 mx-2 border-t border-border/30" />
+                <div className="my-2 mx-2" />
               </>
             )}
 
@@ -224,12 +233,16 @@ export function ConversationSidebar({
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 border-t border-border/60 px-3 py-2.5 mt-1">
+      <div className="shrink-0 px-3 py-2.5 mt-1">
+        <button onClick={onOpenKnowledgeBase} className="flex items-center gap-2.5 w-full p-2 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-hover/60 transition-all duration-150 text-small">
+          <BookOpen size={16} className="text-muted-foreground/40" />
+          Knowledge Base
+        </button>
         <button onClick={onOpenSettings} className="flex items-center gap-2.5 w-full p-2 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-hover/60 transition-all duration-150 text-small">
           <Settings size={16} className="text-muted-foreground/40" />
           Settings
         </button>
-        <div className="flex items-center gap-2.5 p-2 mt-1.5 border-t border-border/40 pt-3">
+        <div className="flex items-center gap-2.5 p-2 mt-1.5 pt-3">
           <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-[10px] font-bold shrink-0 ring-1 ring-primary/20">
             JD
           </div>
@@ -245,6 +258,7 @@ export function ConversationSidebar({
         </div>
       </div>
     </aside>
+    </>
   )
 }
 

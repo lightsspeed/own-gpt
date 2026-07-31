@@ -6,9 +6,8 @@ Purpose: Decide whether retrieval is needed based on intent.
 
 Routing table:
   knowledge → RETRIEVAL     (vector search needed)
-  web       → WEB_SEARCH    (Tavily, skip vector search)
   memory    → MEMORY        (Redis read/write, skip vector search)
-  general   → RETRIEVAL     (attempt retrieval for corpus-backed answers)
+  general   → DIRECT_LLM    (greetings, chitchat — skip retrieval)
   coding    → DIRECT_LLM    (LLM sufficient)
   reasoning → DIRECT_LLM    (LLM sufficient)
   tool      → DIRECT_LLM    (let agent decide which tool)
@@ -28,10 +27,9 @@ logger = logging.getLogger(__name__)
 
 
 class RouteDecision(str, Enum):
-    RETRIEVAL   = "retrieval"
-    WEB_SEARCH  = "web_search"
-    MEMORY      = "memory"
-    DIRECT_LLM  = "direct_llm"
+    RETRIEVAL     = "retrieval"
+    MEMORY        = "memory"
+    DIRECT_LLM    = "direct_llm"
     CLARIFICATION = "clarification"
 
 
@@ -45,9 +43,8 @@ class RouterResult:
 # ── Routing table ─────────────────────────────────────────────────────────────
 _ROUTING_TABLE: dict[Intent, tuple[RouteDecision, bool]] = {
     Intent.KNOWLEDGE: (RouteDecision.RETRIEVAL,    False),
-    Intent.WEB:       (RouteDecision.WEB_SEARCH,   True),
     Intent.MEMORY:    (RouteDecision.MEMORY,        True),
-    Intent.GENERAL:   (RouteDecision.RETRIEVAL,    False),  # Always retrieve when corpus exists
+    Intent.GENERAL:   (RouteDecision.DIRECT_LLM,   True),  # Greetings, chitchat — skip retrieval
     Intent.CODING:    (RouteDecision.DIRECT_LLM,   True),
     Intent.REASONING: (RouteDecision.DIRECT_LLM,   True),
     Intent.TOOL:      (RouteDecision.DIRECT_LLM,   True),

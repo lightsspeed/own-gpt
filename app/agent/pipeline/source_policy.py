@@ -5,13 +5,11 @@ from enum import Enum
 
 
 class SourcePolicy(str, Enum):
-    NONE = "none"
-    KB = "kb"
-    WEB = "web"
-    MEMORY = "memory"
+    NONE       = "none"
+    KB         = "kb"
+    MEMORY     = "memory"
     ATTACHMENT = "attachment"
-    HYBRID = "hybrid"
-    REASONING = "reasoning"
+    REASONING  = "reasoning"
 
 
 @dataclass
@@ -27,56 +25,34 @@ class CitationContract:
 
 
 _KB_DIRECTIVE = (
-    "You are in STRICT KNOWLEDGE BASE MODE.\n\n"
-    "RULES:\n"
-    "1. You MUST answer using ONLY the Retrieved Knowledge sections below.\n"
-    "2. Every factual claim MUST end with the specific [Chunk N] that supports it.\n"
-    "   Example: \"NLB operates at Layer 4 [Chunk 1] and handles millions of RPS [Chunk 2].\"\n"
-    "3. Use DIFFERENT chunks for DIFFERENT claims. Do not cite the same chunk for everything.\n"
-    "4. Extract ALL relevant points across ALL chunks. Do not cherry-pick.\n"
-    "5. Do NOT add any facts, examples, or scenarios not present in the Retrieved Knowledge.\n"
-    "6. If the Retrieved Knowledge does not cover a topic, respond with:\n"
-    "   \"I couldn't find relevant information in the knowledge base for this question. "
-    "The uploaded documents don't appear to contain details on this topic. "
-    "Try rephrasing your question, or ask me to search the web instead.\"\n"
-    "7. Do NOT use your pre-training knowledge. The Retrieved Knowledge is your only source.\n"
-    "8. You must cite at least 1 chunk. Preferably cite 2+ different chunks to show breadth."
-)
-
-_WEB_DIRECTIVE = (
-    "Answer using information from your web search results.\n"
-    "Cite the specific source chunks with [Chunk N] notation.\n"
-    "If a search result is used, cite it. If no source supports a claim, flag it as uncertain."
+    "You are an expert AI assistant answering questions using the provided Knowledge Base.\n\n"
+    "GUIDELINES FOR YOUR RESPONSE:\n"
+    "1. PROVIDE A DETAILED, COMPREHENSIVE, AND IN-DEPTH ANSWER using ONLY the provided Knowledge Base documents.\n"
+    "2. DO NOT INCLUDE RAW `[Chunk N]` OR `[Chunk 0]` TAGS IN YOUR ANSWER TEXT. Write clean, natural, professional, and well-structured Markdown prose.\n"
+    "3. CRITICAL THINKING & REASONING: If the user asks to compare two mismatched concepts or entities from completely different categories (e.g., an abstract cognitive process vs a specific human athlete), explicitly call out the category error/mismatch first, then bridge to any meaningful connection.\n"
+    "4. Structure your response clearly using headers (`###`), bullet points, bold key terms, and code blocks where appropriate.\n"
+    "5. STRICT GROUNDING: You MUST answer using ONLY the provided Knowledge Base documents below. If the provided documents do NOT contain information or documentation on the topic asked, state clearly and concisely that the topic is not covered in your knowledge base. DO NOT use general training knowledge or world knowledge to answer questions about unmentioned topics."
 )
 
 _MEMORY_DIRECTIVE = (
     "Answer based on the user's long-term memory and conversation history.\n"
-    "You do not need to cite chunks, but indicate when information comes from memory."
+    "Provide a natural, detailed, and helpful response."
 )
 
 _REASONING_DIRECTIVE = (
-    "Answer using your own reasoning. No external sources are needed.\n"
-    "Do not fabricate citations."
+    "Answer using your own reasoning and analytical capabilities.\n"
+    "Provide a step-by-step, thorough, and detailed response."
 )
 
 _DEFAULT_CONTRACTS: dict[SourcePolicy, CitationContract] = {
     SourcePolicy.KB: CitationContract(
         requires_evidence=True,
-        min_evidence=1,
-        max_evidence=10,
-        allow_external_knowledge=False,
-        temperature=0.0,
-        system_directive=_KB_DIRECTIVE,
-        on_unsupported="remove",
-    ),
-    SourcePolicy.WEB: CitationContract(
-        requires_evidence=True,
-        min_evidence=1,
+        min_evidence=0,
         max_evidence=10,
         allow_external_knowledge=True,
-        temperature=0.3,
-        system_directive=_WEB_DIRECTIVE,
-        on_unsupported="flag",
+        temperature=0.2,
+        system_directive=_KB_DIRECTIVE,
+        on_unsupported="keep",
     ),
     SourcePolicy.MEMORY: CitationContract(
         requires_evidence=False,
@@ -88,29 +64,11 @@ _DEFAULT_CONTRACTS: dict[SourcePolicy, CitationContract] = {
     ),
     SourcePolicy.ATTACHMENT: CitationContract(
         requires_evidence=True,
-        min_evidence=1,
+        min_evidence=0,
         max_evidence=20,
         allow_external_knowledge=False,
-        temperature=0.0,
-        system_directive="Answer using ONLY the attached document. Cite chunks with [Chunk N].",
-    ),
-    SourcePolicy.HYBRID: CitationContract(
-        requires_evidence=True,
-        min_evidence=1,
-        max_evidence=15,
-        allow_external_knowledge=True,
         temperature=0.2,
-        system_directive=(
-            "You are answering from MULTIPLE SOURCES (Retrieved Knowledge + your own knowledge).\n\n"
-            "RULES:\n"
-            "1. Every claim that comes from the Retrieved Knowledge MUST end with [Chunk N].\n"
-            "2. Claims from your own knowledge should NOT have chunk citations.\n"
-            "3. Extract all relevant points from the Retrieved Knowledge first.\n"
-            "4. Clearly distinguish between source-based and knowledge-based claims.\n"
-            "5. Format as: \"NLB handles 1M+ RPS [Chunk 1]. It also supports TCP health checks.\"\n"
-            "   (first claim cited, second claim is from own knowledge, no citation needed)"
-        ),
-        on_unsupported="mark",
+        system_directive="Provide a comprehensive, detailed answer using the attached document. Write clean Markdown prose without raw chunk labels.",
     ),
     SourcePolicy.REASONING: CitationContract(
         requires_evidence=False,

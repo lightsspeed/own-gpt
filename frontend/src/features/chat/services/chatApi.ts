@@ -52,8 +52,9 @@ export const api = {
     uploadedFiles?: { name: string; chunks: number; type: string }[];
     activeTools?: Record<string, string>;
     context?: ContextItem[];
+    document?: string;
   }): Promise<Response> {
-    const { sessionId, message, model, temperature, systemPrompt, uploadedFiles, activeTools, context } = params;
+    const { sessionId, message, model, temperature, systemPrompt, uploadedFiles, activeTools, context, document } = params;
     let prompt = systemPrompt || '';
 
     const toolInstructions: string[] = [];
@@ -92,6 +93,7 @@ export const api = {
           kb: activeTools.knowledge_base === 'auto' || activeTools.knowledge_base === 'manual',
         } : undefined,
         context: context?.map(c => ({ category: c.category, label: c.label, value: c.value })),
+        document,
       }),
     });
   },

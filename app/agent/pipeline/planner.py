@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 _POLICY_MAP: dict[Intent, SourcePolicy] = {
     Intent.GENERAL:   SourcePolicy.NONE,
     Intent.KNOWLEDGE: SourcePolicy.KB,
-    Intent.WEB:       SourcePolicy.WEB,
     Intent.MEMORY:    SourcePolicy.MEMORY,
     Intent.CODING:    SourcePolicy.REASONING,
     Intent.REASONING: SourcePolicy.REASONING,
@@ -37,22 +36,12 @@ class Planner:
 
         if policy == SourcePolicy.KB:
             sources_required.append("knowledge_base")
-        elif policy == SourcePolicy.WEB:
-            sources_required.append("web")
         elif policy == SourcePolicy.MEMORY:
             sources_required.append("memory")
         elif route.decision == RouteDecision.RETRIEVAL:
             if policy == SourcePolicy.NONE:
                 policy = SourcePolicy.KB
             sources_required.append("knowledge_base")
-
-        if route.decision == RouteDecision.WEB_SEARCH:
-            if policy == SourcePolicy.KB:
-                policy = SourcePolicy.HYBRID
-                sources_required.append("web")
-            elif policy == SourcePolicy.NONE:
-                policy = SourcePolicy.WEB
-                sources_required.append("web")
 
         reason = f"intent={intent.intent.value} route={route.decision.value} policy={policy.value}"
 

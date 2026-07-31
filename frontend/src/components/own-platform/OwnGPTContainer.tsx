@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ConversationSidebar } from './ConversationSidebar'
 import { OwnGPTPage } from './OwnGPTPage'
 import { SearchPalette } from './SearchPalette'
@@ -10,6 +11,7 @@ import { api } from '@/features/chat/services/chatApi'
 import type { ChatSession } from '@/features/chat/types'
 
 export function OwnGPTContainer() {
+  const navigate = useNavigate()
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -102,6 +104,7 @@ export function OwnGPTContainer() {
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(false)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenKnowledgeBase={() => navigate('/learn')}
       />
 
       {!sidebarOpen && (
@@ -115,7 +118,7 @@ export function OwnGPTContainer() {
 
       <main className={cn(
         'flex-1 flex flex-col h-full transition-all duration-300 min-w-0',
-        sidebarOpen ? 'ml-[331px]' : 'ml-0',
+        sidebarOpen ? 'opacity-40 blur-[1px] pointer-events-none' : 'opacity-100',
       )}>
         <div className="flex-1 min-h-0">
           {activeId ? (

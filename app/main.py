@@ -61,7 +61,7 @@ from app.learning.automation.api import router as automation_router
 from app.learning.api.capabilities import router as capabilities_router
 
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
-app.include_router(documents.router, prefix="/api/v1", tags=["documents"])
+app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
 app.include_router(index.router, prefix="/api/v1", tags=["index"])
 app.include_router(system.router, prefix="/api/v1", tags=["system"])
 app.include_router(telemetry_router, prefix="/api/v1", tags=["telemetry"])

@@ -66,7 +66,7 @@ class ConfidenceEvaluator:
 
     def __init__(
         self,
-        high_threshold: float = 0.70,
+        high_threshold: float = 0.55,
         medium_threshold: float = 0.45,
     ) -> None:
         self._high = high_threshold
@@ -125,11 +125,9 @@ class ConfidenceEvaluator:
         )
         overall = min(1.0, max(0.0, overall))
 
-        # Route decision
+        # Route decision: answer if high confidence, else clarification (web search removed)
         if overall >= self._high:
             decision = "answer"
-        elif overall >= self._medium:
-            decision = "web_search"
         else:
             decision = "clarification"
 

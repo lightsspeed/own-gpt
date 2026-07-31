@@ -9,6 +9,7 @@ export interface UseChatOptions {
   temperature?: number;
   systemPrompt?: string;
   uploadedFiles?: UploadedFile[];
+  document?: string;
 }
 
 export interface UseChatReturn {
@@ -68,7 +69,7 @@ function completeAll(stages: PipelineStage[], now: number = Date.now()): Pipelin
 }
 
 export function useChat(options: UseChatOptions): UseChatReturn {
-  const { sessionId, model, temperature, systemPrompt, uploadedFiles } = options;
+  const { sessionId, model, temperature, systemPrompt, uploadedFiles, document } = options;
 
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [input, setInput] = useState('');
@@ -174,9 +175,11 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         ? `\n\nCurrent context:\n${ctx.map(i => `- ${i.label} (${i.category})`).join('\n')}`
         : '';
 
-      const enabledTools = toolsRef.current
-        .filter(t => t.enabled)
-        .reduce((acc, t) => ({ ...acc, [t.name]: t.mode }), {} as Record<string, string>);
+      const enabledTools = document
+        ? { web_search: 'disabled' as const, knowledge_base: 'auto' as const }
+        : toolsRef.current
+          .filter(t => t.enabled)
+          .reduce((acc, t) => ({ ...acc, [t.name]: t.mode }), {} as Record<string, string>);
 
       const response = await api.sendMessage({
         sessionId,
@@ -187,6 +190,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         uploadedFiles,
         context: ctx,
         activeTools: enabledTools,
+        document,
       });
 
       if (!response.ok) {
@@ -319,7 +323,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       setStreamingId(null);
       abortRef.current = null;
     }
-  }, [input, isLoading, sessionId, model, temperature, systemPrompt, uploadedFiles]);
+  }, [input, isLoading, sessionId, model, temperature, systemPrompt, uploadedFiles, document]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

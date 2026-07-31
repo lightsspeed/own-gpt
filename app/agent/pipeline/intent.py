@@ -6,7 +6,6 @@ Purpose: Determine the type of user request before any retrieval or tool use.
 Supported intents:
   general   — casual chat, greetings, arithmetic, simple facts
   knowledge — questions about specific topics, concepts, or uploaded documents
-  web       — questions needing real-time or recent information
   memory    — requests to store or recall personal facts
   tool      — requests to perform an external action
   coding    — requests to write, fix, or debug code
@@ -42,7 +41,6 @@ logger = logging.getLogger(__name__)
 class Intent(str, Enum):
     GENERAL   = "general"
     KNOWLEDGE = "knowledge"
-    WEB       = "web"
     MEMORY    = "memory"
     TOOL      = "tool"
     CODING    = "coding"
@@ -84,13 +82,6 @@ _RULES: list[Rule] = [
         r"\bhow (do i|to) (write|implement|code)\b",
         r"\b(create|write|build)\b.{0,20}\b(dockerfile|makefile|docker-compose)\b",
     ]),
-    Rule("WEB_TIME_SENSITIVE", Intent.WEB, [
-        r"\b(today|yesterday|this week|this month|latest|recent|current|breaking|live)\b",
-        r"\bwhat happened\b",
-        r"\b(news|update|release|version|announcement)\b.{0,20}\b(latest|recent|new|today)\b",
-        r"\b(price|stock|weather|score)\b.{0,10}(today|now|current|live)\b",
-        r"\b202[4-9]\b",
-    ]),
     Rule("KNOWLEDGE_DOC", Intent.KNOWLEDGE, [
         r"\b(in|from|according to|based on)\b.{0,20}\b(document|file|pdf|report|paper|knowledge base)\b",
         r"\bwhat does.{0,30}(say|mention|state|describe)\b",
@@ -101,23 +92,22 @@ _RULES: list[Rule] = [
         r"\b(deploy|publish|schedule)\b.{0,30}\b(app|service|task|workflow|job)\b",
     ]),
     Rule("REASONING_COMPLEX", Intent.REASONING, [
-        r"\b(prove|proof|derive|calculate|compute|solve|analyze|evaluate)\b.{0,30}\b(step|equation|formula|problem)\b",
+        r"\b(prove|proof|derive|calculate|compute|solve)\b.{0,30}\b(step|equation|formula|problem|math)\b",
         r"\bif.{0,50}then.{0,50}(what|how|will)\b",
-        r"\b(pros and cons|advantages and disadvantages|compare and contrast)\b",
     ]),
     Rule("GENERAL_CHAT", Intent.GENERAL, [
-        r"^(hello|hi|hey|howdy|greetings)[\s!.,?]*$",
-        r"^(thanks|thank you|thx|ty|appreciate it)[\s!.,?]*$",
-        r"^(goodbye|bye|see you|cya|later)[\s!.,?]*$",
+        r"^(hello|hi|hey|howdy|greetings|sup|yo)\b",
+        r"^(thanks|thank you|thx|ty|appreciate it)\b",
+        r"^(goodbye|bye|see you|cya|later)\b",
         r"^(yes|no|ok|okay|sure|alright|fine|got it|understood)[\s!.,?]*$",
-        r"^(good morning|good afternoon|good evening|good night)[\s!.,?]*$",
+        r"^(good morning|good afternoon|good evening|good night)\b",
         r"^what is \d",                     # "what is 2+2"
         r"^\d[\d\s\+\-\*\/\(\)\.]+[\=\?]", # "5 * 3 ="
         r"^how are you",
         r"^who (are|r) you",
         r"^what (can|do) you do",
     ]),
-    # Catch-all knowledge patterns — after specific rules so WEB/GENERAL fire first.
+    # Catch-all knowledge patterns — after specific rules so GENERAL/REASONING fire first.
     Rule("KNOWLEDGE_EXPLAIN", Intent.KNOWLEDGE, [
         r"\bexplain\b.{0,60}\b(\w+)\b",
         r"\bdescribe\b.{0,60}\b(\w+)\b",
@@ -127,8 +117,10 @@ _RULES: list[Rule] = [
         r"\b(concept|architecture|lifecycle|benefits|best practices) of\b.{0,60}\b(\w+)\b",
         r"\bwhat (is|are)\b.{0,60}\b(\w+)\b",
         r"\bhow (does|do)\b.{0,60}\b(\w+)\b",
-        r"\bdifference between\b.{0,60}\b(\w+)\b",
-        r"\bcompare\b.{0,60}\b(\w+)\b",
+        r"\b(pros and cons|advantages and disadvantages|compare and contrast)\b",
+        r"\bcompare\b.{0,80}\band\b.{0,80}\b\w+\b",       # "compare X and Y"
+        r"\bdifference between\b.{0,60}\band\b",            # "difference between X and Y"
+        r"\bvs\.?\b",                                       # "X vs Y"
     ]),
 ]
 
@@ -141,17 +133,18 @@ class IntentClassifier:
     falling back to a GPT-4o-mini call only when rules are inconclusive.
     """
 
-    _SYSTEM_PROMPT = """You are a precise intent classifier for an AI assistant.
+    _SYSTEM_PROMPT = """You are a precise intent classifier for a RAG knowledge-base assistant.
 
 Classify the user query into exactly one of these intents:
-  general   — casual chat, greetings, arithmetic, simple facts
-  knowledge — questions about specific topics, concepts, or uploaded documents that benefit from knowledge base retrieval
-  web       — questions needing real-time or recent information from the web
-  memory    — requests to remember, store, or recall personal facts
-  tool      — requests to perform an action (post, send, email, create file)
-  coding    — requests to write, fix, or debug code
-  reasoning — complex multi-step reasoning or math problems
+  general   — ONLY for: greetings (hi/hello/thanks/bye), arithmetic (2+2), or pure conversational filler ("how are you", "who are you")
+  knowledge — ANY factual question, how-to, concept explanation, comparison between technologies/topics (e.g. "Kubernetes vs Docker Swarm"), pros/cons, tutorial, or topic-based query
+  memory    — requests to remember, store, or recall personal facts about the user
+  tool      — requests to perform a system action (post, send, email, create file, deploy)
+  coding    — requests to write, fix, explain, or debug code/scripts
+  reasoning — ONLY abstract mathematical derivations, formal logic proofs, or pure math puzzles (e.g. "solve 2x+5=15", "if A > B and B > C...")
   unknown   — cannot determine
+
+IMPORTANT: All comparisons of concepts, tools, or technologies MUST be classified as knowledge. When in doubt, choose knowledge.
 
 Return ONLY valid JSON — no explanation, no markdown:
 {"intent": "<intent>", "confidence": <0.0-1.0>, "reason": "<10 words max>"}"""

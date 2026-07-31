@@ -10,6 +10,7 @@ const UiLabPage = lazy(() => import('./routes/ui-lab'))
 const AppShellDemo = lazy(() => import('./routes/AppShellDemo'))
 const OwnGPTContainer = lazy(() => import('./components/own-platform/OwnGPTContainer'))
 const DashboardPage = lazy(() => import('./components/own-platform/DashboardPage'))
+const KnowledgeBasePage = lazy(() => import('./components/documents/KnowledgeBasePage'))
 const PlaceholderPage = lazy(() => import('./components/own-platform/PlaceholderPage'))
 
 function RouteSuspense({ children }: { children: React.ReactNode }) {
@@ -41,7 +42,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="dashboard" element={<RouteSuspense><DashboardPage /></RouteSuspense>} />
           <Route path="operations" element={<RouteSuspense><PlaceholderPage title="OwnOps" description="Operational workspace — findings, evaluation, and incident management." /></RouteSuspense>} />
           <Route path="monitor" element={<RouteSuspense><PlaceholderPage title="OwnMonitor" description="Monitor recommendations, decisions, and system health." /></RouteSuspense>} />
-          <Route path="learn" element={<RouteSuspense><PlaceholderPage title="OwnLearn" description="Learning system — capability registry and knowledge management." /></RouteSuspense>} />
+          <Route path="learn" element={<RouteSuspense><KnowledgeBasePage /></RouteSuspense>} />
           <Route path="automation" element={<RouteSuspense><PlaceholderPage title="OwnFlow" description="Automation jobs, schedules, and pipeline orchestration." /></RouteSuspense>} />
           <Route path="evaluation" element={<RouteSuspense><PlaceholderPage title="Continuous Evaluation" description="View evaluation scores, trends, and drill into per-capability detail." /></RouteSuspense>} />
           <Route path="findings" element={<RouteSuspense><PlaceholderPage title="Findings" description="Browse and investigate generated findings across all capabilities." /></RouteSuspense>} />

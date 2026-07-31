@@ -62,6 +62,7 @@ class ChatRequest(BaseModel):
     message: str
     system_prompt: Optional[str] = None
     active_tools: Optional[dict[str, bool]] = None
+    document: Optional[str] = None
 
 
 class ResourceItem(BaseModel):
@@ -199,9 +200,9 @@ async def _generate_session_title(message: str) -> str:
         return message[:30] + "..." if len(message) > 30 else message
 
 
-def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] = None) -> PipelineContext:
+def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] = None, document: Optional[str] = None) -> PipelineContext:
     """Run the pre-processing pipeline. Returns context with intent, route, context_text."""
-    return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode)
+    return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode, filename=document)
 
 
 def _post_process(ctx: PipelineContext, response: str, new_messages: list) -> None:
@@ -242,10 +243,10 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
             await db.commit()
 
         # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
-        ctx = _run_pipeline(request.message, request.session_id)
+        ctx = _run_pipeline(request.message, request.session_id, document=request.document)
 
         # Check if we should short-circuit with clarification
-        if ctx.confidence and ctx.confidence.decision == "clarification":
+        if ctx.confidence and ctx.confidence.decision == "clarification" and not request.document:
             response = _pipeline.clarification_message()
             if ctx.trace:
                 ctx.trace.final_response_len = len(response)
@@ -556,7 +557,7 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
             await db.commit()
 
         # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
-        ctx = _run_pipeline(request.message, request.session_id)
+        ctx = _run_pipeline(request.message, request.session_id, document=request.document)
 
         # Override answer_mode based on active_tools (frontend tool toggles)
         at = request.active_tools or {}
@@ -573,8 +574,8 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
             ctx.context_text = ""
             ctx.ranked_chunks = []
 
-        # Short-circuit for clarification
-        if ctx.confidence and ctx.confidence.decision == "clarification":
+        # Short-circuit for clarification (never when scoped to a document — the scope is known)
+        if ctx.confidence and ctx.confidence.decision == "clarification" and not request.document:
             msg = _pipeline.clarification_message()
             if ctx.trace:
                 ctx.trace.final_response_len = len(msg)
@@ -594,10 +595,18 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
 
         human_message = HumanMessage(content=request.message)
 
+        base_directive = ctx.source_policy.contract.system_directive if ctx.source_policy else ""
+        if request.document:
+            base_directive += (
+                f"\n\nDOCUMENT SCOPE: The user is viewing the document '{request.document}' in the Knowledge Base."
+                " Answer ONLY using content from that document. If the information is not in this document,"
+                " say so clearly — do not use other knowledge base documents."
+            )
+
         initial_state = {
             "messages": [human_message],
             "system_prompt": request.system_prompt or "",
-            "answer_mode_directive": ctx.source_policy.contract.system_directive if ctx.source_policy else "",
+            "answer_mode_directive": base_directive,
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,

@@ -31,13 +31,9 @@ class TestIntentClassifier:
 
     def test_rag_document(self, classifier):
         result = classifier.classify("what does the document say about pricing")
-        assert result.intent == Intent.RAG
+        assert result.intent == Intent.KNOWLEDGE
         assert not result.used_llm
 
-    def test_web_current_event(self, classifier):
-        result = classifier.classify("what happened today in tech")
-        assert result.intent == Intent.WEB
-        assert not result.used_llm
 
     def test_reasoning_proof(self, classifier):
         with pytest.MonkeyPatch.context() as mp:

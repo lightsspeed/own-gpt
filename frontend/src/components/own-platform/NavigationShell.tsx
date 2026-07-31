@@ -100,6 +100,7 @@ const NAV_GROUPS: NavGroup[] = [
         icon: <BookOpen size={18} />,
         path: '/learn',
         children: [
+          { id: 'knowledge-base', label: 'Knowledge Base', icon: null, path: '/learn' },
           { id: 'capabilities', label: 'Capabilities', icon: null, path: '/capabilities' },
         ],
       },
@@ -221,7 +222,9 @@ export function NavigationShell({
               const groupCollapsed = collapsedGroups.has(gi)
               const groupItems = searchQuery
                 ? filteredItems.filter(fi => group.items.some(i => i.id === fi.id))
-                : group.items
+                : navItems !== DEFAULT_NAV_ITEMS
+                  ? group.items.filter(i => navItems.some(ni => ni.id === i.id))
+                  : group.items
               if (groupItems.length === 0) return null
 
               return (

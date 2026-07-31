@@ -27,6 +27,7 @@ Design principles:
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -196,7 +197,7 @@ class RAGPipeline:
         return self._retriever
 
     @traceable(name="rag_pipeline", metadata={"stage": "1-7"})
-    def process(self, question: str, session_id: str, retriever_mode: Optional[str] = None) -> PipelineContext:
+    def process(self, question: str, session_id: str, retriever_mode: Optional[str] = None, filename: Optional[str] = None) -> PipelineContext:
         """
         Run the full pre-processing pipeline (Stages 1–7).
         Returns a PipelineContext ready to be passed into the LangGraph agent.
@@ -205,6 +206,7 @@ class RAGPipeline:
             question: The user's query.
             session_id: Unique session identifier.
             retriever_mode: "vector" | "bm25" | "hybrid" | None (default).
+            filename: If set, restrict retrieval to chunks from this document.
         """
         ctx = PipelineContext(question=question, session_id=session_id)
         trace = PipelineTrace(session_id=session_id, question=question)
@@ -257,9 +259,13 @@ class RAGPipeline:
         # ── Stages 4 & 5: Retrieval + Reranking ─────────────────────────────
         if not ctx.route.skip_retrieval:
             # Stage 4: Retrieval (mode-switchable: hybrid / vector / bm25)
-            current_retriever = self._select_retriever(retriever_mode)
+            if filename:
+                # Document-scoped chat: vector-only, BM25 has no source filter
+                current_retriever = self._vector_retriever
+            else:
+                current_retriever = self._select_retriever(retriever_mode)
             t4 = time.monotonic()
-            ctx.retrieved_chunks, retrieval_timings = current_retriever.retrieve(ctx.final_query)
+            ctx.retrieved_chunks, retrieval_timings = current_retriever.retrieve(ctx.final_query, filename=filename)
             trace.retrieval_time_ms = round((time.monotonic() - t4) * 1000, 2)
             trace.num_retrieved = len(ctx.retrieved_chunks)
             trace.retrieval_scores = [c.score for c in ctx.retrieved_chunks[:10]]
@@ -278,6 +284,51 @@ class RAGPipeline:
                     ctx.final_query, ctx.retrieved_chunks
                 )
                 trace.reranker_ms = round((time.monotonic() - t5) * 1000, 2)
+
+                # ── Filter out irrelevant chunks (low reranker score < 0.05 or 0 token overlap) ──
+                # When scoped to a document, skip the reranker floor — retrieval is already
+                # restricted to the correct file and cross-encoder scores are unreliable per-doc.
+                _STOP_WORDS = {
+                    "a", "an", "the", "in", "on", "of", "to", "for", "with", "is", "are", "was",
+                    "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
+                    "what", "how", "who", "where", "when", "why", "which", "give", "me", "tell",
+                    "about", "show", "can", "you", "please", "find", "details", "information",
+                    "explain", "describe", "overview", "introduction", "list", "game", "topic",
+                }
+                question_words = set(re.findall(r"\w+", ctx.question.lower()))
+                meaningful_q_tokens = {w for w in question_words if w not in _STOP_WORDS and len(w) > 2}
+
+                filtered: list = []
+                for rc in ctx.ranked_chunks:
+                    if not filename and rc.reranker_score is not None and rc.reranker_score < 0.05:
+                        logger.info(
+                            "filtering_low_reranker_chunk session_id=%s score=%.4f source=%s",
+                            session_id, rc.reranker_score, rc.chunk.source,
+                        )
+                        continue
+
+                    if filename:
+                        # Document-scoped chat: skip the token-overlap filter. Retrieval is
+                        # already restricted to the correct file, and follow-up questions are
+                        # referential ("what topic does it cover?") with no shared vocabulary.
+                        filtered.append(rc)
+                        continue
+
+                    chunk_text = rc.chunk.document.page_content.lower()
+                    chunk_words = set(re.findall(r"\w+", chunk_text))
+
+                    if meaningful_q_tokens:
+                        overlap = len(meaningful_q_tokens & chunk_words)
+                        if overlap >= 1:
+                            filtered.append(rc)
+                        else:
+                            logger.info(
+                                "filtering_irrelevant_chunk session_id=%s overlap=0/%d source=%s",
+                                session_id, len(meaningful_q_tokens), rc.chunk.source,
+                            )
+                    else:
+                        filtered.append(rc)
+                ctx.ranked_chunks = filtered
                 trace.num_reranked = len(ctx.ranked_chunks)
                 trace.reranker_scores = [c.reranker_score for c in ctx.ranked_chunks]
 
@@ -306,44 +357,11 @@ class RAGPipeline:
         trace.context_ms = round((time.monotonic() - t7) * 1000, 2)
 
         # ── Answer Transparency Mode ─────────────────────────────────────────
-        # Computed after retrieval + confidence, but orthogonal to confidence.
-        # Describes *how* the answer was produced, not *how confident* we are.
-        # Hybrid detection is execution-based: multiple sources or scattered
-        # chunks mean the model had to combine facts across evidence.
-
         if ctx.route.skip_retrieval:
-            if ctx.route and ctx.route.decision.value == "web_search":
-                ctx.answer_mode = "web"
-            else:
-                ctx.answer_mode = "synthesis"
-        elif ctx.confidence.decision == "clarification":
-            ctx.answer_mode = "no_evidence"
-        elif not ctx.ranked_chunks:
+            ctx.answer_mode = "synthesis"
+        elif ctx.confidence.decision == "clarification" or not ctx.ranked_chunks:
             ctx.answer_mode = "no_evidence"
         else:
-            # ── Filter out chunks with low reranker score or zero token overlap ──
-            question_tokens = set(ctx.question.lower().split())
-            filtered: list = []
-            for rc in ctx.ranked_chunks:
-                # Exclude chunks evaluated as irrelevant by cross-encoder
-                if rc.reranker_score is not None and rc.reranker_score < 0.0:
-                    logger.info(
-                        "filtering_negative_reranker_chunk session_id=%s score=%.4f source=%s",
-                        session_id, rc.reranker_score, rc.chunk.source,
-                    )
-                    continue
-                chunk_text = rc.chunk.document.page_content.lower()
-                chunk_tokens = set(chunk_text.split())
-                overlap = len(question_tokens & chunk_tokens)
-                if overlap >= 1 or len(question_tokens) <= 2:
-                    filtered.append(rc)
-                else:
-                    logger.info(
-                        "filtering_irrelevant_chunk session_id=%s overlap=%d/%d source=%s",
-                        session_id, overlap, len(question_tokens), rc.chunk.source,
-                    )
-            ctx.ranked_chunks = filtered
-
             unique_sources = len({c.chunk.source for c in ctx.ranked_chunks})
             unique_pages = len({
                 c.chunk.page for c in ctx.ranked_chunks
@@ -464,18 +482,16 @@ class RAGPipeline:
     def _build_context(self, ctx: PipelineContext) -> str:
         """
         Format reranked chunks into a context string for the LLM system prompt.
-        Each chunk is annotated with a unique [Chunk N] ID, source, retrieval
-        score, and reranker score so the LLM can cite specific chunks.
+        Presents clean document source headings without raw internal chunk labels.
         """
         if not ctx.ranked_chunks:
             return ""
 
         parts: List[str] = []
         for i, rc in enumerate(ctx.ranked_chunks):
-            chunk_id = getattr(rc.chunk, "chunk_id", None) or f"chunk-{i}"
+            src = getattr(rc.chunk, "source", None) or "document"
             parts.append(
-                f"[Chunk {i} | id={chunk_id} | Source: {rc.chunk.source} | "
-                f"Retrieval: {rc.chunk.score:.2f} | Reranker: {rc.reranker_score:.2f}]\n"
+                f"--- Document Source ({src}) ---\n"
                 f"{rc.chunk.document.page_content}"
             )
         return "\n\n---\n\n".join(parts)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, ExternalLink, RefreshCw, FileText } from 'lucide-react'
+import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, ExternalLink, FileText } from 'lucide-react'
 import type { ResourceItem } from '@/features/chat/types'
 import {
   DropdownMenu,
@@ -24,11 +24,10 @@ interface MessageBubbleProps {
     retrieval_method: string
   }
   onEdit?: (content: string) => void
-  onRegenerate?: () => void
   onShowSources?: (sources: ResourceItem[]) => void
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, resources, answerMode, answerModeMetadata, onEdit, onRegenerate, onShowSources }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, resources, answerMode, answerModeMetadata, onEdit, onShowSources }: MessageBubbleProps) {
   const isUser = role === 'user'
   const [showActions, setShowActions] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -42,7 +41,8 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
       setShowActions(false)
       if (timerRef.current) clearTimeout(timerRef.current)
     } else {
-      timerRef.current = setTimeout(() => setShowActions(true), 1000)
+      // Show immediately when streaming ends
+      setShowActions(true)
     }
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [isStreaming, content, isUser])
@@ -78,7 +78,6 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
           ) : (
             <AssistantActions
               content={content}
-              onRegenerate={onRegenerate}
               resources={resources}
               onShowSources={onShowSources}
             />
@@ -114,12 +113,11 @@ function UserActions({ content, onEdit }: { content: string; onEdit?: (content: 
 
 interface AssistantActionsProps {
   content: string
-  onRegenerate?: () => void
   resources?: ResourceItem[]
   onShowSources?: (sources: ResourceItem[]) => void
 }
 
-function AssistantActions({ content, onRegenerate, resources, onShowSources }: AssistantActionsProps) {
+function AssistantActions({ content, resources, onShowSources }: AssistantActionsProps) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
 
@@ -133,11 +131,6 @@ function AssistantActions({ content, onRegenerate, resources, onShowSources }: A
 
   return (
     <>
-      {onRegenerate && (
-        <button onClick={onRegenerate} className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-hover transition-all" title="Regenerate">
-          <RefreshCw size={14} />
-        </button>
-      )}
       <button onClick={handleCopy} className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-hover transition-all" title="Copy">
         {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
       </button>

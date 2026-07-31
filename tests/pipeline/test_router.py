@@ -14,14 +14,10 @@ class TestRequestRouter:
                             latency_ms=0.0, used_llm=False)
 
     def test_rag_routes_to_retrieval(self, router):
-        result = router.route(self._result(Intent.RAG))
+        result = router.route(self._result(Intent.KNOWLEDGE))
         assert result.decision == RouteDecision.RETRIEVAL
         assert not result.skip_retrieval
 
-    def test_web_routes_to_web_search(self, router):
-        result = router.route(self._result(Intent.WEB))
-        assert result.decision == RouteDecision.WEB_SEARCH
-        assert result.skip_retrieval
 
     def test_memory_routes_to_memory(self, router):
         result = router.route(self._result(Intent.MEMORY))

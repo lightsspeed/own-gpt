@@ -259,7 +259,6 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
                         answerMode={msg.answerMode}
                         answerModeMetadata={msg.answerModeMetadata}
                         onEdit={msg.role === 'user' ? handleEdit : undefined}
-                        onRegenerate={msg.role === 'assistant' && virtualRow.index === visibleMessages.length - 1 && !isLoading ? handleRegenerate : undefined}
                         onShowSources={handleShowSources}
                       />
                       {msg.role === 'assistant' && msg.usedTools && msg.usedTools.length > 0 && !isStreamingMsg && (

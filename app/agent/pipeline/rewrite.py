@@ -55,10 +55,10 @@ Return ONLY valid JSON — no markdown, no explanation:
 class QueryRewriter:
     """
     Rewrites and expands user queries for better retrieval.
-    Only runs when intent is KNOWLEDGE or WEB — skipped for all other intents.
+    Only runs when intent is KNOWLEDGE — skipped for all other intents.
     """
 
-    _RETRIEVAL_INTENTS = {Intent.KNOWLEDGE, Intent.WEB}
+    _RETRIEVAL_INTENTS = {Intent.KNOWLEDGE}
 
     def __init__(self, model_name: str = "gpt-4o-mini") -> None:
         self._model_name = model_name
