@@ -2,11 +2,10 @@ import logging
 from psycopg_pool import ConnectionPool
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.prebuilt import ToolNode
 from app.agent.state import AgentState
 from app.agent.tools import tools
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from app.core.config import settings
 import redis
 
@@ -47,14 +46,48 @@ checkpointer.setup()
 model = ChatOpenAI(model="gpt-4o-mini", temperature=0.4, openai_api_key=settings.OPENAI_API_KEY)
 model_with_tools = model.bind_tools(tools)
 
-tool_node = ToolNode(tools)
-
 
 def should_continue(state: AgentState) -> str:
     last_message = state["messages"][-1]
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "continue"
     return "end"
+
+
+def action_node(state: AgentState) -> dict:
+    """Execute tool calls through the guarded tool gate.
+
+    Read-only calls run immediately (sandbox-safe); mutating calls are recorded
+    as pending and answered with an approval notice — a human operator approves
+    them via the operations API before anything side-effectful runs.
+    """
+    from app.agent.tool_gate import request_tool_execution
+
+    last_message = state["messages"][-1]
+    if not (isinstance(last_message, AIMessage) and last_message.tool_calls):
+        return state
+
+    messages = list(state["messages"])
+    for tool_call in last_message.tool_calls:
+        tool_name = tool_call.get("name", "")
+        args = tool_call.get("args", {}) or {}
+        execution = request_tool_execution(tool_name, args)
+
+        if execution.status == "executed":
+            content = f"[tool:{tool_name}] {execution.result}"
+        elif execution.status == "denied":
+            content = f"[tool:{tool_name}] DENIED: {execution.error}"
+        elif execution.status == "failed":
+            content = f"[tool:{tool_name}] FAILED: {execution.error}"
+        else:
+            content = (
+                f"[tool:{tool_name}] This tool call requires human approval "
+                f"(request {execution.id}). It has NOT been executed. "
+                f"Tell the user a human operator must approve it in the operations workspace."
+            )
+        messages.append(ToolMessage(content=content, tool_call_id=tool_call.get("id", "")))
+
+    return {"messages": messages}
 
 
 def call_model(state: AgentState) -> dict:
@@ -142,7 +175,7 @@ def call_model(state: AgentState) -> dict:
 workflow = StateGraph(AgentState)
 
 workflow.add_node("agent", call_model)
-workflow.add_node("action", tool_node)
+workflow.add_node("action", action_node)
 
 workflow.set_entry_point("agent")
 

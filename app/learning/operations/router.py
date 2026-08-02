@@ -15,6 +15,7 @@ from ..analytics.engine import AnalyticsEngine
 from ..evidence.engine import EvidenceEngine
 from ..config.manager import ConfigManager
 from .review_store import ReviewStore
+from .tool_execution import ToolExecutionStore
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/operations", tags=["operations"])
@@ -536,3 +537,77 @@ async def explore_artifact(artifact_id: str):
         "chain": chain,
         "depth": len(chain),
     }
+
+
+# ── Tool Execution Workspace (HITL sandbox gate) ──────────────────────
+
+
+@router.get("/tool-executions", response_model=dict)
+async def tool_executions_workspace(
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Tool execution records — pending approvals and executed/denied calls."""
+    store = ToolExecutionStore()
+    executions = store.list_all(status=status, limit=limit)
+    return {
+        "workspace": "tool_executions",
+        "total": len(executions),
+        "statuses": ["pending", "allowed", "approved", "executed", "denied", "failed", "timed_out"],
+        "executions": [e.to_dict() for e in executions],
+    }
+
+
+@router.get("/tool-executions/{execution_id}", response_model=dict)
+async def tool_execution_detail(execution_id: str):
+    store = ToolExecutionStore()
+    execution = store.get(execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail=f"Tool execution {execution_id} not found")
+    return execution.to_dict()
+
+
+@router.post("/tool-executions/{execution_id}/approve", response_model=dict)
+async def approve_tool_execution(
+    execution_id: str,
+    operator: str = Query("operator"),
+):
+    """Approve a pending mutating tool call and execute it in the sandbox.
+
+    The platform NEVER executes mutating tools automatically — this endpoint
+    is the explicit human approval gate.
+    """
+    from app.agent.tool_gate import execute_approved
+
+    store = ToolExecutionStore()
+    execution = store.get(execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail=f"Tool execution {execution_id} not found")
+    if execution.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Execution is {execution.status}, not pending")
+
+    result = execute_approved(execution)
+    return {
+        "status": "executed" if result["ok"] else result["error"],
+        "execution_id": result["id"],
+        "tool_name": result["tool_name"],
+        "result": result.get("result"),
+        "error": result.get("error"),
+        "sandboxed": result.get("sandboxed", True),
+    }
+
+
+@router.post("/tool-executions/{execution_id}/reject", response_model=dict)
+async def reject_tool_execution(
+    execution_id: str,
+    operator: str = Query("operator"),
+):
+    """Reject a pending mutating tool call. Nothing executes."""
+    store = ToolExecutionStore()
+    execution = store.get(execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail=f"Tool execution {execution_id} not found")
+    if execution.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Execution is {execution.status}, not pending")
+    execution = store.transition(execution_id, "rejected", note=f"Rejected by {operator}")
+    return {"status": "rejected", "execution_id": execution_id}

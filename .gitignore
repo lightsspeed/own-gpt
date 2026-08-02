@@ -66,6 +66,7 @@ config_snapshots/
 current_config.json
 review_store/
 review_decisions/
+tool_executions/
 
 # Logs
 *.log

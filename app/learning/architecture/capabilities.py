@@ -247,6 +247,16 @@ register(Capability(
     api_prefix="/api/v1/experiments",
 ))
 
+# Runtime tooling
+register(Capability(
+    id="tool_sandboxing", name="Tool Sandboxing & HITL Gate",
+    description="Guardrails classify tool calls; mutating tools require human approval and execute in a sandboxed subprocess with timeout and memory caps",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("operations_control_plane",),
+    artifacts=("ToolExecution", "GuardrailDecision"), api_prefix="/api/v1/operations/tool-executions",
+))
+
 # Governance
 register(Capability(
     id="architecture_governance", name="Architecture Governance",
