@@ -182,6 +182,62 @@ class EvaluationSnapshot:
 
 
 @dataclass
+class BenchmarkBaseline:
+    """Immutable baseline of benchmark results used for regression detection.
+
+    Stores per-dataset aggregate metrics at a point in time. Each run writes a
+    new baseline artifact; regression detection compares the newest run against
+    the most recent baseline and never mutates history.
+    """
+    id: str = ""
+    dataset: str = ""
+    display_name: str = ""
+    timestamp: str = ""
+    benchmark_version: str = "2.0.0"
+    total: int = 0
+    successful: int = 0
+    failed: int = 0
+    success_rate: float = 0.0
+    avg_latency_ms: float = 0.0
+    avg_faithfulness: Optional[float] = None
+    avg_relevancy: Optional[float] = None
+    metrics: dict = field(default_factory=dict)
+    previous_baseline_id: Optional[str] = None
+    lineage: Optional[Lineage] = None
+
+    def __post_init__(self):
+        if not self.id:
+            self.id = f"bl-{uuid.uuid4().hex[:12]}"
+        if not self.timestamp:
+            self.timestamp = datetime.now(timezone.utc).isoformat()
+        if self.lineage is None:
+            self.lineage = Lineage(
+                artifact_id=self.id,
+                parent_artifact_id=self.previous_baseline_id,
+                parent_type=ArtifactType.ANALYTICS_REPORT,
+            )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "dataset": self.dataset,
+            "display_name": self.display_name,
+            "timestamp": self.timestamp,
+            "benchmark_version": self.benchmark_version,
+            "total": self.total,
+            "successful": self.successful,
+            "failed": self.failed,
+            "success_rate": round(self.success_rate, 4),
+            "avg_latency_ms": round(self.avg_latency_ms, 2),
+            "avg_faithfulness": round(self.avg_faithfulness, 4) if self.avg_faithfulness is not None else None,
+            "avg_relevancy": round(self.avg_relevancy, 4) if self.avg_relevancy is not None else None,
+            "metrics": self.metrics,
+            "previous_baseline_id": self.previous_baseline_id,
+            "lineage": self.lineage.to_dict() if isinstance(self.lineage, Lineage) else self.lineage,
+        }
+
+
+@dataclass
 class HealthDomainScore:
     """Score for a single health domain (0-100)."""
     domain: HealthDomain = HealthDomain.OVERALL

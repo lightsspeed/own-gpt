@@ -118,10 +118,10 @@ register(Capability(
 
 register(Capability(
     id="benchmark_runner", name="Benchmark Runner",
-    description="Executes IntentAccuracy and other benchmark datasets for regression detection",
+    description="Executes IntentAccuracy and other benchmark datasets for regression detection against stored baselines",
     owner="evaluation", lifecycle_stage="measure",
     maturity=MaturityLevel.MATURE,
-    artifacts=("BenchmarkReport",),
+    artifacts=("BenchmarkReport", "BenchmarkBaseline"),
 ))
 
 # Learning
@@ -272,8 +272,17 @@ register(Capability(
     description="Aggregation endpoints for five workspaces: Findings, Recommendations, Experiments, Decisions, Configurations",
     owner="learning.operations", lifecycle_stage="operate",
     maturity=MaturityLevel.IMPLEMENTED,
-    dependencies=("evidence_engine", "recommendation_generation", "experimentation", "config_management"),
+    dependencies=("evidence_engine", "recommendation_generation", "experimentation", "config_management", "decision_lifecycle"),
     api_prefix="/api/v1/operations",
+))
+
+register(Capability(
+    id="decision_lifecycle", name="Decision Lifecycle",
+    description="Human review of recommendations (approve/dismiss) with immutable Decision artifacts, and apply-to-configuration materialization",
+    owner="learning.operations", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("recommendation_generation", "config_management"),
+    artifacts=("ReviewRecord", "Decision"), api_prefix="/api/v1/operations/recommendations",
 ))
 
 register(Capability(
