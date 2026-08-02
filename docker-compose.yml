@@ -19,6 +19,23 @@ services:
       - db
       - redis
 
+  worker:
+    build: .
+    command: arq app.ingestion.jobs.WorkerSettings
+    volumes:
+      - .:/app
+      - flashrank_cache:/app/.cache/flashrank
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/owngpt
+      - REDIS_URL=redis://redis:6379/0
+      - PG_HOST=db
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
   db:
     image: ankane/pgvector:latest
     environment:

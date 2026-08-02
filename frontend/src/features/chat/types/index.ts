@@ -32,6 +32,33 @@ export interface Artifact {
   actions: ArtifactAction[];
 }
 
+export interface CitationCheck {
+  valid: boolean
+  cited: number
+  required: number
+  unique_chunks: number
+  total_uses: number
+  warnings: string[]
+  reason: string
+}
+
+export interface ClaimItem {
+  id: string
+  text: string
+  supported: boolean
+  best_score: number
+  threshold: number
+  best_chunk_idx?: number
+  document?: string
+}
+
+export interface ClaimValidation {
+  valid: boolean
+  total: number
+  unsupported: number
+  claims: ClaimItem[]
+}
+
 export interface MessageData {
   id: string;
   role: 'user' | 'assistant' | 'tool_event';
@@ -44,6 +71,7 @@ export interface MessageData {
   images?: string[];
   feedback?: 'liked' | 'disliked' | null;
   usedTools?: string[];
+  recordId?: string;
   answerMode?: 'grounded' | 'hybrid' | 'synthesis' | 'web' | 'no_evidence';
   answerModeMetadata?: {
     chunk_count: number;

@@ -9,25 +9,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MarkdownRenderer } from './MarkdownRenderer'
-import { EvidencePanel } from '@/components/evidence'
+import { api } from '@/features/chat/services/chatApi'
 
 interface MessageBubbleProps {
   role: 'user' | 'assistant' | 'system'
   content: string
   isStreaming?: boolean
   resources?: ResourceItem[]
-  answerMode?: string
-  answerModeMetadata?: {
-    chunk_count: number
-    doc_count: number
-    confidence: number
-    retrieval_method: string
-  }
+  recordId?: string
+  sessionId?: string
   onEdit?: (content: string) => void
   onShowSources?: (sources: ResourceItem[]) => void
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, resources, answerMode, answerModeMetadata, onEdit, onShowSources }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, resources, recordId, sessionId, onEdit, onShowSources }: MessageBubbleProps) {
   const isUser = role === 'user'
   const [showActions, setShowActions] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
@@ -79,6 +74,8 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
             <AssistantActions
               content={content}
               resources={resources}
+              recordId={recordId}
+              sessionId={sessionId}
               onShowSources={onShowSources}
             />
           )}
@@ -88,8 +85,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
   )
 })
 
-function UserActions({ content, onEdit }: { content: string; onEdit?: (content: string) => void }) {
-  const [copied, setCopied] = useState(false)
+function UserActions({ content, onEdit }: { content: string; onEdit?: (content: string) => void }) {  const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(content)
@@ -111,13 +107,7 @@ function UserActions({ content, onEdit }: { content: string; onEdit?: (content: 
   )
 }
 
-interface AssistantActionsProps {
-  content: string
-  resources?: ResourceItem[]
-  onShowSources?: (sources: ResourceItem[]) => void
-}
-
-function AssistantActions({ content, resources, onShowSources }: AssistantActionsProps) {
+function AssistantActions({ content, resources, recordId, sessionId, onShowSources }: AssistantActionsProps) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
 
@@ -125,6 +115,14 @@ function AssistantActions({ content, resources, onShowSources }: AssistantAction
     await navigator.clipboard.writeText(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
+    if (recordId) api.sendEvent('copy', recordId, sessionId)
+  }
+
+  const handleFeedback = (thumb: 'up' | 'down') => {
+    if (!recordId) return
+    const next = feedback === thumb ? null : thumb
+    setFeedback(next)
+    api.sendThumb(recordId, next || 'none')
   }
 
   const hasResources = resources && resources.length > 0
@@ -135,14 +133,14 @@ function AssistantActions({ content, resources, onShowSources }: AssistantAction
         {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
       </button>
       <button
-        onClick={() => setFeedback(feedback === 'up' ? null : 'up')}
+        onClick={() => handleFeedback('up')}
         className={cn('p-1.5 rounded-lg transition-all', feedback === 'up' ? 'text-success' : 'text-muted-foreground/40 hover:text-foreground hover:bg-hover')}
         title="Good response"
       >
         <ThumbsUp size={14} />
       </button>
       <button
-        onClick={() => setFeedback(feedback === 'down' ? null : 'down')}
+        onClick={() => handleFeedback('down')}
         className={cn('p-1.5 rounded-lg transition-all', feedback === 'down' ? 'text-danger' : 'text-muted-foreground/40 hover:text-foreground hover:bg-hover')}
         title="Bad response"
       >

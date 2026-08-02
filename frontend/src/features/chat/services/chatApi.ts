@@ -105,6 +105,28 @@ export const api = {
     } catch { return false; }
   },
 
+  async sendThumb(recordId: string, thumb: 'up' | 'down'): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/telemetry/thumb`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record_id: recordId, thumb }),
+      });
+      return res.ok;
+    } catch { return false; }
+  },
+
+  async sendEvent(type: string, recordId: string, sessionId?: string, metadata?: Record<string, unknown>): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/telemetry/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, record_id: recordId, session_id: sessionId, metadata }),
+      });
+      return res.ok;
+    } catch { return false; }
+  },
+
   async updateSession(sessionId: string, updates: { title?: string; is_pinned?: boolean }): Promise<boolean> {
     try {
       const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}`, {

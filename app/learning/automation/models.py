@@ -70,7 +70,7 @@ class AutomationRun:
             "findings_generated": self.findings_generated,
             "error": self.error,
             "snapshot_id": self.snapshot_id,
-            "lineage": self.lineage.to_dict() if self.lineage else None,
+            "lineage": self.lineage.to_dict() if isinstance(self.lineage, Lineage) else self.lineage,
         }
 
 
@@ -156,7 +156,7 @@ class EvaluationSnapshot:
             "change_summary": self.change_summary,
             "findings_delta": self.findings_delta,
             "confidence_delta": self.confidence_delta,
-            "lineage": self.lineage.to_dict() if self.lineage else None,
+            "lineage": self.lineage.to_dict() if isinstance(self.lineage, Lineage) else self.lineage,
         }
 
 
@@ -236,6 +236,8 @@ class DailyBrief:
     routing_note: str = ""
     recommendations_generated: int = 0
     experiments_awaiting: int = 0
+    knowledge_docs: int = 0
+    knowledge_updated: str = ""
     snapshot_id: str = ""
     generated_at: str = ""
 
@@ -256,6 +258,8 @@ class DailyBrief:
             "routing_note": self.routing_note,
             "recommendations_generated": self.recommendations_generated,
             "experiments_awaiting": self.experiments_awaiting,
+            "knowledge_docs": self.knowledge_docs,
+            "knowledge_updated": self.knowledge_updated,
             "snapshot_id": self.snapshot_id,
             "generated_at": self.generated_at,
         }

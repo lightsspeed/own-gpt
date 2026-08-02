@@ -6,6 +6,7 @@ sqlalchemy==2.0.30
 asyncpg==0.31.0
 alembic==1.13.1
 redis==5.0.4
+arq==0.26.3
 
 # LangChain ecosystem – pinned exact versions for reproducibility
 langsmith==0.10.9

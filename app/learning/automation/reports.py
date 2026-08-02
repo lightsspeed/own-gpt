@@ -17,6 +17,16 @@ from .jobs import run_daily_evaluation
 logger = logging.getLogger(__name__)
 
 
+def _knowledge_doc_count() -> int:
+    """Count indexed knowledge documents from the Whoosh BM25 index."""
+    try:
+        from app.core.whoosh_manager import get_whoosh_retriever
+        bm25 = get_whoosh_retriever()
+        return int(getattr(bm25, "doc_count", 0) or 0)
+    except Exception:
+        return 0
+
+
 def generate_daily_brief(snapshot_id: Optional[str] = None) -> DailyBrief:
     """Generate a daily brief from the latest evaluation snapshot.
 
@@ -40,6 +50,7 @@ def generate_daily_brief(snapshot_id: Optional[str] = None) -> DailyBrief:
             overall_health=100.0,
             generated_at=datetime.now(timezone.utc).isoformat(),
             calibration_note="Insufficient data for evaluation",
+            knowledge_docs=_knowledge_doc_count(),
         )
 
     # Compute health from snapshot data
@@ -106,6 +117,7 @@ def generate_daily_brief(snapshot_id: Optional[str] = None) -> DailyBrief:
         routing_note=routing_note,
         recommendations_generated=0,
         experiments_awaiting=0,
+        knowledge_docs=_knowledge_doc_count(),
         snapshot_id=snapshot.id,
         generated_at=datetime.now(timezone.utc).isoformat(),
     )

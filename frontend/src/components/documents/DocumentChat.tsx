@@ -10,9 +10,10 @@ interface DocumentChatProps {
   filename: string;
   currentPage: number;
   onClose?: () => void;
+  onCitationClick?: (snippet: string) => void;
 }
 
-export function DocumentChat({ filename, currentPage, onClose }: DocumentChatProps) {
+export function DocumentChat({ filename, currentPage, onClose, onCitationClick }: DocumentChatProps) {
   const {
     messages,
     input,
@@ -130,8 +131,8 @@ export function DocumentChat({ filename, currentPage, onClose }: DocumentChatPro
                   content={msg.content}
                   isStreaming={msg.id === streamingId}
                   resources={msg.resources}
-                  answerMode={msg.answerMode}
-                  answerModeMetadata={msg.answerModeMetadata}
+                  recordId={msg.recordId}
+                  sessionId={`doc-chat-${filename}`}
                   onEdit={msg.role === 'user' ? handleEdit : undefined}
                   onShowSources={handleShowSources}
                 />
@@ -156,23 +157,29 @@ export function DocumentChat({ filename, currentPage, onClose }: DocumentChatPro
               </div>
               <div className="p-2 space-y-1">
                 {expandedSources.map((s, i) => (
-                  <a
+                  <div
                     key={i}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-small text-foreground/80 hover:bg-hover transition-colors"
+                    className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-small text-foreground/80 hover:bg-hover transition-colors group"
                   >
                     {s.type === 'web' ? (
                       <Globe size={12} className="mt-0.5 shrink-0 text-sky-400" />
                     ) : (
                       <FileText size={12} className="mt-0.5 shrink-0 text-primary" />
                     )}
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{s.title}</span>
-                      {s.snippet && <span className="block text-caption text-muted-foreground/60 line-clamp-2">{s.snippet}</span>}
-                    </span>
-                  </a>
+                    <div className="min-w-0 flex-1">
+                      <p className="block truncate font-medium">{s.title}</p>
+                      {s.snippet && <p className="block text-caption text-muted-foreground/60 line-clamp-2">{s.snippet}</p>}
+                    </div>
+                    {s.type !== 'web' && onCitationClick && (
+                      <button
+                        onClick={() => onCitationClick(s.snippet || s.title)}
+                        className="shrink-0 rounded-md px-1.5 py-0.5 text-caption text-primary/80 hover:text-primary hover:bg-primary/10 opacity-0 group-hover:opacity-100 transition-all"
+                        title="Locate in document"
+                      >
+                        Locate
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

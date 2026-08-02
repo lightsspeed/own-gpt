@@ -10,6 +10,7 @@ const KB_NAV_ITEMS: NavItem[] = [
     path: '/learn',
     children: [
       { id: 'knowledge-base', label: 'Knowledge Base', icon: null, path: '/learn' },
+      { id: 'quality', label: 'Answer Quality', icon: null, path: '/learn/quality' },
       { id: 'capabilities', label: 'Capabilities', icon: null, path: '/capabilities' },
     ],
   },

@@ -77,6 +77,7 @@ class ChatResponse(BaseModel):
     response: str
     resources: List[ResourceItem] = []
     answer_mode: str = "grounded"
+    record_id: str = ""
 
 
 class HistoryMessage(BaseModel):
@@ -205,8 +206,8 @@ def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] =
     return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode, filename=document)
 
 
-def _post_process(ctx: PipelineContext, response: str, new_messages: list) -> None:
-    """Validate response, store trace, and record telemetry."""
+def _post_process(ctx: PipelineContext, response: str, new_messages: list) -> str:
+    """Validate response, store trace, and record telemetry. Returns the learning record_id."""
     ctx.trace.memory_used = True  # memory is always checked in call_model
     ctx.trace.tools_used = _extract_tool_names(new_messages)
     ctx.trace.prompt_tokens = _count_tokens(ctx.question)
@@ -215,7 +216,32 @@ def _post_process(ctx: PipelineContext, response: str, new_messages: list) -> No
     _pipeline.validate_response(question=ctx.question, response=response, ctx=ctx)
 
     # Record learning telemetry (fire-and-forget, never blocks the response)
-    learning_collector.record(ctx, response)
+    return learning_collector.record(ctx, response)
+
+
+def _persist_quality(session_id: str, question: str, answer_mode: str, validation_result, claim_data: list[dict], record_id: str) -> None:
+    """Persist citation + grounding validation as an answer-quality report."""
+    try:
+        supported = sum(1 for c in claim_data if c.get("supported"))
+        learning_collector.store.save_quality_report({
+            "record_id": record_id,
+            "session_id": session_id,
+            "question": question[:500],
+            "answer_mode": answer_mode,
+            "citation_valid": validation_result.valid,
+            "cited": validation_result.cited_count,
+            "required": validation_result.required_count,
+            "unique_chunks": validation_result.unique_chunks_cited,
+            "total_uses": validation_result.total_citation_uses,
+            "warnings": validation_result.warnings,
+            "reason": validation_result.reason,
+            "claims_total": len(claim_data),
+            "claims_supported": supported,
+            "claims_unsupported": len(claim_data) - supported,
+            "claims": claim_data,
+        })
+    except Exception as exc:
+        logger.warning("quality_persist_failed error=%s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -306,8 +332,19 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         )
 
         # Grounding validation (claim-level)
+        claim_data: list[dict] = []
         if ctx.ranked_chunks and ctx.source_policy and ctx.source_policy.contract.requires_evidence:
             grounding = _pipeline.run_grounding(response, ctx)
+            for v in grounding.validations:
+                claim_data.append({
+                    "id": v.claim.id,
+                    "text": v.claim.text,
+                    "supported": v.supported,
+                    "best_score": v.best_score,
+                    "threshold": v.threshold,
+                    "best_chunk_idx": v.best_chunk_idx,
+                    "document": v.document_name,
+                })
             if not grounding.all_supported:
                 logger.warning(
                     "grounding_unsupported session_id=%s unsupported=%d total=%d threshold=%.2f",
@@ -318,13 +355,23 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
                 )
 
         # ── Stages 8-9: Validate response + store trace ───────────────────────
-        _post_process(ctx, response, new_messages)
+        record_id = _post_process(ctx, response, new_messages)
+        if record_id:
+            _persist_quality(
+                session_id=request.session_id,
+                question=request.message,
+                answer_mode=ctx.answer_mode,
+                validation_result=validation_result,
+                claim_data=claim_data,
+                record_id=record_id,
+            )
 
         return ChatResponse(
             session_id=request.session_id,
             response=response,
             resources=resources,
             answer_mode=ctx.answer_mode,
+            record_id=record_id,
         )
     except Exception as e:
         logger.error("Chat endpoint error: %s\n%s", str(e), traceback.format_exc())
@@ -692,9 +739,9 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                     }))
 
                     # Grounding validation (claim-level)
+                    claim_data: list[dict] = []
                     if ctx.ranked_chunks and ctx.source_policy and ctx.source_policy.contract.requires_evidence:
                         grounding = _pipeline.run_grounding(response_text, ctx)
-                        claim_data = []
                         for v in grounding.validations:
                             claim_data.append({
                                 "id": v.claim.id,
@@ -722,8 +769,26 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                             )
 
                     # Stages 8-9: Validate + trace
+                    record_id = ""
                     if response_text:
-                        _post_process(ctx, response_text, new_msgs)
+                        record_id = _post_process(ctx, response_text, new_msgs)
+
+                    # Emit the learning record_id for feedback correlation
+                    if record_id:
+                        loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                            "type": "record_id",
+                            "record_id": record_id,
+                        }))
+
+                    if record_id:
+                        _persist_quality(
+                            session_id=request.session_id,
+                            question=request.message,
+                            answer_mode=ctx.answer_mode,
+                            validation_result=validation_result,
+                            claim_data=claim_data,
+                            record_id=record_id,
+                        )
 
                     # Emit trace metadata as final SSE event before [DONE]
                     if ctx.trace:

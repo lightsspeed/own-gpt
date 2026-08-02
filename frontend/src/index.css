@@ -146,6 +146,17 @@
   backdrop-filter: blur(2px);
 }
 
+/* ── Citation highlight (document workspace) ── */
+.citation-highlight {
+  animation: citation-flash 3.8s ease-in-out 1;
+  border-radius: 2px;
+}
+@keyframes citation-flash {
+  0% { background-color: rgba(250, 204, 21, 0.55); }
+  60% { background-color: rgba(250, 204, 21, 0.3); }
+  100% { background-color: transparent; }
+}
+
 /* ── Custom scrollbar ── */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;

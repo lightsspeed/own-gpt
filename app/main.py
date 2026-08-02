@@ -50,8 +50,9 @@ app.add_middleware(
 async def health_check():
     return {"status": "ok"}
 
-from app.api.endpoints import chat, documents, index, system
+from app.api.endpoints import chat, documents, index, system, ingestion
 from app.learning.api.telemetry import router as telemetry_router
+from app.learning.api.quality import router as quality_router
 from app.learning.analytics.api import router as analytics_router
 from app.learning.evidence.api import router as evidence_router
 from app.learning.experiments.api import router as experiments_router
@@ -62,9 +63,11 @@ from app.learning.api.capabilities import router as capabilities_router
 
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
+app.include_router(ingestion.router, prefix="/api/v1", tags=["ingestion"])
 app.include_router(index.router, prefix="/api/v1", tags=["index"])
 app.include_router(system.router, prefix="/api/v1", tags=["system"])
 app.include_router(telemetry_router, prefix="/api/v1", tags=["telemetry"])
+app.include_router(quality_router, prefix="/api/v1", tags=["quality"])
 app.include_router(analytics_router, prefix="/api/v1", tags=["analytics"])
 app.include_router(evidence_router, prefix="/api/v1", tags=["evidence"])
 app.include_router(experiments_router, prefix="/api/v1", tags=["experiments"])

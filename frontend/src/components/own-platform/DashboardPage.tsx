@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
   MessageSquare, Activity, AlertTriangle, Clock, RefreshCw,
   Zap, Monitor, BookOpen, Beaker, BarChart3, GitBranch, Archive, Cog,
   TrendingUp, TrendingDown, Minus, Sparkles, ChevronRight,
-  Lightbulb, FlaskConical, Brain,
+  Lightbulb, FlaskConical, Brain, ArrowRight,
 } from 'lucide-react'
 import { dashboardApi, type DailyBriefData } from '@/features/dashboard/services/dashboardApi'
+import type { BriefTrigger } from '@/features/automation/services/automationApi'
+import { useCountUp } from '@/lib/useCountUp'
 
 /* ── Section wrapper ── */
 function Section({ title, icon: Icon, children, className }: {
@@ -44,6 +47,7 @@ function Dot({ status }: { status: string }) {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [brief, setBrief] = useState<DailyBriefData | null>(null)
@@ -67,8 +71,50 @@ export function DashboardPage() {
     fetchAll().finally(() => setRefreshing(false))
   }
 
+  const healthAnim = useCountUp(brief?.overall_health ?? 0)
+
   const trendIcon = brief?.trend === 'up' ? TrendingUp : brief?.trend === 'down' ? TrendingDown : Minus
   const trendColor = brief?.trend === 'up' ? 'text-success' : brief?.trend === 'down' ? 'text-danger' : 'text-muted-foreground'
+
+  const decliningDomain = useMemo(() => {
+    const decliners = (brief?.health_domains ?? []).filter(d => d.trend === 'declining' && d.previous_score != null && d.score < (d.previous_score ?? 0))
+    decliners.sort((a, b) => (a.score - (a.previous_score ?? a.score)) - (b.score - (b.previous_score ?? b.score)))
+    return decliners[0] ?? null
+  }, [brief])
+
+  const healthReason = useMemo(() => {
+    if (decliningDomain) {
+      const prev = decliningDomain.previous_score ?? decliningDomain.score
+      return `${decliningDomain.domain} dropped ${prev.toFixed(1)} → ${decliningDomain.score.toFixed(1)} (${(prev - decliningDomain.score).toFixed(1)}pts)`
+    }
+    if (brief?.health_change != null) {
+      return `Health ${brief.health_change > 0 ? 'improved' : 'dropped'} ${Math.abs(brief.health_change).toFixed(1)}pts`
+    }
+    return null
+  }, [decliningDomain, brief])
+
+  const topTrigger = useMemo(() => {
+    const sev: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+    const triggers = brief?.triggers ?? []
+    if (triggers.length === 0) return null
+    return [...triggers].sort((a, b) => (sev[a.severity] ?? 9) - (sev[b.severity] ?? 9))[0]
+  }, [brief])
+
+  const actionForTrigger = (t: BriefTrigger | null | undefined): string => {
+    if (!t) return ''
+    switch (t.domain) {
+      case 'calibration':
+        return t.severity === 'critical' ? 'Run a calibration check and review low-confidence answers' : 'Monitor calibration drift'
+      case 'knowledge':
+        return t.severity === 'critical' || t.severity === 'high' ? 'Add missing knowledge and re-sync the knowledge base' : 'Monitor knowledge gaps'
+      case 'retrieval':
+        return 'Review weak chunks and re-index affected documents'
+      case 'routing':
+        return 'Review routing rules for misdirected queries'
+      default:
+        return 'Review recent findings and triggers'
+    }
+  }
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar">
@@ -102,20 +148,47 @@ export function DashboardPage() {
                   <span className="text-body text-muted-foreground">Good morning</span>
                   <span className="text-body font-medium text-foreground">Akhilesh</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {trendIcon && (
-                    <trendIcon size={18} className={trendColor} />
-                  )}
-                  <span className="text-title font-semibold text-foreground">
-                    {brief?.overall_health != null ? `${brief.overall_health.toFixed(0)}% healthy` : 'Platform status unavailable'}
+
+                <div className="flex items-center gap-2.5">
+                  {trendIcon && <trendIcon size={18} className={trendColor} />}
+                  <span className="text-caption uppercase tracking-wider text-muted-foreground/70">Platform Health</span>
+                  <span className={cn('text-h2 font-semibold', brief?.overall_health != null && brief.overall_health < 50 ? 'text-danger' : brief?.overall_health != null && brief.overall_health < 80 ? 'text-warning' : 'text-foreground')}>
+                    {brief?.overall_health != null ? `${Math.round(healthAnim)}%` : '—'}
                   </span>
                 </div>
+
+                {healthReason && (
+                  <div className="flex items-center gap-1.5 text-caption text-danger">
+                    <TrendingDown size={13} />
+                    <span>Reason: {healthReason}</span>
+                  </div>
+                )}
+
+                {topTrigger && (
+                  <div className="flex items-start gap-2 text-caption">
+                    <AlertTriangle size={13} className="text-warning mt-0.5 shrink-0" />
+                    <span className="text-muted-foreground/80">
+                      <span className="font-medium text-warning">{topTrigger.title}</span>
+                      <span className="text-muted-foreground/60"> — {topTrigger.description}</span>
+                    </span>
+                  </div>
+                )}
+
+                {topTrigger && (
+                  <div className="flex items-start gap-2 text-caption">
+                    <ArrowRight size={13} className="text-info mt-0.5 shrink-0" />
+                    <span className="text-muted-foreground/80">
+                      Recommended action: <span className="font-medium text-info">{actionForTrigger(topTrigger)}</span>
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-3 pt-1">
                   {brief && (
                     <>
-                      {brief.recommendation_count > 0 && (
+                      {(brief.recommendation_count > 0 || (brief.triggers?.length ?? 0) > 0) && (
                         <span className="flex items-center gap-1.5 text-small text-warning">
-                          <AlertTriangle size={14} /> {brief.recommendation_count} recommendation{brief.recommendation_count > 1 ? 's' : ''}
+                          <AlertTriangle size={14} /> {(brief.triggers?.length ?? 0)} active trigger{(brief.triggers?.length ?? 0) > 1 ? 's' : ''}
                         </span>
                       )}
                       {brief.degraded_services > 0 && (
@@ -132,8 +205,14 @@ export function DashboardPage() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-small font-medium hover:brightness-110 transition-all">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <button
+                  onClick={() => navigate('/automation')}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-small font-medium hover:brightness-110 transition-all inline-flex items-center gap-1.5 justify-center"
+                >
+                  Investigate <ChevronRight size={14} />
+                </button>
+                <button className="px-4 py-2 rounded-lg bg-elevated border border-border text-foreground text-small font-medium hover:bg-hover transition-all">
                   Open OwnGPT
                 </button>
                 <button className="px-4 py-2 rounded-lg bg-elevated border border-border text-foreground text-small font-medium hover:bg-hover transition-all">
@@ -157,7 +236,7 @@ export function DashboardPage() {
               <KpiCard icon={MessageSquare} value={brief ? String(brief.recommendation_count + brief.automations_completed + (brief.degraded_services > 0 ? 1 : 0)) : '—'} label="Action Items" trend="Today" status={brief && (brief.recommendation_count > 0 || brief.degraded_services > 0) ? 'Attention needed' : 'Clear'} danger={brief ? brief.recommendation_count > 0 || brief.degraded_services > 0 : false} />
               <KpiCard icon={Activity} value={brief?.overall_health != null ? `${brief.overall_health.toFixed(0)}%` : '—'} label="System Health" trend={brief?.trend ?? '—'} status={brief?.overall_health != null && brief.overall_health >= 80 ? 'Healthy' : brief?.overall_health != null && brief.overall_health >= 50 ? 'Degraded' : 'Critical'} danger={brief?.overall_health != null && brief.overall_health < 50} />
               <KpiCard icon={FlaskConical} value={String(brief?.running_experiments_list?.length ?? 0)} label="Active Experiments" trend="Running" status="See OwnLab" />
-              <KpiCard icon={Brain} value={String(brief?.knowledge_docs ?? 0)} label="Knowledge Docs" trend={brief?.knowledge_updated ?? '—'} status="Indexed" />
+              <KpiCard icon={Brain} value={String(brief?.knowledge_docs ?? 0)} label="Knowledge Docs" trend={brief?.knowledge_docs ? (brief?.knowledge_updated ?? '—') : 'No docs yet'} status="Indexed" />
             </>
           )}
         </div>
@@ -271,6 +350,19 @@ export function DashboardPage() {
           <Section title="Knowledge" icon={BookOpen}>
             {loading ? (
               <div className="h-16 bg-muted/20 rounded-lg animate-pulse" />
+            ) : brief?.knowledge_docs === 0 ? (
+              <div className="flex flex-col items-center text-center gap-2 py-4">
+                <BookOpen size={20} className="text-muted-foreground/30" />
+                <p className="text-small text-muted-foreground leading-relaxed max-w-xs">
+                  No documents indexed yet. Upload your first document to start building your knowledge base.
+                </p>
+                <button
+                  onClick={() => navigate('/learn')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-small font-medium hover:bg-primary/20 transition-all"
+                >
+                  <BookOpen size={13} /> Upload a document
+                </button>
+              </div>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -279,7 +371,7 @@ export function DashboardPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-small text-muted-foreground">Updated</span>
-                  <span className="text-small font-medium text-foreground">{brief?.knowledge_updated !== 'N/A' ? brief?.knowledge_updated : '12 min ago'}</span>
+                  <span className="text-small font-medium text-foreground">{brief?.knowledge_updated && brief?.knowledge_updated !== 'N/A' ? brief?.knowledge_updated : 'Not synced yet'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-small text-muted-foreground">Status</span>
@@ -328,7 +420,7 @@ function KpiCard({ icon: Icon, value, label, trend, status, danger }: {
   danger?: boolean
 }) {
   return (
-    <div className="bg-elevated border border-border/60 rounded-xl p-5 hover:border-primary/30 transition-all">
+    <div className="bg-elevated border border-border/60 rounded-xl p-5 hover:border-primary/30 hover:-translate-y-0.5 transition-all">
       <div className="flex items-start justify-between mb-3">
         <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', danger ? 'bg-danger/10' : 'bg-primary/10')}>
           <Icon size={16} className={danger ? 'text-danger' : 'text-primary'} />

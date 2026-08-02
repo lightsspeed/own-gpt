@@ -298,6 +298,13 @@ export function useChat(options: UseChatOptions): UseChatReturn {
                 }
                 return m;
               }));
+            } else if (payload.type === 'record_id') {
+              setMessages(prev => prev.map(m => {
+                if (m.id === assistantMessageId) {
+                  return { ...m, recordId: payload.record_id };
+                }
+                return m;
+              }));
             } else if (payload.type === 'error') {
               throw new Error(payload.message);
             }

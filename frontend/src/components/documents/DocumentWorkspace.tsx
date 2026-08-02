@@ -3,6 +3,7 @@ import { ArrowLeft, PanelRight, BookOpen } from 'lucide-react';
 import { PdfViewer } from './PdfViewer';
 import { DocumentChat } from './DocumentChat';
 
+const API_BASE = 'http://localhost:8000/api/v1';
 const CHAT_DEFAULT_WIDTH = 320;
 const CHAT_MIN_WIDTH = 280;
 const CHAT_MAX_WIDTH = 520;
@@ -16,11 +17,33 @@ export function DocumentWorkspace({ filename, onBack }: DocumentWorkspaceProps) 
   const [currentPage, setCurrentPage] = useState(1);
   const [showChat, setShowChat] = useState(true);
   const [chatWidth, setChatWidth] = useState(CHAT_DEFAULT_WIDTH);
+  const [highlightTarget, setHighlightTarget] = useState<{ page: number; text: string; ts: number } | null>(null);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
   }, []);
+
+  const handleCitationClick = useCallback(async (snippet: string) => {
+    if (!snippet.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(filename)}/pages`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const needle = snippet.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 80);
+      let page = 1;
+      for (const p of data.pages ?? []) {
+        const hay = (p.text ?? '').toLowerCase().replace(/\s+/g, ' ');
+        if (hay.includes(needle)) {
+          page = p.page_number;
+          break;
+        }
+      }
+      setHighlightTarget({ page, text: snippet, ts: Date.now() });
+    } catch {
+      // leave viewer untouched if page lookup fails
+    }
+  }, [filename]);
 
   const onResizeMove = useCallback((e: PointerEvent) => {
     if (!dragRef.current) return;
@@ -84,6 +107,7 @@ export function DocumentWorkspace({ filename, onBack }: DocumentWorkspaceProps) 
           <PdfViewer
             filename={filename}
             onPageChange={handlePageChange}
+            highlight={highlightTarget}
           />
         </div>
 
@@ -100,6 +124,7 @@ export function DocumentWorkspace({ filename, onBack }: DocumentWorkspaceProps) 
                 filename={filename}
                 currentPage={currentPage}
                 onClose={() => setShowChat(false)}
+                onCitationClick={handleCitationClick}
               />
             </div>
           </>

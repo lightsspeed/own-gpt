@@ -1,36 +1,16 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from app.services.vector_store import add_documents_to_store
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.core.database import get_db
-from pathlib import Path
-import tempfile
+from app.ingestion.processor import SUPPORTED_TYPES, UPLOAD_DIR
 import os
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-SUPPORTED_TYPES = {
-    ".pdf": "application/pdf",
-    ".txt": "text/plain",
-    ".md": "text/markdown",
-}
-
-UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-class DocumentResponse(BaseModel):
-    filename: str
-    message: str
-    chunks: int
-    file_type: str
 
 class DocumentListResponse(BaseModel):
     supported_types: List[str]
@@ -38,76 +18,6 @@ class DocumentListResponse(BaseModel):
 @router.get("/supported-types", response_model=DocumentListResponse)
 async def get_supported_types():
     return DocumentListResponse(supported_types=list(SUPPORTED_TYPES.keys()))
-
-@router.post("/upload", response_model=DocumentResponse)
-async def upload_document(file: UploadFile = File(...)):
-    ext = os.path.splitext(file.filename)[-1].lower()
-    if ext not in SUPPORTED_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type '{ext}'. Supported: {', '.join(SUPPORTED_TYPES.keys())}"
-        )
-
-    tmp_path = None
-    try:
-        content = await file.read()
-
-        dest = UPLOAD_DIR / file.filename
-        with open(dest, "wb") as f:
-            f.write(content)
-
-        if ext == ".pdf":
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
-            loader = PyPDFLoader(tmp_path)
-            docs = loader.load()
-
-        elif ext in (".txt", ".md"):
-            text_content = content.decode("utf-8", errors="replace")
-            docs = [Document(
-                page_content=text_content,
-                metadata={"source": file.filename, "file_type": ext}
-            )]
-
-        for doc in docs:
-            if doc.page_content:
-                doc.page_content = doc.page_content.replace("\x00", "")
-
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-        )
-        splits = splitter.split_documents(docs)
-
-        import uuid
-        for idx, chunk in enumerate(splits):
-            chunk.metadata["filename"] = file.filename
-            chunk.metadata["chunk_id"] = str(uuid.uuid4())
-            chunk.metadata["chunk_index"] = idx
-
-        ids = [chunk.metadata["chunk_id"] for chunk in splits]
-        add_documents_to_store(splits, ids=ids)
-
-        try:
-            from app.core.whoosh_manager import add_to_whoosh_index
-            add_to_whoosh_index(splits)
-        except Exception as whoosh_err:
-            logger.warning("whoosh_incremental_update_failed error=%s", whoosh_err)
-
-        return DocumentResponse(
-            filename=file.filename,
-            message=f"Successfully embedded {len(splits)} chunks from '{file.filename}'.",
-            chunks=len(splits),
-            file_type=ext,
-        )
-
-    except Exception as e:
-        logger.error("Document upload error: %s", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 
 @router.get("/")
@@ -250,6 +160,12 @@ async def delete_document(filename: str, db: AsyncSession = Depends(get_db)):
         """)
         await db.execute(query, {"filename": filename, "filename2": filename})
         await db.commit()
+
+        try:
+            from app.core.whoosh_manager import delete_from_whoosh_index
+            delete_from_whoosh_index(filename)
+        except Exception as whoosh_err:
+            logger.warning("whoosh_delete_failed error=%s", whoosh_err)
 
         file_path = UPLOAD_DIR / filename
         if file_path.exists():

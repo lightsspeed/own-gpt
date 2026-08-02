@@ -1,6 +1,8 @@
 """
 Batch-upload files from a local directory through the canonical upload API.
 
+Uploads are queued asynchronously; this script polls each job until done.
+
 Usage:
     python scripts/batch_upload.py                           # uploads Ingest docs/
     python scripts/batch_upload.py --source-dir path/to/docs
@@ -10,6 +12,7 @@ Usage:
 import argparse
 import logging
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -17,7 +20,9 @@ import requests
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-SUPPORTED = {".pdf", ".txt", ".md", ".csv", ".docx", ".pptx", ".xlsx", ".htm", ".html"}
+SUPPORTED = {".pdf", ".txt", ".md"}
+
+TERMINAL = {"completed", "duplicate", "failed"}
 
 
 def upload_file(filepath: Path, api_url: str) -> dict | None:
@@ -25,11 +30,23 @@ def upload_file(filepath: Path, api_url: str) -> dict | None:
     with open(filepath, "rb") as f:
         resp = requests.post(url, files={"file": (filepath.name, f)}, timeout=300)
     if resp.ok:
-        logger.info("  OK  %s", filepath.name)
         return resp.json()
-    else:
-        logger.warning("FAIL  %s — %s", filepath.name, resp.text[:200])
-        return None
+    logger.warning("FAIL  %s — %s", filepath.name, resp.text[:200])
+    return None
+
+
+def wait_for_job(job_id: str, api_url: str, timeout: float = 900.0) -> dict | None:
+    url = f"{api_url}/api/v1/ingestion/jobs/{job_id}"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        resp = requests.get(url, timeout=30)
+        if resp.ok:
+            job = resp.json()
+            if job["status"] in TERMINAL:
+                return job
+        time.sleep(2)
+    logger.warning("TIMEOUT job_id=%s", job_id)
+    return None
 
 
 def main():
@@ -55,13 +72,27 @@ def main():
         return
 
     logger.info("Uploading %d file(s) from %s ...", len(files), source)
-    results = []
+    completed, failed, skipped = 0, 0, 0
     for f in files:
         result = upload_file(f, args.api_url)
-        if result:
-            results.append(result)
+        if not result:
+            failed += 1
+            continue
+        if result["status"] == "duplicate":
+            logger.info(" DUP  %s (%d chunks)", f.name, result["chunks"])
+            skipped += 1
+            continue
+        job = wait_for_job(result["job_id"], args.api_url)
+        if job is None:
+            failed += 1
+        elif job["status"] == "failed":
+            logger.warning("FAIL  %s — %s", f.name, job["error"])
+            failed += 1
+        else:
+            logger.info("  OK  %s (%d chunks, %d ms)", f.name, job["chunks"], job["latency_ms"])
+            completed += 1
 
-    logger.info("Done — %d/%d uploaded successfully", len(results), len(files))
+    logger.info("Done — %d ingested, %d duplicates, %d failed", completed, skipped, failed)
 
 
 if __name__ == "__main__":

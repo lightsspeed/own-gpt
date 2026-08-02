@@ -15,9 +15,10 @@ interface PdfViewerProps {
   filename: string;
   onPageChange?: (page: number) => void;
   onLoad?: (numPages: number) => void;
+  highlight?: { page: number; text: string; ts: number } | null;
 }
 
-export function PdfViewer({ filename, onPageChange, onLoad }: PdfViewerProps) {
+export function PdfViewer({ filename, onPageChange, onLoad, highlight }: PdfViewerProps) {
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
@@ -77,6 +78,54 @@ export function PdfViewer({ filename, onPageChange, onLoad }: PdfViewerProps) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [pageNumber, scrollToPage]);
+
+  // Locate and flash-highlight a cited passage in the document
+  useEffect(() => {
+    if (!highlight) return;
+    const { page, text } = highlight;
+    scrollToPage(page);
+    const pageEl = pageRefs.current[page];
+    if (!pageEl) return;
+    pageEl.classList.add('ring-2', 'ring-amber-400/60', 'rounded-sm');
+
+    const timer = window.setTimeout(() => {
+      const spans = Array.from(pageEl.querySelectorAll('.textLayer span'));
+      const needle = (text || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      if (!needle) return;
+      let acc = '';
+      let accStart: Element | null = null;
+      let hit: Element | null = null;
+      for (const span of spans) {
+        const t = span.textContent ?? '';
+        if (!t.trim()) continue;
+        if (!accStart) accStart = span;
+        acc += t;
+        const idx = acc.indexOf(needle.slice(0, 60));
+        if (idx >= 0) {
+          hit = accStart;
+          break;
+        }
+        if (acc.length > 140) {
+          acc = acc.slice(40);
+          accStart = null;
+        }
+      }
+      if (hit) {
+        hit.classList.add('citation-highlight');
+        hit.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.setTimeout(() => hit?.classList.remove('citation-highlight'), 4000);
+      }
+    }, 300);
+
+    const clearRing = window.setTimeout(() => {
+      pageEl.classList.remove('ring-2', 'ring-amber-400/60', 'rounded-sm');
+    }, 4300);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(clearRing);
+    };
+  }, [highlight, scrollToPage]);
 
   if (showFallback) {
     return <TextViewerFallback filename={filename} />;

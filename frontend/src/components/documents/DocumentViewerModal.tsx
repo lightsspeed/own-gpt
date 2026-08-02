@@ -124,7 +124,7 @@ function RawFileViewer({ url, onNotFound }: { url: string; onNotFound: () => voi
     };
     load();
     return () => { cancelled = true; };
-  }, [url]);
+  }, [url, onNotFound]);
 
   if (isLoading) {
     return (

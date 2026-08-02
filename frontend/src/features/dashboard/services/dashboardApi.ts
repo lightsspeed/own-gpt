@@ -52,6 +52,10 @@ export interface DailyBriefData {
   running_experiments_list: { name: string; status: string; score?: number }[]
   automations_list: { name: string; status: string }[]
   recommendations_list: Recommendation[]
+  health_change?: number | null
+  health_domains?: { domain: string; score: number; previous_score: number | null; trend: string }[]
+  triggers?: { id: string; title: string; description: string; severity: string; domain: string }[]
+  top_finding?: string
 }
 
 async function fetchJson<T>(url: string, fallback: T): Promise<T> {

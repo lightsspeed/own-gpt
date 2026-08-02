@@ -256,8 +256,8 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
                         content={msg.content}
                         isStreaming={isStreamingMsg}
                         resources={msg.resources}
-                        answerMode={msg.answerMode}
-                        answerModeMetadata={msg.answerModeMetadata}
+                        recordId={msg.recordId}
+                        sessionId={sessionId}
                         onEdit={msg.role === 'user' ? handleEdit : undefined}
                         onShowSources={handleShowSources}
                       />
