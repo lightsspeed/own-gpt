@@ -12,6 +12,39 @@ from .models import EvaluationSnapshot
 logger = logging.getLogger(__name__)
 
 SNAPSHOT_DIR = "eval_snapshots"
+RUN_DIR = "eval_run_history"
+
+
+class RunStore:
+    """Persists AutomationRun history as JSON files (append-only, newest-first)."""
+
+    def __init__(self, run_dir: str = RUN_DIR):
+        self._run_dir = run_dir
+        os.makedirs(run_dir, exist_ok=True)
+
+    def record(self, run) -> run.__class__:
+        path = self._path(run.id)
+        with open(path, "w") as f:
+            json.dump(run.to_dict(), f, indent=2, default=str)
+        return run
+
+    def _path(self, run_id: str) -> str:
+        return os.path.join(self._run_dir, f"{run_id}.json")
+
+    def list_all(self, limit: int = 50) -> list:
+        from .models import AutomationRun
+        if not os.path.exists(self._run_dir):
+            return []
+        files = sorted(os.listdir(self._run_dir), key=lambda f: f, reverse=True)[:limit]
+        result = []
+        for fname in files:
+            path = os.path.join(self._run_dir, fname)
+            try:
+                with open(path, "r") as f:
+                    result.append(AutomationRun.from_dict(json.load(f)))
+            except (json.JSONDecodeError, IOError):
+                continue
+        return result
 
 
 class SnapshotStore:

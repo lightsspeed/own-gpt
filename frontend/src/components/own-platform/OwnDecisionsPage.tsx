@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
-  AlertTriangle, CheckCircle2, ChevronRight, GitBranch, Loader2, RefreshCw, Scale,
+  AlertTriangle, CheckCircle2, ChevronRight, GitBranch, Loader2, RefreshCw, Scale, Send,
 } from 'lucide-react'
 import {
   operationsApi, type ArtifactTrace, type DecisionRow, type DecisionsWorkspace,
@@ -41,6 +41,7 @@ export function OwnDecisionsPage() {
   const [trace, setTrace] = useState<{ id: string; data: ArtifactTrace } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
 
   const fetchAll = async () => {
     setLoading(true)
@@ -81,6 +82,19 @@ export function OwnDecisionsPage() {
     }
   }
 
+  const applyDecision = async (d: DecisionRow) => {
+    setBusy(d.id)
+    setError(null)
+    try {
+      await operationsApi.applyDecision(d.id)
+      await fetchAll()
+    } catch (e: any) {
+      setError(e.message || 'Failed to apply decision')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto custom-scrollbar">
       <div className="max-w-[1100px] mx-auto p-6 space-y-5">
@@ -111,7 +125,7 @@ export function OwnDecisionsPage() {
         {/* ── Status filter ── */}
         <Section title="Filters" icon={Scale}>
           <div className="flex flex-wrap items-center gap-2">
-            {[{ v: '', l: 'All' }, { v: 'approved', l: 'Approved' }, { v: 'archived', l: 'Archived' }].map(s => (
+            {[{ v: '', l: 'All' }, { v: 'approved', l: 'Approved' }, { v: 'archived', l: 'Archived' }, { v: 'dismissed', l: 'Dismissed' }].map(s => (
               <button
                 key={s.v}
                 onClick={() => setStatusFilter(s.v)}
@@ -137,7 +151,7 @@ export function OwnDecisionsPage() {
               <Scale size={24} className="mx-auto mb-2 text-muted-foreground/40" />
               <p className="text-small">No decisions recorded yet.</p>
               <p className="text-caption text-muted-foreground/60 mt-1">
-                Decisions are created when an experiment candidate is approved and its configuration snapshot is applied.
+                Decisions appear when a recommendation is approved, dismissed, or an experiment candidate gets applied to configuration.
               </p>
             </div>
           ) : (
@@ -150,10 +164,12 @@ export function OwnDecisionsPage() {
                       onClick={() => toggle(d.id)}
                       className="w-full flex items-start gap-3 p-3.5 text-left hover:bg-hover/40 transition-all"
                     >
-                      <div className="mt-0.5 shrink-0">
+                      <div className="mt-0.5 shrink-0 space-y-1">
                         <span className={cn(
                           'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-caption capitalize',
-                          d.status === 'approved' ? 'text-success bg-success/10 border-success/25' : 'text-muted-foreground bg-muted/20 border-border/40',
+                          d.status === 'approved' ? 'text-success bg-success/10 border-success/25'
+                            : d.status === 'dismissed' ? 'text-muted-foreground bg-muted/20 border-border/40'
+                              : 'text-muted-foreground bg-muted/20 border-border/40',
                         )}>
                           {d.status === 'approved' && <CheckCircle2 size={11} />}
                           {d.status}
@@ -166,7 +182,7 @@ export function OwnDecisionsPage() {
                         </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-caption text-muted-foreground/60">
                           {d.description && <span>{d.description}</span>}
-                          <span>config v{d.config_version}</span>
+                          {d.config_version != null && <span>config v{d.config_version}</span>}
                           {d.config_snapshot_id && <span>{d.config_snapshot_id}</span>}
                           {d.applied_at && <span>{new Date(d.applied_at).toLocaleString()}</span>}
                         </div>
@@ -176,6 +192,17 @@ export function OwnDecisionsPage() {
                     {open && (
                       <div className="px-4 pb-4 pt-1 border-t border-border/50 bg-background/20 space-y-3 text-small">
                         <div className="flex flex-wrap gap-2">
+                          <span className={cn(
+                            'text-caption capitalize rounded-md border px-2 py-0.5',
+                            d.source === 'config_snapshot' ? 'text-info bg-info/10 border-info/25' : 'text-warning bg-warning/10 border-warning/25',
+                          )}>
+                            source: {d.source.replace(/_/g, ' ')}
+                          </span>
+                          {d.recommendation_type && (
+                            <span className="text-caption capitalize bg-muted/20 border border-border/40 rounded-md px-2 py-0.5">
+                              {d.recommendation_type.replace(/_/g, ' ')}
+                            </span>
+                          )}
                           {d.experiment_id && (
                             <span className="text-caption bg-muted/20 border border-border/40 rounded-md px-2 py-0.5">
                               experiment <span className="font-mono text-foreground/80">{d.experiment_id}</span>
@@ -192,6 +219,21 @@ export function OwnDecisionsPage() {
                             </span>
                           )}
                         </div>
+                        {d.source === 'review' && d.status === 'approved' && (
+                          <button
+                            onClick={() => applyDecision(d)}
+                            disabled={busy !== null}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success text-success-foreground text-caption font-medium hover:brightness-110 disabled:opacity-50 transition-all"
+                            title="Materializes a ConfigurationSnapshot and makes it current"
+                          >
+                            {busy === d.id ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Apply to production config
+                          </button>
+                        )}
+                        {d.source === 'review' && d.status === 'approved' && (
+                          <p className="text-caption text-muted-foreground/60">
+                            Approved by operator. Applying creates a new ConfigurationSnapshot pointing at the current pipeline defaults; history is never mutated.
+                          </p>
+                        )}
                         <button
                           onClick={() => openTrace(d.id)}
                           className="flex items-center gap-1.5 text-caption text-primary hover:brightness-110 transition-all"

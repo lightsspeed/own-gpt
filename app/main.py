@@ -26,8 +26,14 @@ async def lifespan(app: FastAPI):
     bm25 = get_whoosh_retriever()
     logger.info("whoosh_loaded doc_count=%d", bm25.doc_count)
 
+    # Start the automation scheduler (runs due jobs on cadence)
+    from app.learning.automation.scheduler import scheduler
+    scheduler.start()
+    logger.info("automation_scheduler_started")
+
     yield
     # Teardown
+    scheduler.stop()
     await engine.dispose()
 
 app = FastAPI(

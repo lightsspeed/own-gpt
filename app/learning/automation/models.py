@@ -58,6 +58,27 @@ class AutomationRun:
         if self.lineage is None:
             self.lineage = Lineage(artifact_id=self.id)
 
+    @staticmethod
+    def from_dict(data: dict) -> "AutomationRun":
+        """Reconstruct from a dict (handles enums and nested Lineage)."""
+        kwargs = dict(data)
+        lineage_data = kwargs.pop("lineage", None)
+        if lineage_data and isinstance(lineage_data, dict):
+            kwargs["lineage"] = Lineage(**lineage_data)
+        jt = kwargs.get("job_type")
+        st = kwargs.get("status")
+        if jt is not None:
+            try:
+                kwargs["job_type"] = JobType(jt)
+            except ValueError:
+                pass
+        if st is not None:
+            try:
+                kwargs["status"] = JobStatus(st)
+            except ValueError:
+                pass
+        return AutomationRun(**kwargs)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,

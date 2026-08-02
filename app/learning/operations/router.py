@@ -13,14 +13,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..analytics.engine import AnalyticsEngine
 from ..evidence.engine import EvidenceEngine
-from ..evidence.models import EvidenceStrengthLabel
-from ..experiments.runner import ReplayRunner
-from ..experiments.comparator import Comparator, build_decision_candidate
-from ..experiments.models import ExperimentDefinition, DecisionCandidate, DecisionStatus
 from ..config.manager import ConfigManager
+from .review_store import ReviewStore
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/operations", tags=["operations"])
+
+
+def get_decision_manager() -> ConfigManager:
+    return ConfigManager()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -60,6 +61,33 @@ def get_trend(finding) -> str:
         return finding.evidence.strength.trend
     except AttributeError:
         return "stable"
+
+
+def _find_recommendation(rec_id: str) -> Optional[dict]:
+    """Recompute current recommendations and find one by id."""
+    try:
+        ae = AnalyticsEngine()
+        ee = EvidenceEngine()
+        query_report = ae.query.analyze()
+        retrieval_report = ae.retrieval.analyze()
+        routing_report = ae.routing.analyze()
+        evidence_report = ee.analyze(
+            query_report=query_report,
+            retrieval_report=retrieval_report,
+            routing_report=routing_report,
+        )
+        recs = ae.recommendations.from_findings(evidence_report.findings)
+        for r in recs.all:
+            if r.id == rec_id:
+                return {
+                    "id": r.id,
+                    "type": r.type.value if hasattr(r.type, "value") else str(r.type),
+                    "title": r.title,
+                    "severity": r.severity.value if hasattr(r.severity, "value") else str(r.severity),
+                }
+    except Exception:  # noqa: BLE001
+        logger.exception("find_recommendation failed for %s", rec_id)
+    return None
 
 
 # ── Workspace 1: Findings ──────────────────────────────────────────────
@@ -133,6 +161,7 @@ async def recommendations_workspace(
     """Recommendation review workspace — PR-style with full lineage."""
     ae = AnalyticsEngine()
     ee = EvidenceEngine()
+    rs = ReviewStore()
 
     query_report = ae.query.analyze()
     retrieval_report = ae.retrieval.analyze()
@@ -147,7 +176,10 @@ async def recommendations_workspace(
     results = []
     for r in recs.all:
         rtype = r.type.value if hasattr(r.type, "value") else str(r.type)
-        rstatus = r.status.value if hasattr(r.status, "value") else str(r.status)
+        # r.status on flattened rows is the finding severity; review status lives
+        # in the review store.
+        review = rs.get_status(r.id) or {}
+        rstatus = review.get("status", "open")
         if status and rstatus != status:
             continue
         results.append({
@@ -157,15 +189,76 @@ async def recommendations_workspace(
             "title": r.title,
             "description": r.description,
             "status": rstatus,
+            "review_notes": review.get("notes", ""),
+            "reviewed_at": review.get("updated_at"),
             "finding_id": r.finding_id,
             "evidence": r.evidence if isinstance(r.evidence, dict) else {"note": "See linked finding"},
             "lineage": r.lineage.to_dict() if r.lineage else None,
         })
 
+    # Decisions tied to recommendations
+    decisions = rs.list_decisions()
+    decisions_by_rec = {d["recommendation_id"]: d for d in decisions}
+
     return {
         "workspace": "recommendations",
         "total": len(results),
+        "decisions": list(decisions_by_rec.values())[:10],
         "recommendations": results[:limit],
+    }
+
+
+@router.post("/recommendations/{rec_id}/approve", response_model=dict)
+async def approve_recommendation(
+    rec_id: str,
+    reviewer_notes: str = Query(""),
+):
+    """Human approval of a recommendation. Creates a Decision artifact.
+
+    The platform NEVER applies configuration automatically — approval only
+    records the human intent. A subsequent /apply call (or operator action)
+    materializes it as a ConfigurationSnapshot.
+    """
+    rs = ReviewStore()
+    rec = _find_recommendation(rec_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"Recommendation {rec_id} not found")
+
+    rs.set_status(rec_id, "approved", notes=reviewer_notes)
+    decision = rs.create_decision(
+        rec_id=rec_id,
+        decision="approved",
+        reviewer_notes=reviewer_notes,
+        recommendation_title=rec["title"],
+        recommendation_type=rec["type"],
+    )
+    return {
+        "status": "approved",
+        "recommendation_id": rec_id,
+        "decision": decision,
+    }
+
+
+@router.post("/recommendations/{rec_id}/dismiss", response_model=dict)
+async def dismiss_recommendation(
+    rec_id: str,
+    reviewer_notes: str = Query(""),
+):
+    """Human dismissal of a recommendation. Records the decision, no execution."""
+    rs = ReviewStore()
+    rec = _find_recommendation(rec_id)
+    rs.set_status(rec_id, "dismissed", notes=reviewer_notes)
+    decision = rs.create_decision(
+        rec_id=rec_id,
+        decision="dismissed",
+        reviewer_notes=reviewer_notes,
+        recommendation_title=(rec or {}).get("title", ""),
+        recommendation_type=(rec or {}).get("type", ""),
+    )
+    return {
+        "status": "dismissed",
+        "recommendation_id": rec_id,
+        "decision": decision,
     }
 
 
@@ -246,10 +339,13 @@ async def decisions_workspace(
     status: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ):
-    """Decision history — approved/rejected experiments with full trace."""
+    """Decision history — approved/rejected experiments and reviews with full trace."""
     cm = ConfigManager()
+    rs = ReviewStore()
     snapshots = cm.list_snapshots(limit=limit)
     decisions = []
+
+    # Config snapshots created from an approved decision/experiment
     for s in snapshots:
         if not s.created_from_decision_id:
             continue
@@ -265,15 +361,77 @@ async def decisions_workspace(
             "name": s.name,
             "description": s.description,
             "applied_at": s.created_at,
+            "source": "config_snapshot",
             "lineage": s.lineage.to_dict() if s.lineage else None,
         })
 
-    decisions.sort(key=lambda x: x.get("config_version", 0), reverse=True)
+    # Review decisions (approve/dismiss, no config applied yet)
+    for d in rs.list_decisions(limit=limit):
+        d_status = "approved" if d["decision"] == "approved" else "dismissed"
+        if status and d_status != status:
+            continue
+        decisions.append({
+            "id": d["id"],
+            "experiment_id": None,
+            "config_snapshot_id": None,
+            "config_version": None,
+            "status": d_status,
+            "name": d.get("recommendation_title") or f"Review {d['recommendation_id']}",
+            "description": d.get("reviewer_notes") or "Human decision recorded",
+            "applied_at": d.get("created_at"),
+            "source": "review",
+            "recommendation_type": d.get("recommendation_type"),
+            "lineage": {"artifact_id": d["id"]},
+        })
+
+    decisions.sort(key=lambda x: x.get("applied_at", "") or "", reverse=True)
     return {
         "workspace": "decisions",
         "total": len(decisions),
         "decisions": decisions[:limit],
     }
+
+
+@router.post("/decisions/apply", response_model=dict)
+async def apply_decision(
+    decision_id: str,
+    manager: ConfigManager = Depends(get_decision_manager),
+):
+    """Apply an approved decision: materialize a ConfigurationSnapshot.
+
+    Snapshot captures current pipeline defaults and is linked back to the
+    decision via created_from_decision_id. rollback moves the pointer only.
+    """
+    rs = ReviewStore()
+    decisions = {d["id"]: d for d in rs.list_decisions()}
+    decision = decisions.get(decision_id)
+    if not decision:
+        raise HTTPException(status_code=404, detail=f"Decision {decision_id} not found")
+    if decision["decision"] != "approved":
+        raise HTTPException(status_code=400, detail="Only approved decisions can be applied")
+
+    current = manager.get_current()
+    version = (current.version + 1) if current else 1
+    short_title = (decision.get("recommendation_title") or "")[:80]
+    snap = manager.create_from_dict(
+        params={
+            "retriever_top_k": 10,
+            "bm25_weight": 0.5,
+            "reranker_threshold": 0.35,
+            "confidence_threshold": 0.3,
+            "chunk_size": 512,
+            "chunk_overlap": 64,
+            "embedding_model": "default",
+            "reranker_model": "default",
+            "prompt_version": "default",
+        },
+        name=f"Config applied to decision {decision_id[:12]} — {short_title}" if short_title else f"Config applied to decision {decision_id[:12]}",
+        description=decision.get("reviewer_notes", ""),
+        decision_id=decision_id,
+        experiment_id=None,
+    )
+    manager.set_current(snap.id)
+    return {"status": "applied", "snapshot": snap.to_dict()}
 
 
 # ── Workspace 5: Configuration ────────────────────────────────────────

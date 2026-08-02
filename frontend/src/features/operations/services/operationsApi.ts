@@ -31,26 +31,41 @@ export interface RecommendationRow {
   title: string
   description: string
   status: string
+  review_notes?: string
+  reviewed_at?: string
   finding_id: string
   evidence: Record<string, any>
   lineage: Record<string, string> | null
 }
 
+export interface ReviewDecision {
+  id: string
+  recommendation_id: string
+  recommendation_type?: string
+  recommendation_title?: string
+  decision: string
+  reviewer_notes?: string
+  created_at?: string
+}
+
 export interface RecommendationsWorkspace {
   workspace: string
   total: number
+  decisions: ReviewDecision[]
   recommendations: RecommendationRow[]
 }
 
 export interface DecisionRow {
   id: string
-  experiment_id: string
-  config_snapshot_id: string
-  config_version: number
+  experiment_id: string | null
+  config_snapshot_id: string | null
+  config_version: number | null
   status: string
   name: string
   description: string
-  applied_at: string
+  applied_at: string | null
+  source: string
+  recommendation_type?: string | null
   lineage: Record<string, string> | null
 }
 
@@ -140,8 +155,28 @@ export const operationsApi = {
     return get<RecommendationsWorkspace>(`/operations/recommendations${q ? `?${q}` : ''}`)
   },
 
+  async approveRecommendation(recId: string, notes: string = ''): Promise<any> {
+    const qs = new URLSearchParams()
+    if (notes) qs.set('reviewer_notes', notes)
+    const q = qs.toString()
+    return post(`/operations/recommendations/${encodeURIComponent(recId)}/approve${q ? `?${q}` : ''}`)
+  },
+
+  async dismissRecommendation(recId: string, notes: string = ''): Promise<any> {
+    const qs = new URLSearchParams()
+    if (notes) qs.set('reviewer_notes', notes)
+    const q = qs.toString()
+    return post(`/operations/recommendations/${encodeURIComponent(recId)}/dismiss${q ? `?${q}` : ''}`)
+  },
+
   async getRecommendation(id: string): Promise<{ recommendation: RecommendationRow; finding: FindingRow | null; actions: string[] }> {
     return get(`/operations/recommendations/${encodeURIComponent(id)}`)
+  },
+
+  async applyDecision(decisionId: string): Promise<any> {
+    const qs = new URLSearchParams()
+    qs.set('decision_id', decisionId)
+    return post(`/operations/decisions/apply?${qs.toString()}`)
   },
 
   async getDecisions(params: { status?: string; limit?: number } = {}): Promise<DecisionsWorkspace> {

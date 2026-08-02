@@ -165,6 +165,7 @@ class ConfidenceCalibration:
                     evidence=evidence,
                     recommendation_text=f"Review confidence scoring for queries in the {b.bucket} range. "
                                         f"Consider calibrating the evaluation thresholds or adding a confidence correction factor.",
+                    signature=f"calibration|overconfidence|{b.bucket}",
                 ))
 
         # Check for underconfidence (low confidence but high acceptance)
@@ -201,6 +202,7 @@ class ConfidenceCalibration:
                     evidence=evidence,
                     recommendation_text=f"Review confidence scoring for low-confidence queries. "
                                         f"Answers in the {b.bucket} range perform better than predicted — thresholds may be too conservative.",
+                    signature=f"calibration|underconfidence|{b.bucket}",
                 ))
 
         return findings

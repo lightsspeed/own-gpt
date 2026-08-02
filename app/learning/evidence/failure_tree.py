@@ -262,6 +262,7 @@ class RetrievalFailureTree:
                 ),
                 evidence=evidence,
                 recommendation_text=f"Address the {cat} failure pattern. Review the specific root causes and apply targeted fixes.",
+                signature=f"failure_tree|{cat}|{root_cause_cat.value if hasattr(root_cause_cat, 'value') else root_cause_cat}",
             ))
 
         return findings

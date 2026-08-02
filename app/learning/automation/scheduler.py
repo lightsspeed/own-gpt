@@ -7,6 +7,8 @@ It does NOT know about analytics, evidence, or any specific module.
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -14,7 +16,7 @@ from typing import Optional
 
 from .models import JobType, JobStatus, AutomationRun
 from .jobs import run_daily_evaluation, run_calibration_check, run_benchmark_regression
-from .state import SnapshotStore
+from .state import SnapshotStore, RunStore
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +78,14 @@ DEFAULT_SCHEDULES: list[ScheduleDef] = [
 ]
 
 
-# ── Run history (in-memory; will migrate to SQLite) ────────────────────
+# ── Run history (persisted to disk; survives restarts) ─────────────────
 
-_run_history: list[AutomationRun] = []
+_run_store = RunStore()
+_run_lock = threading.Lock()
 
 
 def run_job(job_type: JobType) -> AutomationRun:
-    """Execute a single job by type. Returns the AutomationRun record."""
+    """Execute a single job by type. Returns the AutomationRun record, persisted."""
     runner_map = {
         JobType.DAILY_EVALUATION: run_daily_evaluation,
         JobType.CALIBRATION_CHECK: run_calibration_check,
@@ -91,11 +94,11 @@ def run_job(job_type: JobType) -> AutomationRun:
     runner = runner_map.get(job_type)
     if not runner:
         run = AutomationRun(job_type=job_type, status=JobStatus.FAILED, error=f"No runner for {job_type}")
-        _run_history.append(run)
-        return run
+    else:
+        run = runner()
 
-    run = runner()
-    _run_history.append(run)
+    with _run_lock:
+        _run_store.record(run)
     return run
 
 
@@ -121,10 +124,51 @@ def run_due_jobs() -> list[AutomationRun]:
 
 
 def get_run_history(limit: int = 50) -> list[AutomationRun]:
-    """Return recent automation run history."""
-    return list(reversed(_run_history))[:limit]
+    """Return recent automation run history (persisted)."""
+    return _run_store.list_all(limit=limit)
 
 
 def get_schedules() -> list[ScheduleDef]:
     """Return the current schedule definitions."""
     return list(DEFAULT_SCHEDULES)
+
+
+# ── Background scheduler ────────────────────────────────────────────────
+
+SCHEDULE_INTERVAL_SECONDS = 3600  # 1 hour between schedule checks
+
+
+def _scheduler_loop(stop_event: threading.Event):
+    """Background loop that runs due jobs on cadence."""
+    logger.info("scheduler started (interval=%ss)", SCHEDULE_INTERVAL_SECONDS)
+    while not stop_event.is_set():
+        try:
+            runs = run_due_jobs()
+            if runs:
+                logger.info("scheduler ran %d due job(s)", len(runs))
+        except Exception:  # noqa: BLE001
+            logger.exception("scheduler tick failed")
+        stop_event.wait(SCHEDULE_INTERVAL_SECONDS)
+
+
+class SchedulerLoop:
+    """Owns the background scheduler thread lifecycle."""
+
+    def __init__(self):
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=_scheduler_loop, args=(self._stop,), daemon=True, name="automation-scheduler")
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+
+
+scheduler = SchedulerLoop()

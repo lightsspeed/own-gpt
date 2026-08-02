@@ -192,4 +192,5 @@ class KnowledgeGapDiagnosis:
             root_cause=RootCause(category=cause, explanation=explanation, confidence=conf, evidence=evidence),
             evidence=evidence,
             recommendation_text=rec,
+            signature=f"knowledge_gap|{cause.value}|{sample}",
         )
