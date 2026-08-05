@@ -10,3 +10,4 @@ class AgentState(TypedDict):
     intent: str
     rewritten_query: str
     pipeline_context: str
+    answer_mode: str

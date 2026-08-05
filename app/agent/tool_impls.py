@@ -25,7 +25,11 @@ def search_knowledge_base_impl(query: str) -> str:
     try:
         results = similarity_search(query, k=3)
         if not results:
-            return "No relevant information found in the knowledge base."
+            return (
+                "No relevant information found in the knowledge base for this query. "
+                "The topic is not covered in the Knowledge Base — state this clearly and "
+                "do NOT answer using general knowledge."
+            )
         context = "\n\n---\n\n".join(
             f"Source: {doc.metadata.get('filename', 'Unknown')}\n{doc.page_content}"
             for doc in results

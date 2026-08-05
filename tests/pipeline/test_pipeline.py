@@ -80,6 +80,11 @@ class TestRAGPipeline:
         assert len(msg) > 10
         assert "rephrase" in msg.lower()
 
+    def test_kb_not_covered_message(self, pipeline):
+        msg = pipeline.kb_not_covered_message()
+        assert len(msg) > 10
+        assert "Knowledge Base" in msg
+
     def test_document_scoped_keeps_chunks_without_token_overlap(self):
         """Referential follow-ups ("what topic does it cover?") must not be
         filtered out by the token-overlap filter when scoped to a document."""

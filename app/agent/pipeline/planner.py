@@ -13,8 +13,8 @@ _POLICY_MAP: dict[Intent, SourcePolicy] = {
     Intent.GENERAL:   SourcePolicy.NONE,
     Intent.KNOWLEDGE: SourcePolicy.KB,
     Intent.MEMORY:    SourcePolicy.MEMORY,
-    Intent.CODING:    SourcePolicy.REASONING,
-    Intent.REASONING: SourcePolicy.REASONING,
+    Intent.CODING:    SourcePolicy.KB,
+    Intent.REASONING: SourcePolicy.KB,
     Intent.TOOL:      SourcePolicy.NONE,
     Intent.UNKNOWN:   SourcePolicy.KB,
 }

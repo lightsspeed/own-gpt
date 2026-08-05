@@ -99,10 +99,13 @@ def call_model(state: AgentState) -> dict:
     intent = state.get("intent", "")
     pipeline_context = state.get("pipeline_context", "")
     answer_mode_directive = state.get("answer_mode_directive", "")
+    answer_mode = state.get("answer_mode", "")
 
-    RETRIEVAL_INTENTS = {"knowledge", "unknown", "memory"}
+    RETRIEVAL_INTENTS = {"knowledge", "unknown", "memory", "coding", "reasoning"}
 
-    if intent in RETRIEVAL_INTENTS and not pipeline_context:
+    if (answer_mode == "no_evidence" and not pipeline_context) or (
+        intent in RETRIEVAL_INTENTS and not pipeline_context
+    ):
         # STRICT KNOWLEDGE BASE BOUNDARY
         # When retrieval ran but 0 relevant documents matched, replace prompt sections completely
         # to eliminate conflicting directives asking for detailed/comprehensive answers.

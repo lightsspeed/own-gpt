@@ -53,6 +53,12 @@ _CLARIFICATION_MESSAGE = (
     "Could you provide more context or rephrase your question?"
 )
 
+_KB_NOT_COVERED_MESSAGE = (
+    "This topic is not covered in your Knowledge Base. "
+    "I can only answer questions based on the documents uploaded to the Knowledge Base. "
+    "You can upload relevant documents or rephrase your question."
+)
+
 
 @dataclass
 class PipelineContext:
@@ -499,3 +505,7 @@ class RAGPipeline:
     @staticmethod
     def clarification_message() -> str:
         return _CLARIFICATION_MESSAGE
+
+    @staticmethod
+    def kb_not_covered_message() -> str:
+        return _KB_NOT_COVERED_MESSAGE

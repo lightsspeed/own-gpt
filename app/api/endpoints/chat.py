@@ -273,7 +273,10 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
 
         # Check if we should short-circuit with clarification
         if ctx.confidence and ctx.confidence.decision == "clarification" and not request.document:
-            response = _pipeline.clarification_message()
+            if not ctx.ranked_chunks:
+                response = _pipeline.kb_not_covered_message()
+            else:
+                response = _pipeline.clarification_message()
             if ctx.trace:
                 ctx.trace.final_response_len = len(response)
                 ctx.trace.total_latency_ms = 0.0
@@ -294,6 +297,7 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
+            "answer_mode": ctx.answer_mode,
         }
 
         final_state = graph.invoke(initial_state, config=config)
@@ -623,7 +627,11 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
 
         # Short-circuit for clarification (never when scoped to a document — the scope is known)
         if ctx.confidence and ctx.confidence.decision == "clarification" and not request.document:
-            msg = _pipeline.clarification_message()
+            msg = (
+                _pipeline.kb_not_covered_message()
+                if not ctx.ranked_chunks
+                else _pipeline.clarification_message()
+            )
             if ctx.trace:
                 ctx.trace.final_response_len = len(msg)
                 ctx.trace.total_latency_ms = 0.0
@@ -657,6 +665,7 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
+            "answer_mode": ctx.answer_mode,
         }
 
         q: asyncio.Queue = asyncio.Queue()
@@ -874,7 +883,11 @@ async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = De
 
         # Short-circuit for clarification
         if ctx.confidence and ctx.confidence.decision == "clarification":
-            msg = _pipeline.clarification_message()
+            msg = (
+                _pipeline.kb_not_covered_message()
+                if not ctx.ranked_chunks
+                else _pipeline.clarification_message()
+            )
             if ctx.trace:
                 ctx.trace.final_response_len = len(msg)
                 ctx.trace.total_latency_ms = 0.0
@@ -891,6 +904,7 @@ async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = De
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
+            "answer_mode": ctx.answer_mode,
         }
 
         final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
