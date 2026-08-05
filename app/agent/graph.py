@@ -67,7 +67,10 @@ def action_node(state: AgentState) -> dict:
     if not (isinstance(last_message, AIMessage) and last_message.tool_calls):
         return state
 
-    messages = list(state["messages"])
+    # Return ONLY the new ToolMessages — the state reducer appends them.
+    # Returning the full list would duplicate history and break the
+    # tool_calls → ToolMessage pairing the model requires.
+    new_tool_messages = []
     for tool_call in last_message.tool_calls:
         tool_name = tool_call.get("name", "")
         args = tool_call.get("args", {}) or {}
@@ -85,9 +88,9 @@ def action_node(state: AgentState) -> dict:
                 f"(request {execution.id}). It has NOT been executed. "
                 f"Tell the user a human operator must approve it in the operations workspace."
             )
-        messages.append(ToolMessage(content=content, tool_call_id=tool_call.get("id", "")))
+        new_tool_messages.append(ToolMessage(content=content, tool_call_id=tool_call.get("id", "")))
 
-    return {"messages": messages}
+    return {"messages": new_tool_messages}
 
 
 def call_model(state: AgentState) -> dict:
