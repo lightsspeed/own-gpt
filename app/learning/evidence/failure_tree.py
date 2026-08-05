@@ -99,11 +99,15 @@ class RetrievalFailureTree:
         classifications: dict[str, int] = {}
         by_cause: dict[str, int] = {}
         aggregated: dict[str, list[dict]] = {}  # qhash → [classifications]
+        record_ids_by_category: dict[str, list[str]] = {}
 
         for r in rows:
             classification = self._classify(r)
             key = classification.category.value if hasattr(classification.category, 'value') else str(classification.category)
             classifications[key] = classifications.get(key, 0) + 1
+            record_ids_by_category.setdefault(key, [])
+            if r.get("record_id"):
+                record_ids_by_category[key].append(r["record_id"])
             cause_key = classification.root_cause.value if hasattr(classification.root_cause, 'value') else str(classification.root_cause)
             by_cause[cause_key] = by_cause.get(cause_key, 0) + 1
 
@@ -113,7 +117,7 @@ class RetrievalFailureTree:
             aggregated[qhash].append(classification)
 
         # Generate findings for the most common failure patterns
-        findings = self._generate_findings(classifications, by_cause, aggregated)
+        findings = self._generate_findings(classifications, by_cause, aggregated, record_ids_by_category)
 
         return FailureTreeReport(
             total_failed=len(rows),
@@ -211,8 +215,13 @@ class RetrievalFailureTree:
         )
 
     def _generate_findings(
-        self, classifications: dict, by_cause: dict, aggregated: dict[str, list]
+        self,
+        classifications: dict,
+        by_cause: dict,
+        aggregated: dict[str, list],
+        record_ids_by_category: Optional[dict[str, list[str]]] = None,
     ) -> list[Finding]:
+        record_ids_by_category = record_ids_by_category or {}
         findings = []
         total = sum(classifications.values()) or 1
 
@@ -242,6 +251,7 @@ class RetrievalFailureTree:
                     f"Category: {cat}",
                     f"Sample question hash: {sample_qhash or 'N/A'}",
                 ],
+                supporting_record_ids=record_ids_by_category.get(cat, [])[:20],
             )
 
             root_cause_cat = RootCauseCategory.UNKNOWN

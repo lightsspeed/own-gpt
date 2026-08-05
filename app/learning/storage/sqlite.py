@@ -50,6 +50,7 @@ class LearningStore:
                     question          TEXT,
                     normalized_question TEXT,
                     question_hash     TEXT,
+                    response          TEXT,
                     intent            TEXT,
                     matched_rule      TEXT,
                     intent_confidence REAL,
@@ -141,6 +142,7 @@ class LearningStore:
                     "ADD COLUMN question_hash TEXT",
                     "ADD COLUMN learning_schema_version INTEGER DEFAULT 1",
                     "ADD COLUMN normalized_question TEXT",
+                    "ADD COLUMN response TEXT",
                 ]:
                     try:
                         conn.execute(f"ALTER TABLE learning_records {col_sql}")

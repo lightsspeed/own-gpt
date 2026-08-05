@@ -64,7 +64,7 @@ class KnowledgeGapDiagnosis:
 
         # Fetch sample records for this question_hash to inspect retrieval
         records = self._store.query_sql("""
-            SELECT retriever, documents, chunks, answer_mode, matched_rule, intent,
+            SELECT record_id, retriever, documents, chunks, answer_mode, matched_rule, intent,
                    confidence, accepted, reranker_scores
             FROM learning_records
             WHERE question_hash = ?
@@ -73,6 +73,8 @@ class KnowledgeGapDiagnosis:
 
         if not records:
             return None
+
+        record_ids = [r["record_id"] for r in records if r.get("record_id")]
 
         # Analyze retrieval characteristics
         has_docs = any(r.get("documents") and r["documents"] != "[]" for r in records)
@@ -182,6 +184,7 @@ class KnowledgeGapDiagnosis:
                 f"Knowlege routing: {is_knowledge:.0%}",
                 f"Answer modes: {', '.join(sorted(set(answer_modes)))[:60]}",
             ],
+            supporting_record_ids=record_ids,
         )
 
         return Finding(

@@ -66,6 +66,7 @@ class LearningRecord:
     intent: str = ""
     matched_rule: str = ""
     intent_confidence: float = 0.0
+    response: str = ""  # the final answer text (PII-sanitized before storage)
 
     # ── Retrieval ─────────────────────────────────────────────────────────
     retriever: str = ""
@@ -118,6 +119,7 @@ class LearningRecord:
     _FIELDS = frozenset({
         "learning_schema_version", "record_id", "timestamp", "session_id", "message_id",
         "question", "normalized_question", "question_hash", "intent", "matched_rule", "intent_confidence",
+        "response",
         "retriever", "answer_mode", "documents", "chunks",
         "vector_scores", "bm25_scores", "rrf_scores", "reranker_scores",
         "model", "prompt_version", "latency_ms", "tokens_in", "tokens_out",

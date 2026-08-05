@@ -39,6 +39,7 @@ def build_learning_record(
         session_id=ctx.session_id,
         question=ctx.question,
         normalized_question=sanitized,
+        response=sanitize(response),
         intent=ctx.intent_label if ctx.intent else "unknown",
         matched_rule=ctx.intent.matched_rule if ctx.intent else "",
         intent_confidence=ctx.intent.confidence if ctx.intent else 0.0,

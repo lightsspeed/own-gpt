@@ -78,7 +78,7 @@ class ConfidenceCalibration:
 
     def analyze(self) -> CalibrationReport:
         rows = self._store.query_sql("""
-            SELECT confidence, accepted, thumb
+            SELECT record_id, confidence, accepted, thumb
             FROM learning_records
             WHERE confidence > 0 AND confidence IS NOT NULL
         """)
@@ -91,6 +91,7 @@ class ConfidenceCalibration:
             upper=(i + 1) / NUM_BUCKETS,
             bucket=f"{int(i * 10)}-{int((i + 1) * 10)}%",
         ) for i in range(NUM_BUCKETS)]
+        record_ids_by_bucket: dict[str, list[str]] = {b.bucket: [] for b in buckets}
 
         for r in rows:
             conf = r["confidence"]
@@ -102,6 +103,8 @@ class ConfidenceCalibration:
                 b.accept_rate += 1.0
             if r.get("thumb") == "up":
                 b.thumb_up_rate += 1.0
+            if r.get("record_id"):
+                record_ids_by_bucket[b.bucket].append(r["record_id"])
 
         total = sum(b.count for b in buckets)
         ece_sum = 0.0
@@ -116,7 +119,7 @@ class ConfidenceCalibration:
         ece = ece_sum
         overconf_bucket = max(buckets, key=lambda b: b.gap if b.count >= 10 else -999)
         underconf_bucket = min(buckets, key=lambda b: b.gap if b.count >= 10 else 999)
-        findings = self._generate_findings(buckets, ece)
+        findings = self._generate_findings(buckets, ece, record_ids_by_bucket)
 
         return CalibrationReport(
             buckets=buckets,
@@ -127,7 +130,13 @@ class ConfidenceCalibration:
             findings=findings,
         )
 
-    def _generate_findings(self, buckets: list[CalibrationBucket], ece: float) -> list[Finding]:
+    def _generate_findings(
+        self,
+        buckets: list[CalibrationBucket],
+        ece: float,
+        record_ids_by_bucket: Optional[dict[str, list[str]]] = None,
+    ) -> list[Finding]:
+        record_ids_by_bucket = record_ids_by_bucket or {}
         findings = []
 
         # Check for severe overconfidence (high confidence but low acceptance)
@@ -148,6 +157,7 @@ class ConfidenceCalibration:
                         confidence=0.85,
                     ),
                     observations=obs,
+                    supporting_record_ids=record_ids_by_bucket.get(b.bucket, []),
                 )
                 findings.append(Finding(
                     category=FindingCategory.CALIBRATION_DRIFT,
@@ -186,6 +196,7 @@ class ConfidenceCalibration:
                         confidence=0.80,
                     ),
                     observations=obs,
+                    supporting_record_ids=record_ids_by_bucket.get(b.bucket, []),
                 )
                 findings.append(Finding(
                     category=FindingCategory.CALIBRATION_DRIFT,
