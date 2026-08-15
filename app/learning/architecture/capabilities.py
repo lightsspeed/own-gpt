@@ -324,12 +324,21 @@ register(Capability(
 
 register(Capability(
     id="memory_v2", name="Memory V2 — Governed Memory Store",
-    description="Durable, scoped, curated memories with authority-aware conflict resolution, lifecycle events, and vector retrieval",
+    description="Durable, scoped, curated memories with authority-aware conflict resolution, lifecycle events, and vector retrieval; backs the agent recall node (retrieve_memory) and the memory tools",
     owner="services.memory", lifecycle_stage="operate",
     maturity=MaturityLevel.IMPLEMENTED,
     dependencies=("architecture_governance", "agent_memory"),
     artifacts=("MemoryEntity", "MemoryEvent"),
     api_prefix="/api/v1/memory",
+))
+
+register(Capability(
+    id="memory_extraction", name="Memory Extraction",
+    description="Detached three-gate extraction of durable user facts from completed conversations into the governed memory store (pending status, extracted authority — never self-approved)",
+    owner="learning.extraction", lifecycle_stage="observe",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("memory_v2",),
+    artifacts=("MemoryEntity",),
 ))
 
 # Automation

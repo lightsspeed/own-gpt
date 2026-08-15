@@ -176,6 +176,40 @@ def get_memory(db: Session, memory_id: str, user_id: str) -> MemoryEntity | None
     return _get_owned(db, memory_id, user_id)
 
 
+def find_memory_by_statement(
+    db: Session,
+    user_id: str,
+    statement: str,
+    *,
+    project_id: Optional[str] = None,
+    statuses: tuple[str, ...] = (STATUS_ACTIVE,),
+) -> MemoryEntity | None:
+    """Exact normalized-statement match within the user's scope.
+
+    Scope mirrors retrieval: a project context sees project memories plus
+    user-wide memories; without a project, only user-wide memories. Returns
+    the first deterministic match (created_at asc, id asc) or None.
+    """
+    normalized = _normalize(statement)
+    if not normalized:
+        return None
+    q = select(MemoryEntity).where(
+        MemoryEntity.user_id == user_id,
+        MemoryEntity.status.in_(statuses),
+    )
+    if project_id is None:
+        q = q.where(MemoryEntity.project_id.is_(None))
+    else:
+        q = q.where(or_(MemoryEntity.project_id == project_id, MemoryEntity.project_id.is_(None)))
+    matches = [
+        e
+        for e in db.execute(q).scalars().all()
+        if _normalize(e.statement) == normalized
+    ]
+    matches.sort(key=lambda e: (e.created_at if e.created_at is not None else datetime.min.replace(tzinfo=timezone.utc), e.id))
+    return matches[0] if matches else None
+
+
 def list_memories(
     db: Session,
     user_id: str,

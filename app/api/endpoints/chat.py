@@ -334,6 +334,8 @@ async def chat_endpoint(
             "pipeline_context": ctx.context_text,
             "answer_mode": ctx.answer_mode,
             "session_id": request.session_id,
+            "user_id": user.id,
+            "project_id": conv.project_id or "",
             "model": model,
             "temperature": temperature,
         }
@@ -412,6 +414,10 @@ async def chat_endpoint(
 
         # Persist the completed assistant message (exactly once, final content)
         store.persist_assistant_message(db, conv, response, model, status=store.MESSAGE_STATUS_COMPLETED)
+
+        # Detached memory extraction — fire-and-forget, never on the request path
+        from app.learning.extraction.extractor import schedule_extraction
+        schedule_extraction(request.session_id, user.id, conv.project_id)
 
         return ChatResponse(
             session_id=request.session_id,
@@ -745,6 +751,8 @@ async def chat_stream_endpoint(
             "pipeline_context": ctx.context_text,
             "answer_mode": ctx.answer_mode,
             "session_id": request.session_id,
+            "user_id": user.id,
+            "project_id": conv.project_id or "",
             "model": model,
             "temperature": temperature,
         }
@@ -885,6 +893,10 @@ async def chat_stream_endpoint(
                     # Persist the completed assistant message exactly once
                     if response_text:
                         persist_assistant(response_text, store.MESSAGE_STATUS_COMPLETED)
+                        # Detached memory extraction — after the stream is done,
+                        # own thread, never on the stream path.
+                        from app.learning.extraction.extractor import schedule_extraction
+                        schedule_extraction(request.session_id, user.id, conv.project_id)
                     else:
                         # Generation finished but produced nothing visible —
                         # do not fabricate an assistant message.
@@ -1031,6 +1043,8 @@ async def chat_evaluate_endpoint(
             "pipeline_context": ctx.context_text,
             "answer_mode": ctx.answer_mode,
             "session_id": session_id,
+            "user_id": user.id,
+            "project_id": "",
             "model": resolve_model(None),
             "temperature": settings.TEMPERATURE_DEFAULT,
         }

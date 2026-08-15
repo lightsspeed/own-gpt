@@ -250,7 +250,7 @@ The LLM produces **candidates only**. Persistence happens through the validated 
 - **Pipeline (V2.1):** vector-only.
   1. Candidate generation — pgvector similarity (cosine) on `embedding`
   2. Hard filters — `status = active`, scope rule (§4), domain filter, `expires_at > now`
-  3. Ranking — `score = w1·cosine + w2·importance + w3·log-decayed recency`
+  3. Ranking — `score = w1·cosine + w2·importance + w3·exponential half-life decay (0.5 ** (days / MEMORY_RECENCY_HALF_LIFE_DAYS))`
 - **Output:** ranked `MemoryHit {entity, score}` list, capped by a caller-supplied token budget. No raw dicts.
 - **Explicitly deferred:** hybrid keyword+vector retrieval and reranking (BM25/RRF per ADR-0008 precedent). V2.3+ introduces them as a measured experiment — start vector-only, then measure whether hybrid improves recall.
 

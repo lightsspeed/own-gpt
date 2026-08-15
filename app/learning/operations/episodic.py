@@ -72,12 +72,15 @@ def load_recent_transcripts(
     return transcripts
 
 
-def default_session_loader(limit: int = 8) -> list[SessionTranscript]:
+def default_session_loader(limit: int = 8, user_id: str = "") -> list[SessionTranscript]:
     """Load recent conversation transcripts from application chat persistence.
 
     chat_messages (PostgreSQL) is the canonical conversation history — not
     LangGraph checkpoint blobs. Reading here keeps memory consolidation
     aligned with what the user actually sees.
+
+    Tenant isolation invariant (V2.2): when user_id is provided, ONLY that
+    user's sessions are loaded — cross-tenant transcript leakage is impossible.
     """
     try:
         from sqlalchemy import select
@@ -85,11 +88,10 @@ def default_session_loader(limit: int = 8) -> list[SessionTranscript]:
         from app.models.chat import ChatMessage, ChatSession
 
         with SyncSessionLocal() as db:
-            sessions = list(
-                db.execute(
-                    select(ChatSession).order_by(ChatSession.updated_at.desc()).limit(limit)
-                ).scalars()
-            )
+            q = select(ChatSession).order_by(ChatSession.updated_at.desc()).limit(limit)
+            if user_id:
+                q = q.where(ChatSession.owner_id == user_id)
+            sessions = list(db.execute(q).scalars())
             transcripts: list[SessionTranscript] = []
             for session in sessions:
                 messages = list(
@@ -157,6 +159,7 @@ class EpisodicRecallService:
         min_transcript_messages: int = 4,
         max_transcript_messages: int = 50,
         exclude_eval: bool = True,
+        user_id: str = "",
     ):
         self._store_dir = store_dir
         self._session_loader = session_loader or default_session_loader
@@ -168,16 +171,20 @@ class EpisodicRecallService:
         self._min_transcript_messages = min_transcript_messages
         self._max_transcript_messages = max_transcript_messages
         self._exclude_eval = exclude_eval
+        self._user_id = user_id
 
     # ── Public ──────────────────────────────────────────────────────────────
 
-    def recall(self, query: str, session_id: str = "") -> list[MemoryFact]:
+    def recall(self, query: str, session_id: str = "", user_id: str = "") -> list[MemoryFact]:
         """Top-k summaries of past conversations relevant to the query.
 
         Returns [] when nothing clears the similarity floor or recall is
-        impossible (empty query, no other sessions).
+        impossible (empty query, no other sessions). With user_id provided,
+        transcripts are tenant-scoped to that user (D4 invariant).
         """
         query = (query or "").strip()
+        if user_id:
+            self._user_id = user_id
         current_scope = session_scope(session_id) if session_id else ""
         store = MemoryStore(store_dir=self._store_dir)
 
@@ -226,7 +233,10 @@ class EpisodicRecallService:
             )
 
     def _load_transcripts(self) -> list[SessionTranscript]:
-        transcripts = load_recent_transcripts(self._session_loader, "", self._exclude_eval)
+        loader = self._session_loader
+        if loader is default_session_loader and self._user_id:
+            loader = lambda limit: default_session_loader(limit, user_id=self._user_id)
+        transcripts = load_recent_transcripts(loader, "", self._exclude_eval)
         return [
             t
             for t in transcripts

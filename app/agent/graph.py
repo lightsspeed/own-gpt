@@ -8,9 +8,12 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from app.core.config import settings
 from app.core.model_config import DEFAULT_MODEL
-from app.learning.operations.memory import MemoryStore, MemoryEmbeddingIndex, SCOPE_GLOBAL, session_scope
+from app.services.memory import search_memories as _search_memories
+from app.services.embeddings import build_embedding_provider as _build_embedding_provider
 
 logger = logging.getLogger(__name__)
+
+MEMORY_TOOL_NAMES = frozenset({"remember_user_fact", "remember_session_fact", "forget_user_fact"})
 
 
 def _strip_images(content) -> str:
@@ -98,9 +101,15 @@ def action_node(state: AgentState) -> dict:
         tool_name = tool_call.get("name", "")
         args = tool_call.get("args", {}) or {}
         # Session-scoped memory tools need the current conversation id, which
-        # the model cannot know — inject it from the graph state.
-        if tool_name in {"remember_session_fact", "forget_user_fact"} and "session_id" not in args:
-            args = {**args, "session_id": state.get("session_id", "")}
+        # the model cannot know — inject it from the graph state. Memory tools
+        # also receive the tenant identity so writes land in the owned scope.
+        if tool_name in MEMORY_TOOL_NAMES:
+            args = {
+                **args,
+                "session_id": args.get("session_id") or state.get("session_id", ""),
+                "user_id": state.get("user_id", ""),
+                "project_id": state.get("project_id") or "",
+            }
         execution = request_tool_execution(tool_name, args)
 
         if execution.status == "executed":
@@ -179,61 +188,10 @@ def call_model(state: AgentState) -> dict:
             # Strip KB directive to avoid confusing the model
             sections = [s for s in sections if "Answer Mode" not in s]
 
-    # Long-term memory from the memory store (global + current session scope)
-    memories_str = ""
-    try:
-        store = MemoryStore()
-        memory_sections = []
-        query_text = ""
-        for m in reversed(state.get("messages", [])):
-            if type(m).__name__ == "HumanMessage":
-                query_text = _strip_images(m.content)
-                break
-        global_facts = store.list_active(scope=SCOPE_GLOBAL)
-        if global_facts:
-            # Vectored recall: inject only the facts most relevant to this query,
-            # keeping the context window bounded as memory grows.
-            try:
-                selected = MemoryEmbeddingIndex().select_for_query(query_text, global_facts, k=5)
-            except Exception:
-                selected = global_facts[:5]
-            if selected:
-                facts_list = "\n".join(f"- {f.fact}" for f in selected)
-                memory_sections.append(
-                    f"Long-Term Memory:\n"
-                    f"You have learned the following persistent facts about the user from previous sessions. "
-                    f"Use these to personalize your responses:\n{facts_list}"
-                )
-        session_id = state.get("session_id", "") or ""
-        session_facts = store.list_active(scope=session_scope(session_id)) if session_id else []
-        if session_facts:
-            facts_list = "\n".join(f"- {f.fact}" for f in session_facts)
-            memory_sections.append(
-                f"Conversation Memory:\n"
-                f"The user shared the following facts in THIS conversation. "
-                f"Use them for context, but do not carry them to other conversations:\n{facts_list}"
-            )
-        elif intent == "memory" and query_text:
-            # Episodic recall: memory-intent questions in a conversation with no
-            # facts of its own may draw on summaries of past conversations.
-            try:
-                from app.learning.operations.episodic import EpisodicRecallService
-
-                past = EpisodicRecallService().recall(query_text, session_id)
-                if past:
-                    past_list = "\n".join(f"- {f.fact}" for f in past)
-                    memory_sections.append(
-                        f"Past Conversations:\n"
-                        f"You discussed the following topics in earlier conversations. "
-                        f"Use them to answer questions about what was discussed previously:\n{past_list}"
-                    )
-            except Exception as e:
-                logger.error(f"Failed to recall episodic memory: {e}")
-        if memory_sections:
-            memories_str = "\n" + "\n\n".join(memory_sections)
-            sections.append(memories_str)
-    except Exception as e:
-        logger.error(f"Failed to fetch memories: {e}")
+    # Long-term memory computed by the retrieve_memory node (V2.1 store).
+    memory_context = state.get("memory_context", "")
+    if memory_context:
+        sections.append("\n" + memory_context)
 
     full_prompt = "\n".join(sections)
 
@@ -255,12 +213,67 @@ def call_model(state: AgentState) -> dict:
     return {"messages": [response]}
 
 
+def retrieve_memory(state: AgentState) -> dict:
+    """Recall cross-session context from the governed V2.1 memory store.
+
+    Runs before the first model call. Produces `memory_context` (a text block
+    appended to the system prompt by call_model) from MemoryService-ranked
+    active memories in the project scope plus user-wide scope. Never raises:
+    any failure degrades to no memory context — memory is context, not truth.
+    """
+    if not settings.MEMORY_V2_GRAPH:
+        return {"memory_context": ""}
+
+    user_id = state.get("user_id", "")
+    project_id = state.get("project_id") or None
+    query_text = ""
+    for m in reversed(state.get("messages", [])):
+        if type(m).__name__ == "HumanMessage":
+            query_text = _strip_images(m.content)
+            break
+    if not user_id or not query_text.strip():
+        return {"memory_context": ""}
+
+    try:
+        from app.core.database import SyncSessionLocal
+
+        provider = _build_embedding_provider()
+        with SyncSessionLocal() as db:
+            hits = _search_memories(
+                db,
+                user_id=user_id,
+                query=query_text,
+                project_id=project_id,
+                k=5,
+                max_tokens=400,
+                embed=provider.embed if provider else None,
+            )
+    except Exception as e:
+        logger.error("memory_recall_failed user=%s error=%s", user_id, e)
+        return {"memory_context": ""}
+
+    if not hits:
+        return {"memory_context": ""}
+    facts_list = "\n".join(f"- {hit.entity.statement}" for hit in hits)
+    return {
+        "memory_context": (
+            "Long-Term Memory:\n"
+            "You have learned the following persistent facts about the user from previous sessions. "
+            "Use these to personalize your responses:\n"
+            f"{facts_list}"
+        )
+    }
+
+
 workflow = StateGraph(AgentState)
 
+workflow.add_node("retrieve_memory", retrieve_memory)
 workflow.add_node("agent", call_model)
 workflow.add_node("action", action_node)
 
-workflow.set_entry_point("agent")
+workflow.set_entry_point("retrieve_memory")
+
+workflow.add_edge("retrieve_memory", "agent")
 
 workflow.add_conditional_edges(
     "agent",

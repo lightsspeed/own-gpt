@@ -1,6 +1,6 @@
 # OwnGPT Memory V2.1 — Implementation Specification
 
-**Status:** Finalized (2026-08-14, post pre-flight amendments)
+**Status:** Finalized (2026-08-14, post pre-flight amendments). Storage wiring superseded by V2.2 (agent recall node + tools + extraction route through the V2.1 `MemoryService`; see `docs/v22_memory_intelligence_spec.md`). This document remains normative for the store itself: schema, lifecycle, retrieval.
 
 **Normative reference:** `docs/memory_contract.md` — Memory Contract v0.2 (frozen). Where this spec and the contract disagree, **the contract wins**; surface the conflict instead of improvising.
 

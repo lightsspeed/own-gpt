@@ -46,6 +46,7 @@ _FAKE_NAMES = [
     "app.agent.pipeline.source_validator",
     "app.learning.telemetry.collector",
     "app.evaluation.models",
+    "app.learning.extraction.extractor",
 ]
 
 
@@ -234,6 +235,7 @@ def _install_fakes() -> None:
         "store": type("S", (), {"save_quality_report": lambda self, **k: None})(),
     })())
     _fake("app.evaluation.models", build_evaluation_result=lambda *a, **k: type("R", (), {"to_dict": lambda self: {}})())
+    _fake("app.learning.extraction.extractor", schedule_extraction=lambda *a, **k: None)
 
 
 @pytest.fixture(autouse=True)

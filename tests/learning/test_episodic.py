@@ -282,3 +282,98 @@ def test_newest_summary_per_session_wins(tmp_path):
 
     assert len(top) == 1
     assert "newer summary" in top[0].fact
+
+
+# ── D4 tenant isolation (V2.2) ───────────────────────────────────────────
+
+def test_default_session_loader_filters_by_owner(monkeypatch):
+    """Cross-tenant leakage regression: only the requesting user's sessions."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.core.database import Base
+    from app.learning.operations.episodic import default_session_loader
+    from app.models.chat import ChatMessage, ChatSession
+    from app.services import auth
+
+    from app.models import chat as _chat_model  # noqa: F401
+    from app.models import memory as _memory_model  # noqa: F401
+    from app.models import project as _project_model  # noqa: F401
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    S = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
+
+    with S() as db:
+        alice = auth.create_user(db, "alice", "password123")
+        bob = auth.create_user(db, "bob", "password123")
+        for owner, sid, text in (
+            (alice, "alice-sess", "alice said hi"),
+            (bob, "bob-sess", "bob said hi"),
+        ):
+            db.add(ChatSession(id=sid, owner_id=owner.id, thread_id=sid, title="T"))
+            db.add(ChatMessage(session_id=sid, role="user", content=text, status="completed", sequence=1))
+            db.add(ChatMessage(session_id=sid, role="assistant", content="ok", status="completed", sequence=2))
+        db.commit()
+
+    alice_transcripts = default_session_loader(limit=10, user_id=alice.id)
+    bob_transcripts = default_session_loader(limit=10, user_id=bob.id)
+
+    assert [t.session_id for t in alice_transcripts] == ["alice-sess"]
+    assert [t.session_id for t in bob_transcripts] == ["bob-sess"]
+    engine.dispose()
+
+
+def test_recall_without_user_loads_everything(monkeypatch):
+    """Backward-compatible: no user_id means no owner filter."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.core.database import Base
+    from app.learning.operations.episodic import default_session_loader
+    from app.models.chat import ChatMessage, ChatSession
+    from app.services import auth
+
+    from app.models import chat as _chat_model  # noqa: F401
+    from app.models import memory as _memory_model  # noqa: F401
+    from app.models import project as _project_model  # noqa: F401
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    S = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
+
+    with S() as db:
+        alice = auth.create_user(db, "alice", "password123")
+        bob = auth.create_user(db, "bob", "password123")
+        for owner, sid in ((alice, "alice-sess"), (bob, "bob-sess")):
+            db.add(ChatSession(id=sid, owner_id=owner.id, thread_id=sid, title="T"))
+            db.add(ChatMessage(session_id=sid, role="user", content="hello", status="completed", sequence=1))
+            db.add(ChatMessage(session_id=sid, role="assistant", content="ok", status="completed", sequence=2))
+        db.commit()
+
+    transcripts = default_session_loader(limit=10)
+
+    assert {t.session_id for t in transcripts} == {"alice-sess", "bob-sess"}
+    engine.dispose()
+
+
+def test_recall_threads_user_id_to_default_loader(monkeypatch, tmp_path):
+    """EpisodicRecallService.recall(user_id=...) must reach the loader."""
+    from app.learning.operations.episodic import EpisodicRecallService
+
+    seen = {}
+
+    def spy(limit, user_id=""):
+        seen["user_id"] = user_id
+        return []
+
+    monkeypatch.setattr("app.learning.operations.episodic.default_session_loader", spy)
+
+    service = EpisodicRecallService(store_dir=str(tmp_path))
+    service.recall("what did we discuss?", session_id="sess-new", user_id="alice")
+
+    assert seen.get("user_id") == "alice"

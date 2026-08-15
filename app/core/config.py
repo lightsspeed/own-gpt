@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     MEMORY_EMBEDDING_BATCH_SIZE: int = 64
     MEMORY_ACCESS_UPDATE_THROTTLE_SECONDS: int = 3600
 
+    # Memory V2.2 — routes agent recall through the governed MemoryService.
+    # ON: retrieve_memory node recalls via MemoryService.search_memories;
+    # OFF: no memory context is injected (legacy fallback window only).
+    MEMORY_V2_GRAPH: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
