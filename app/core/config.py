@@ -102,6 +102,18 @@ class Settings(BaseSettings):
     # OFF: no memory context is injected (legacy fallback window only).
     MEMORY_V2_GRAPH: bool = True
 
+    # Memory extraction — execution control (P1 hardening).
+    # Extraction runs on a bounded daemon worker pool; a Redis single-flight
+    # claim (per conversation turn) and a distributed, TTL-protected throttle
+    # coordinate across application workers. Redis is already a production
+    # dependency (tracing, arq ingestion worker); every coordination failure
+    # fails OPEN (chat is never affected) and falls back to in-process state.
+    MEMORY_EXTRACTION_MAX_CONCURRENCY: int = 2     # concurrent extractions per worker process
+    MEMORY_EXTRACTION_MAX_QUEUE: int = 200         # pending extractions per worker process
+    MEMORY_EXTRACTION_SINGLE_FLIGHT_TTL_SECONDS: int = 300   # claim lifetime (crash safety net)
+    MEMORY_EXTRACTION_TURN_INTERVAL: int = 3       # user turns between extractions, per session
+    MEMORY_EXTRACTION_THROTTLE_TTL_SECONDS: int = 86400      # throttle marker lifetime
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

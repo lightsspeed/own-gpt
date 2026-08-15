@@ -3,6 +3,8 @@ model validation, duplicate requests, history from application persistence."""
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -188,6 +190,25 @@ def test_stream_partial_failure_preserves_partial_marked_failed(client, alice_to
         ("user", "completed", "hi"),
         ("assistant", "failed", "Partial"),
     ]
+
+
+def test_stream_reaches_done_when_extraction_scheduled(client, alice_token, fake_graph, db, monkeypatch):
+    """The real scheduling path (claim → bounded enqueue) runs off the stream
+    thread; extraction must never delay or break the user-visible [DONE]."""
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        sys.modules["app.learning.extraction.extractor"], "schedule_extraction",
+        lambda *a, **k: calls.append(a),
+    )
+    fake_graph.partial_chunks = ["He", "llo"]
+    events = _consume_stream(client.post(
+        "/chat/stream", json={"session_id": "s4", "message": "hi"}, headers=_bearer(alice_token)
+    ))
+    assert events[-1] == "[DONE]"
+    assert len(calls) == 1
+    session_id, _user_id, _project_id, user_msg_id = calls[0]
+    assert session_id == "s4"
+    assert user_msg_id is not None  # turn identity (immutable message id), never a timestamp
 
 
 def test_stream_clarification_persisted(client, alice_token, db, chat_module):

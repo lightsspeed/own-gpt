@@ -82,13 +82,14 @@ def test_substantive_turn_is_eligible():
 
 
 def test_throttle_one_per_interval():
-    ex._throttle.clear()
-    assert ex._throttle_allowed("sess-1", 10)
-    assert not ex._throttle_allowed("sess-1", 11)   # 1 < interval
-    assert not ex._throttle_allowed("sess-1", 12)   # 2 < interval
-    assert ex._throttle_allowed("sess-1", 13)       # 3 == interval
-    assert ex._throttle_allowed("sess-2", 1)        # other session independent
-    ex._throttle.clear()
+    from app.learning.extraction.coordinator import ExecutionCoordinator
+
+    c = ExecutionCoordinator(redis_url=None, interval=3)
+    assert c.throttle_allowed("sess-1", 10)
+    assert not c.throttle_allowed("sess-1", 11)   # 1 < interval
+    assert not c.throttle_allowed("sess-1", 12)   # 2 < interval
+    assert c.throttle_allowed("sess-1", 13)       # 3 == interval
+    assert c.throttle_allowed("sess-2", 1)        # other session independent
 
 
 # ── Gate 3: validation (batch-atomic) ────────────────────────────────────
@@ -120,7 +121,18 @@ def test_gate3_drops_batch_containing_secret_material():
 
 # ── End-to-end run_extraction ────────────────────────────────────────────
 
-def test_run_extraction_writes_pending_memories(engine, user, project, monkeypatch):
+@pytest.fixture
+def coord(monkeypatch):
+    """Fresh in-process coordinator (no Redis) — isolates throttle/claim
+    state between tests and keeps the suite free of network access."""
+    from app.learning.extraction.coordinator import ExecutionCoordinator
+
+    c = ExecutionCoordinator(redis_url=None)
+    monkeypatch.setattr(ex, "coordinator", c)
+    return c
+
+
+def test_run_extraction_writes_pending_memories(engine, user, project, coord, monkeypatch):
     from sqlalchemy.orm import Session
 
     S = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
@@ -129,7 +141,8 @@ def test_run_extraction_writes_pending_memories(engine, user, project, monkeypat
         from app.services import chat_persistence as store
 
         conv = store.create_conversation(db, user, "sess-1", title="T")
-        db.add(ChatMessage(session_id=conv.id, role="user", content="I prefer kotlin for side projects and I work at Acme", status="completed", sequence=1))
+        user_msg = ChatMessage(session_id=conv.id, role="user", content="I prefer kotlin for side projects and I work at Acme", status="completed", sequence=1)
+        db.add(user_msg)
         db.add(ChatMessage(session_id=conv.id, role="assistant", content="Good to know!", status="completed", sequence=2))
         db.commit()
 
@@ -153,9 +166,8 @@ def test_run_extraction_writes_pending_memories(engine, user, project, monkeypat
         ]
 
     monkeypatch.setattr(ex, "_extract_with_llm", fake_llm)
-    ex._throttle.clear()
 
-    written = ex.run_extraction("sess-1", user.id, project.id)
+    written = ex.run_extraction("sess-1", user.id, project.id, user_msg.id)
 
     assert written == 2
     with S() as db:
@@ -168,20 +180,19 @@ def test_run_extraction_writes_pending_memories(engine, user, project, monkeypat
             assert e.confidence == 0.65
             assert e.project_id == project.id
             assert e.source_conversation_id == "sess-1"
-    ex._throttle.clear()
 
 
-def test_run_extraction_skips_eval_sessions(engine, user, monkeypatch):
+def test_run_extraction_skips_eval_sessions(engine, user, coord, monkeypatch):
     from sqlalchemy.orm import Session
 
     S = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
     monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
     monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange: [])
 
-    assert ex.run_extraction("eval-9", user.id) == 0
+    assert ex.run_extraction("eval-9", user.id, None, 12345) == 0
 
 
-def test_run_extraction_malformed_llm_output_writes_nothing(engine, user, monkeypatch):
+def test_run_extraction_malformed_llm_output_writes_nothing(engine, user, coord, monkeypatch):
     from sqlalchemy.orm import Session
 
     S = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
@@ -190,16 +201,15 @@ def test_run_extraction_malformed_llm_output_writes_nothing(engine, user, monkey
         from app.services import chat_persistence as store
 
         conv = store.create_conversation(db, user, "sess-2", title="T")
-        db.add(ChatMessage(session_id=conv.id, role="user", content="I prefer kotlin for side projects", status="completed", sequence=1))
+        user_msg = ChatMessage(session_id=conv.id, role="user", content="I prefer kotlin for side projects", status="completed", sequence=1)
+        db.add(user_msg)
         db.add(ChatMessage(session_id=conv.id, role="assistant", content="Good to know!", status="completed", sequence=2))
         db.commit()
 
     monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
     monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange: [{"statement": "x" * 600, "domain": "semantic", "importance": 0.5}])
-    ex._throttle.clear()
 
-    assert ex.run_extraction("sess-2", user.id) == 0
+    assert ex.run_extraction("sess-2", user.id, None, user_msg.id) == 0
 
     with S() as db:
         assert db.execute(select(MemoryEntity)).scalars().all() == []
-    ex._throttle.clear()

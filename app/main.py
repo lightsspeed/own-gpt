@@ -49,6 +49,10 @@ async def lifespan(app: FastAPI):
     yield
     # Teardown
     scheduler.stop()
+    # Stop accepting memory-extraction work; queued tasks are abandoned safely
+    # (single-flight TTL + idempotent writes) and daemon workers never block exit.
+    from app.learning.extraction.executor import extraction_executor
+    extraction_executor.shutdown()
     await engine.dispose()
 
 

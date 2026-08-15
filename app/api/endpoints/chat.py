@@ -300,7 +300,7 @@ async def chat_endpoint(
             raise api_error(409, "duplicate_request", "A message with this request_id already exists")
 
         # Persist the user message BEFORE graph execution
-        store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
+        user_msg = store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
 
         # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
         ctx = _run_pipeline(request.message, request.session_id, document=request.document)
@@ -417,7 +417,7 @@ async def chat_endpoint(
 
         # Detached memory extraction — fire-and-forget, never on the request path
         from app.learning.extraction.extractor import schedule_extraction
-        schedule_extraction(request.session_id, user.id, conv.project_id)
+        schedule_extraction(request.session_id, user.id, conv.project_id, user_msg.id)
 
         return ChatResponse(
             session_id=request.session_id,
@@ -688,7 +688,7 @@ async def chat_stream_endpoint(
             raise api_error(409, "duplicate_request", "A message with this request_id already exists")
 
         # Persist the user message BEFORE graph execution
-        store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
+        user_msg = store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
 
         # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
         ctx = _run_pipeline(request.message, request.session_id, document=request.document)
@@ -896,7 +896,7 @@ async def chat_stream_endpoint(
                         # Detached memory extraction — after the stream is done,
                         # own thread, never on the stream path.
                         from app.learning.extraction.extractor import schedule_extraction
-                        schedule_extraction(request.session_id, user.id, conv.project_id)
+                        schedule_extraction(request.session_id, user.id, conv.project_id, user_msg.id)
                     else:
                         # Generation finished but produced nothing visible —
                         # do not fabricate an assistant message.
