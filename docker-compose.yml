@@ -13,11 +13,13 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/owngpt
       - REDIS_URL=redis://redis:6379/0
       - PG_HOST=db
+      - OLLAMA_BASE_URL=http://ollama:11434
     env_file:
       - .env
     depends_on:
       - db
       - redis
+      - ollama
 
   worker:
     build: .
@@ -29,11 +31,13 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/owngpt
       - REDIS_URL=redis://redis:6379/0
       - PG_HOST=db
+      - OLLAMA_BASE_URL=http://ollama:11434
     env_file:
       - .env
     depends_on:
       - db
       - redis
+      - ollama
     restart: unless-stopped
 
   db:
@@ -54,6 +58,21 @@ services:
     volumes:
       - redis_data:/data
 
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # No host port published: only the OwnGPT containers reach it on the
+    # compose network at http://ollama:11434. Host-based dev overrides
+    # OLLAMA_BASE_URL in .env (http://localhost:11434).
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
@@ -69,4 +88,5 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  ollama_data:
   flashrank_cache:

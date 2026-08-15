@@ -135,12 +135,12 @@ class RAGPipeline:
         cfg = config or {}
 
         self._intent_classifier = IntentClassifier(
-            model_name=cfg.get("intent_model", "gpt-4o-mini"),
+            model_name=cfg.get("intent_model"),
         )
         self._router = RequestRouter()
         self._planner = Planner()
         self._rewriter = QueryRewriter(
-            model_name=cfg.get("rewrite_model", "gpt-4o-mini"),
+            model_name=cfg.get("rewrite_model"),
         )
 
         # Store individual retrievers for mode-switching support
@@ -175,7 +175,7 @@ class RAGPipeline:
             medium_threshold=cfg.get("confidence_medium", 0.45),
         )
         self._validator = ResponseValidator(
-            model_name=cfg.get("validation_model", "gpt-4o-mini"),
+            model_name=cfg.get("validation_model"),
         )
         self._evidence_builder = EvidenceBuilder(
             min_overlap=cfg.get("evidence", {}).get("min_overlap", 0.15),

@@ -23,7 +23,6 @@ from app.agent.pipeline.source_validator import SourceValidator
 from app.services.vector_store import vector_store, embeddings as _embeddings
 from app.learning.telemetry.collector import learning_collector
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from datetime import datetime
 from app.models.user import User
 
@@ -168,7 +167,8 @@ def _extract_tool_names(messages_subset) -> List[str]:
 
 async def _generate_session_title(message: str) -> str:
     try:
-        title_model = ChatOpenAI(model=settings.DEFAULT_MODEL, temperature=0, openai_api_key=settings.OPENAI_API_KEY)
+        from app.core.llm_provider import build_llm
+        title_model = build_llm(model=settings.DEFAULT_MODEL, temperature=0)
         res = await title_model.ainvoke([
             SystemMessage(content="Summarize the user's query in 3 to 5 words as a conversation title. Output ONLY the title, no punctuation, no quotes, no extra text."),
             HumanMessage(content=message)

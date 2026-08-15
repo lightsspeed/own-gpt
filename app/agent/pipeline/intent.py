@@ -136,7 +136,7 @@ _RULES: list[Rule] = [
 class IntentClassifier:
     """
     Classifies user intent using rule-based detection first,
-    falling back to a GPT-4o-mini call only when rules are inconclusive.
+    falling back to the configured LLM only when rules are inconclusive.
     """
 
     _SYSTEM_PROMPT = """You are a precise intent classifier for a RAG knowledge-base assistant.
@@ -155,14 +155,16 @@ IMPORTANT: All comparisons of concepts, tools, or technologies MUST be classifie
 Return ONLY valid JSON — no explanation, no markdown:
 {"intent": "<intent>", "confidence": <0.0-1.0>, "reason": "<10 words max>"}"""
 
-    def __init__(self, model_name: str = "gpt-4o-mini") -> None:
+    def __init__(self, model_name: str | None = None) -> None:
+        # None resolves the provider default (LLM_MODEL under Ollama,
+        # DEFAULT_MODEL under OpenAI) via the provider boundary.
         self._model_name = model_name
         self._llm: object | None = None  # lazy init to avoid import overhead at startup
 
     def _get_llm(self):
         if self._llm is None:
-            from langchain_openai import ChatOpenAI
-            self._llm = ChatOpenAI(model=self._model_name, temperature=0, max_tokens=64)
+            from app.core.llm_provider import build_llm
+            self._llm = build_llm(model=self._model_name, temperature=0, max_tokens=64)
         return self._llm
 
     # ── Private helpers ──────────────────────────────────────────────────────
@@ -184,22 +186,36 @@ Return ONLY valid JSON — no explanation, no markdown:
         return None
 
     def _llm_classify(self, query: str) -> IntentResult:
-        """Calls GPT-4o-mini for intent classification."""
+        """Calls the configured LLM for intent classification.
+
+        The model may return malformed JSON (more likely with local models);
+        a parse failure degrades to intent=unknown, never an exception."""
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        response = self._get_llm().invoke([
-            SystemMessage(content=self._SYSTEM_PROMPT),
-            HumanMessage(content=query),
-        ])
-        data = json.loads(response.content.strip())
-        return IntentResult(
-            intent=Intent(data.get("intent", "unknown")),
-            confidence=float(data.get("confidence", 0.5)),
-            reason=data.get("reason", "LLM classification"),
-            latency_ms=0.0,
-            used_llm=True,
-            matched_rule="LLM_CLASSIFIER",
-        )
+        try:
+            response = self._get_llm().invoke([
+                SystemMessage(content=self._SYSTEM_PROMPT),
+                HumanMessage(content=query),
+            ])
+            data = json.loads(response.content.strip())
+            return IntentResult(
+                intent=Intent(data.get("intent", "unknown")),
+                confidence=float(data.get("confidence", 0.5)),
+                reason=data.get("reason", "LLM classification"),
+                latency_ms=0.0,
+                used_llm=True,
+                matched_rule="LLM_CLASSIFIER",
+            )
+        except Exception as exc:
+            logger.warning("intent_llm_classification_failed error=%s", exc)
+            return IntentResult(
+                intent=Intent.UNKNOWN,
+                confidence=0.4,
+                reason="LLM returned unusable output",
+                latency_ms=0.0,
+                used_llm=True,
+                matched_rule="LLM_CLASSIFIER",
+            )
 
     # ── Public interface ─────────────────────────────────────────────────────
 

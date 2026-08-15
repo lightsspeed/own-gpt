@@ -32,8 +32,15 @@ def _parse_supported_models(raw: str) -> list[str]:
     return list(dict.fromkeys(models))
 
 
-SUPPORTED_MODELS: list[str] = _parse_supported_models(settings.SUPPORTED_MODELS)
-DEFAULT_MODEL: str = settings.DEFAULT_MODEL if settings.DEFAULT_MODEL in SUPPORTED_MODELS else SUPPORTED_MODELS[0]
+if settings.LLM_PROVIDER == "ollama":
+    # The Ollama allowlist is the configured local model — nothing else can
+    # be requested, because no other model exists in the Ollama server.
+    # Never fake OpenAI model names against Ollama.
+    SUPPORTED_MODELS: list[str] = [settings.LLM_MODEL]
+    DEFAULT_MODEL: str = settings.LLM_MODEL
+else:
+    SUPPORTED_MODELS = _parse_supported_models(settings.SUPPORTED_MODELS)
+    DEFAULT_MODEL: str = settings.DEFAULT_MODEL if settings.DEFAULT_MODEL in SUPPORTED_MODELS else SUPPORTED_MODELS[0]
 
 
 def is_supported_model(model: str | None) -> bool:

@@ -118,9 +118,9 @@ def default_session_loader(limit: int = 8, user_id: str = "") -> list[SessionTra
 
 def default_summarize(transcripts: list[SessionTranscript]) -> list[str]:
     """Consolidate transcripts into 2-3 sentence summaries (one per transcript)."""
-    from langchain_openai import ChatOpenAI  # deferred — heavy import
+    from app.core.llm_provider import build_llm  # deferred — heavy import
 
-    model = ChatOpenAI(model=settings.DEFAULT_MODEL, temperature=0.0, openai_api_key=settings.OPENAI_API_KEY)
+    model = build_llm(model=settings.DEFAULT_MODEL, temperature=0.0)
     results: list[str] = []
     for transcript in transcripts:
         prompt = (

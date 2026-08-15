@@ -64,14 +64,16 @@ class ResponseValidator:
     LLM check only runs when rules detect a problem.
     """
 
-    def __init__(self, model_name: str = "gpt-4o-mini") -> None:
+    def __init__(self, model_name: str | None = None) -> None:
+        # None resolves the provider default (LLM_MODEL under Ollama,
+        # DEFAULT_MODEL under OpenAI) via the provider boundary.
         self._model_name = model_name
         self._llm: object | None = None
 
     def _get_llm(self):
         if self._llm is None:
-            from langchain_openai import ChatOpenAI
-            self._llm = ChatOpenAI(model=self._model_name, temperature=0, max_tokens=64)
+            from app.core.llm_provider import build_llm
+            self._llm = build_llm(model=self._model_name, temperature=0, max_tokens=64)
         return self._llm
 
     # ── Tier 1: Rule validation ──────────────────────────────────────────────
@@ -100,16 +102,23 @@ class ResponseValidator:
     # ── Tier 2: LLM validation ───────────────────────────────────────────────
 
     def _llm_validate(self, question: str, response: str) -> tuple[bool, str]:
-        """Returns (is_valid, reason). Uses gpt-4o-mini."""
+        """Returns (is_valid, reason). Uses the configured LLM.
+
+        Malformed JSON from the model (possible with local models) degrades to
+        "invalid" — the response stays flagged for review; never an exception."""
         from langchain_core.messages import HumanMessage, SystemMessage
 
         prompt = f"Question: {question[:500]}\n\nResponse: {response[:2000]}"
-        result = self._get_llm().invoke([
-            SystemMessage(content=_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
-        ])
-        data = json.loads(result.content.strip())
-        return bool(data.get("valid", True)), data.get("reason", "LLM validation")
+        try:
+            result = self._get_llm().invoke([
+                SystemMessage(content=_SYSTEM_PROMPT),
+                HumanMessage(content=prompt),
+            ])
+            data = json.loads(result.content.strip())
+            return bool(data.get("valid", True)), data.get("reason", "LLM validation")
+        except Exception as exc:
+            logger.warning("llm_validation_failed error=%s", exc)
+            return False, "LLM validation returned unusable output"
 
     # ── Public interface ─────────────────────────────────────────────────────
 

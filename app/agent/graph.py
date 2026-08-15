@@ -4,9 +4,10 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.postgres import PostgresSaver
 from app.agent.state import AgentState
 from app.agent.tools import tools
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.language_models import BaseChatModel
 from app.core.config import settings
+from app.core.llm_provider import build_llm
 from app.core.model_config import DEFAULT_MODEL
 from app.services.memory import search_memories as _search_memories
 from app.services.embeddings import build_embedding_provider as _build_embedding_provider
@@ -63,14 +64,11 @@ def setup_checkpointer() -> None:
     checkpointer.setup()
 
 
-def build_model(model_name: str, temperature: float) -> ChatOpenAI:
+def build_model(model_name: str, temperature: float) -> BaseChatModel:
     """Construct the agent LLM for a request. Model is server-validated by
-    the API layer (allowlist) before reaching this point."""
-    return ChatOpenAI(
-        model=model_name,
-        temperature=temperature,
-        openai_api_key=settings.OPENAI_API_KEY,
-    )
+    the API layer (allowlist) before reaching this point; the provider
+    boundary (build_llm) resolves the configured LLM_PROVIDER."""
+    return build_llm(model=model_name, temperature=temperature)
 
 
 def should_continue(state: AgentState) -> str:

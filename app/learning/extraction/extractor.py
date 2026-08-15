@@ -34,7 +34,10 @@ from app.models.memory import (
 
 logger = logging.getLogger(__name__)
 
-EXTRACTION_MODEL = "gpt-4o-mini"
+# Extraction LLM: the provider default when running on Ollama, the classic
+# OpenAI extraction model otherwise. Structured-JSON reliability differs by
+# provider — Gate 3 validation is provider-agnostic and batch-atomic.
+EXTRACTION_MODEL = settings.LLM_MODEL if settings.LLM_PROVIDER == "ollama" else "gpt-4o-mini"
 MAX_CANDIDATES = 3
 MAX_STATEMENT_CHARS = 500
 # Throttle: at most one extraction per N user turns, per session.
@@ -111,13 +114,9 @@ def _extract_with_llm(exchange: str) -> list[dict]:
     malformed JSON twice (batch dropped).
     """
     from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_openai import ChatOpenAI
+    from app.core.llm_provider import build_llm
 
-    model = ChatOpenAI(
-        model=EXTRACTION_MODEL,
-        temperature=0.0,
-        openai_api_key=settings.OPENAI_API_KEY,
-    )
+    model = build_llm(model=EXTRACTION_MODEL, temperature=0.0)
     system = (
         "You are a memory extraction service. From the conversation turn below, "
         "extract at most %d durable facts about the user or their projects "
