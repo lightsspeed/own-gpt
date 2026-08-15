@@ -38,6 +38,26 @@ export interface Recommendation {
   description?: string
 }
 
+export interface UsageData {
+  records: number
+  tokens_in: number
+  tokens_out: number
+  total_tokens: number
+  estimated_cost_usd: number
+  cost_per_1k_input: number
+  cost_per_1k_output: number
+}
+
+export interface DashboardCounters {
+  user_events: number
+  thumbs_up: number
+  thumbs_down: number
+  thumb_approval_rate: number
+  copies: number
+  regenerations: number
+  usage?: UsageData
+}
+
 export interface DailyBriefData {
   overall_health: number | null
   recommendation_count: number
@@ -85,8 +105,12 @@ export const dashboardApi = {
     return data?.length ?? 0
   },
 
-  async getCounters() {
-    return fetchJson<any>(`${API_BASE}/telemetry/dashboard`, { user_events: 0, thumbs_up: 0, thumbs_down: 0, thumb_approval_rate: 0, copies: 0, regenerations: 0 })
+  async getCounters(): Promise<DashboardCounters> {
+    const data = await fetchJson<any>(`${API_BASE}/telemetry/dashboard`, { user_events: 0, thumbs_up: 0, thumbs_down: 0, thumb_approval_rate: 0, copies: 0, regenerations: 0 })
+    return {
+      ...data,
+      usage: data?.usage ?? { records: 0, tokens_in: 0, tokens_out: 0, total_tokens: 0, estimated_cost_usd: 0, cost_per_1k_input: 0, cost_per_1k_output: 0 },
+    }
   },
 
   async getAutomationHistory(): Promise<AutomationRun[]> {

@@ -8,21 +8,24 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
+from sqlalchemy.orm import Session, sessionmaker
+
 from app.agent.graph import graph, pool
 from app.evaluation.models import build_evaluation_result
-from app.core.database import get_db
-from app.models.chat import ChatSession
+from app.core.database import get_sync_db
+from app.core.config import settings
+from app.core.model_config import resolve_model, validate_temperature, ModelConfigError
+from app.api.deps import get_current_user, api_error
+from app.services import chat_persistence as store
 from app.agent.pipeline import RAGPipeline, PipelineContext, load_pipeline_config
 from app.agent.pipeline.evidence_builder import _parse_chunk_references
 from app.agent.pipeline.source_validator import SourceValidator
 from app.services.vector_store import vector_store, embeddings as _embeddings
-from app.core.config import settings
 from app.learning.telemetry.collector import learning_collector
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
-from datetime import datetime
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from datetime import datetime
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -49,9 +52,9 @@ _pipeline = RAGPipeline(
 
 
 def _count_tokens(text: str) -> int:
-    import tiktoken
     try:
-        enc = tiktoken.encoding_for_model("gpt-4o-mini")
+        import tiktoken
+        enc = tiktoken.get_encoding("cl100k_base")
         return len(enc.encode(text))
     except Exception:
         return len(text) // 4
@@ -60,6 +63,9 @@ def _count_tokens(text: str) -> int:
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    model: Optional[str] = None
+    temperature: Optional[float] = None
+    request_id: Optional[str] = None
     system_prompt: Optional[str] = None
     active_tools: Optional[dict[str, bool]] = None
     document: Optional[str] = None
@@ -84,6 +90,8 @@ class HistoryMessage(BaseModel):
     role: str
     content: str
     resources: List[ResourceItem] = []
+    model: Optional[str] = None
+    status: str = "completed"
 
 
 class HistoryResponse(BaseModel):
@@ -95,6 +103,7 @@ class SessionListItem(BaseModel):
     id: str
     title: str
     is_pinned: bool = False
+    selected_model: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -102,6 +111,7 @@ class SessionListItem(BaseModel):
 class SessionUpdateRequest(BaseModel):
     title: Optional[str] = None
     is_pinned: Optional[bool] = None
+    project_id: Optional[str] = None
 
 
 class SessionListResponse(BaseModel):
@@ -145,37 +155,6 @@ def _flatten_content(content) -> str:
     return str(content)
 
 
-def _extract_resources(messages_subset) -> List[ResourceItem]:
-    resources = []
-    seen = set()
-    for msg in messages_subset:
-        if type(msg).__name__ == "ToolMessage":
-            content = str(msg.content)
-            parts = re.split(r"---|\n\n", content)
-            for part in parts:
-                match = re.search(r"Source:\s*([^\n]+)", part)
-                if match:
-                    title = match.group(1).strip()
-                    if title in seen:
-                        continue
-                    seen.add(title)
-                    snippet_lines = []
-                    for line in part.split("\n"):
-                        clean = line.strip()
-                        if clean and not clean.startswith("Source:") and not clean.startswith("Found the following") and not clean.startswith("Web search results:"):
-                            clean = re.sub(r"\*\*|#", "", clean)
-                            snippet_lines.append(clean)
-                    snippet = " ".join(snippet_lines)[:180]
-                    if len(snippet) >= 180:
-                        snippet += "..."
-
-                    if title.startswith("http://") or title.startswith("https://"):
-                        resources.append(ResourceItem(type="web", title=title, url=title, snippet=snippet))
-                    else:
-                        resources.append(ResourceItem(type="file", title=title, snippet=snippet))
-    return resources
-
-
 def _extract_tool_names(messages_subset) -> List[str]:
     tools_used = []
     for msg in messages_subset:
@@ -189,7 +168,7 @@ def _extract_tool_names(messages_subset) -> List[str]:
 
 async def _generate_session_title(message: str) -> str:
     try:
-        title_model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        title_model = ChatOpenAI(model=settings.DEFAULT_MODEL, temperature=0, openai_api_key=settings.OPENAI_API_KEY)
         res = await title_model.ainvoke([
             SystemMessage(content="Summarize the user's query in 3 to 5 words as a conversation title. Output ONLY the title, no punctuation, no quotes, no extra text."),
             HumanMessage(content=message)
@@ -206,8 +185,11 @@ def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] =
     return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode, filename=document)
 
 
-def _post_process(ctx: PipelineContext, response: str, new_messages: list) -> str:
+def _post_process(ctx: PipelineContext, response: str, new_messages: list, model: str = "", temperature: float = 0.0) -> str:
     """Validate response, store trace, and record telemetry. Returns the learning record_id."""
+    if ctx.trace:
+        ctx.trace.model = model
+        ctx.trace.temperature = temperature
     ctx.trace.memory_used = True  # memory is always checked in call_model
     ctx.trace.tools_used = _extract_tool_names(new_messages)
     ctx.trace.prompt_tokens = _count_tokens(ctx.question)
@@ -244,29 +226,81 @@ def _persist_quality(session_id: str, question: str, answer_mode: str, validatio
         logger.warning("quality_persist_failed error=%s", exc)
 
 
+def _resolve_generation_params(request: ChatRequest) -> tuple[str, float]:
+    """Validate model + temperature against the server allowlist."""
+    try:
+        model = resolve_model(request.model)
+        temperature = validate_temperature(request.temperature)
+        return model, temperature
+    except ModelConfigError as e:
+        raise api_error(400, "invalid_generation_config", str(e))
+
+
+def _load_conversation(db: Session, user: User, session_id: str, require: bool = True):
+    """Owned conversation lookup. 404 for both missing and foreign
+    conversations — never reveal that a conversation exists."""
+    conv = store.get_conversation(db, session_id, user.id)
+    if conv is None and require:
+        raise api_error(404, "conversation_not_found", "Conversation not found")
+    return conv
+
+
+def _checkpoint_len(existing_state) -> int:
+    return len(existing_state.values.get("messages", [])) if existing_state and existing_state.values else 0
+
+
+def _checkpoint_messages(existing_state):
+    if existing_state and existing_state.values:
+        return existing_state.values.get("messages", [])
+    return []
+
+
+def _ensure_backfilled(db: Session, conv, checkpoint_messages) -> None:
+    """Idempotently backfill legacy conversations from checkpoint state."""
+    if not checkpoint_messages:
+        return
+    try:
+        store.backfill_messages_from_checkpoint(db, conv, checkpoint_messages)
+    except Exception as exc:
+        logger.warning("backfill_failed conversation=%s error=%s", conv.id, exc)
+
+
 # ---------------------------------------------------------------------------
-# POST /chat  – send a message; the checkpointer handles multi-turn context
+# POST /chat  – send a message (non-streaming); app DB is the chat history
 # ---------------------------------------------------------------------------
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat_endpoint(
+    request: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
+    model, temperature = _resolve_generation_params(request)
     try:
         config = {"configurable": {"thread_id": request.session_id}}
-        existing_state = graph.get_state(config)
-        existing_len = len(existing_state.values.get("messages", [])) if existing_state and existing_state.values else 0
+        existing_state = await asyncio.to_thread(graph.get_state, config)
+        existing_len = _checkpoint_len(existing_state)
 
-        # Upsert session
-        stmt = select(ChatSession).where(ChatSession.id == request.session_id)
-        res = await db.execute(stmt)
-        session = res.scalar_one_or_none()
-
-        if session is None:
+        # Conversation (owned) — create if missing
+        conv = _load_conversation(db, user, request.session_id, require=False)
+        if conv is None:
+            if store.get_conversation_any_owner(db, request.session_id) is not None:
+                raise api_error(404, "not_found", "Session not found")
             title = await _generate_session_title(request.message)
-            session = ChatSession(id=request.session_id, title=title)
-            db.add(session)
-            await db.commit()
+            conv = store.create_conversation(db, user, request.session_id, title=title, selected_model=model)
         else:
-            session.updated_at = datetime.utcnow()
-            await db.commit()
+            if conv.selected_model != model:
+                store.update_conversation(db, conv, selected_model=model)
+            store.touch_conversation(db, conv)
+
+        # Backfill legacy history from checkpoints (idempotent, count==0 only)
+        _ensure_backfilled(db, conv, _checkpoint_messages(existing_state))
+
+        # Idempotency: identical request_id retry → reject before double work
+        if request.request_id and store.get_user_message_by_request_id(db, conv.id, request.request_id):
+            raise api_error(409, "duplicate_request", "A message with this request_id already exists")
+
+        # Persist the user message BEFORE graph execution
+        store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
 
         # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
         ctx = _run_pipeline(request.message, request.session_id, document=request.document)
@@ -282,6 +316,7 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
                 ctx.trace.total_latency_ms = 0.0
             if _pipeline_config.get("trace_enabled", True):
                 _pipeline.tracer.store(ctx.trace)
+            store.persist_assistant_message(db, conv, response, model, status=store.MESSAGE_STATUS_COMPLETED)
             return ChatResponse(
                 session_id=request.session_id,
                 response=response,
@@ -298,13 +333,18 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
             "answer_mode": ctx.answer_mode,
+            "session_id": request.session_id,
+            "model": model,
+            "temperature": temperature,
         }
 
-        final_state = graph.invoke(initial_state, config=config)
+        final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
 
         new_messages = final_state["messages"][existing_len:]
         last_message = final_state["messages"][-1]
         response = last_message.content
+        if not isinstance(response, str):
+            response = _flatten_content(response)
 
         # Filter resources based on answer mode and evidence builder
         evidence_result = _pipeline._evidence_builder.build(
@@ -359,7 +399,7 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
                 )
 
         # ── Stages 8-9: Validate response + store trace ───────────────────────
-        record_id = _post_process(ctx, response, new_messages)
+        record_id = _post_process(ctx, response, new_messages, model=model, temperature=temperature)
         if record_id:
             _persist_quality(
                 session_id=request.session_id,
@@ -370,6 +410,9 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
                 record_id=record_id,
             )
 
+        # Persist the completed assistant message (exactly once, final content)
+        store.persist_assistant_message(db, conv, response, model, status=store.MESSAGE_STATUS_COMPLETED)
+
         return ChatResponse(
             session_id=request.session_id,
             response=response,
@@ -377,41 +420,51 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
             answer_mode=ctx.answer_mode,
             record_id=record_id,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Chat endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/sessions  – list all chat sessions
+# GET /chat/sessions  – list the CURRENT user's conversations
 # ---------------------------------------------------------------------------
 @router.get("/chat/sessions", response_model=SessionListResponse)
-async def list_sessions(db: AsyncSession = Depends(get_db)):
+async def list_sessions(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
-        stmt = select(ChatSession).order_by(ChatSession.is_pinned.desc(), ChatSession.updated_at.desc())
-        res = await db.execute(stmt)
-        sessions = res.scalars().all()
+        sessions = store.list_conversations(db, user)
         return SessionListResponse(
             sessions=[
                 SessionListItem(
                     id=s.id,
                     title=s.title,
                     is_pinned=s.is_pinned,
+                    selected_model=s.selected_model,
                     created_at=s.created_at,
-                    updated_at=s.updated_at
+                    updated_at=s.updated_at,
                 ) for s in sessions
             ]
         )
     except Exception as e:
         logger.error(f"Failed to list sessions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/search  – search sessions and messages
+# GET /chat/search  – search titles + message content, scoped to the user
 # ---------------------------------------------------------------------------
 @router.get("/chat/search", response_model=SearchResponse)
-async def search_conversations(q: str = "", type: str = "all", limit: int = 20, db: AsyncSession = Depends(get_db)):
+async def search_conversations(
+    q: str = "",
+    type: str = "all",
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
         query = q.strip()
         if not query:
@@ -419,193 +472,217 @@ async def search_conversations(q: str = "", type: str = "all", limit: int = 20, 
 
         results: List[SearchResultItem] = []
 
-        # Search session titles
-        stmt = (
-            select(ChatSession)
-            .where(ChatSession.title.ilike(f"%{query}%"))
-            .order_by(ChatSession.updated_at.desc())
-            .limit(limit)
-        )
-        res = await db.execute(stmt)
-        for s in res.scalars().all():
-            preview = s.title[:120]
-            if query.lower() in preview.lower():
+        # Search session titles (owned only)
+        convs = store.list_conversations(db, user, limit=100)
+        for s in convs:
+            if query.lower() in (s.title or "").lower():
+                preview = (s.title or "")[:120]
                 idx = preview.lower().index(query.lower())
                 start = max(0, idx - 30)
                 end = min(len(preview), idx + len(query) + 30)
                 preview = ("…" if start > 0 else "") + preview[start:end] + ("…" if end < len(preview) else "")
-            results.append(SearchResultItem(
-                session_id=s.id,
-                session_title=s.title,
-                match_type="title",
-                preview=preview,
-                timestamp=s.updated_at or s.created_at,
-            ))
-
-        # Search message content via history endpoint per session
-        if len(results) < limit:
-            msg_stmt = (
-                select(ChatSession)
-                .order_by(ChatSession.updated_at.desc())
-                .limit(limit * 2)
-            )
-            msg_res = await db.execute(msg_stmt)
-            for s in msg_res.scalars().all():
+                results.append(SearchResultItem(
+                    session_id=s.id,
+                    session_title=s.title,
+                    match_type="title",
+                    preview=preview,
+                    timestamp=s.updated_at or s.created_at,
+                ))
                 if len(results) >= limit:
                     break
-                if any(r.session_id == s.id for r in results):
-                    continue
-                try:
-                    config = {"configurable": {"thread_id": s.id}}
-                    state = graph.get_state(config)
-                    if not state or not state.values:
-                        continue
-                    for msg in state.values.get("messages", []):
-                        content = msg.content if isinstance(msg.content, str) else ""
-                        if query.lower() in content.lower():
-                            idx = content.lower().index(query.lower())
-                            start = max(0, idx - 60)
-                            end = min(len(content), idx + len(query) + 60)
-                            preview = ("…" if start > 0 else "") + content[start:end] + ("…" if end < len(content) else "")
-                            results.append(SearchResultItem(
-                                session_id=s.id,
-                                session_title=s.title,
-                                match_type="message",
-                                preview=preview,
-                                timestamp=s.updated_at or s.created_at,
-                            ))
-                            break
-                except Exception:
-                    continue
 
-        search_logger.info("search query=%q hits=%d", query, len(results))
+        # Search message content via the application chat database — never
+        # by parsing LangGraph checkpoint blobs.
+        if len(results) < limit:
+            for msg in store.search_messages(db, user, query, limit=limit * 2):
+                if len(results) >= limit:
+                    break
+                if any(r.session_id == msg.session_id for r in results):
+                    continue
+                conv = next((c for c in convs if c.id == msg.session_id), None)
+                if conv is None:
+                    continue
+                content = msg.content or ""
+                if query.lower() in content.lower():
+                    idx = content.lower().index(query.lower())
+                    start = max(0, idx - 60)
+                    end = min(len(content), idx + len(query) + 60)
+                    preview = ("…" if start > 0 else "") + content[start:end] + ("…" if end < len(content) else "")
+                    results.append(SearchResultItem(
+                        session_id=msg.session_id,
+                        session_title=conv.title,
+                        match_type="message",
+                        preview=preview,
+                        timestamp=msg.created_at or conv.updated_at or conv.created_at,
+                    ))
+
+        search_logger.info("search query=%s hits=%d", query, len(results))
         return SearchResponse(query=query, results=results[:limit], total=len(results))
     except Exception as e:
         logger.error("Search endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# PATCH /chat/sessions/{session_id}  – update title / pin state
+# PATCH /chat/sessions/{session_id}  – update title / pin state (owned only)
 # ---------------------------------------------------------------------------
 @router.patch("/chat/sessions/{session_id}", response_model=SessionListItem)
-async def update_session(session_id: str, request: SessionUpdateRequest, db: AsyncSession = Depends(get_db)):
+async def update_session(
+    session_id: str,
+    request: SessionUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
-        stmt = select(ChatSession).where(ChatSession.id == session_id)
-        res = await db.execute(stmt)
-        session = res.scalar_one_or_none()
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        if request.title is not None:
-            session.title = request.title
-        if request.is_pinned is not None:
-            session.is_pinned = request.is_pinned
-
-        session.updated_at = datetime.utcnow()
-        await db.commit()
-        await db.refresh(session)
-
+        conv = _load_conversation(db, user, session_id)
+        body = request.model_dump(exclude_unset=True)
+        if "project_id" in body:
+            # Ownership chain: the project must belong to the requesting
+            # user; the FK proves existence, not ownership.
+            try:
+                from app.services.memory import resolve_owned_project
+                resolve_owned_project(db, body["project_id"], user.id)
+            except ValueError:
+                raise api_error(404, "project_not_found", "Project not found")
+            store.update_conversation(db, conv, project_id=body["project_id"])
+        store.update_conversation(db, conv, title=request.title, is_pinned=request.is_pinned)
         return SessionListItem(
-            id=session.id,
-            title=session.title,
-            is_pinned=session.is_pinned,
-            created_at=session.created_at,
-            updated_at=session.updated_at
+            id=conv.id,
+            title=conv.title,
+            is_pinned=conv.is_pinned,
+            selected_model=conv.selected_model,
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to update session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/{session_id}/history  – load past messages
+# GET /chat/{session_id}/history  – load messages from application persistence
 # ---------------------------------------------------------------------------
 @router.get("/chat/{session_id}/history", response_model=HistoryResponse)
-async def get_history(session_id: str):
+async def get_history(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
-        config = {"configurable": {"thread_id": session_id}}
-        state = graph.get_state(config)
+        conv = _load_conversation(db, user, session_id, require=False)
+
+        # Legacy conversations: backfill chat_messages from checkpoint state
+        # (idempotent) so the UI never parses checkpoint blobs.
+        existing_state = await asyncio.to_thread(graph.get_state, {"configurable": {"thread_id": session_id}})
+        checkpoint_msgs = _checkpoint_messages(existing_state)
+        if conv is None:
+            # No app row yet: adopt the legacy checkpoint conversation for the
+            # requesting user (404 if the id is owned by someone else).
+            if store.get_conversation_any_owner(db, session_id) is not None:
+                raise api_error(404, "not_found", "Session not found")
+            first = next((m.content for m in checkpoint_msgs if m), session_id)
+            conv = store.create_conversation(db, user, session_id, title=str(first)[:60])
+        _ensure_backfilled(db, conv, checkpoint_msgs)
 
         messages: List[HistoryMessage] = []
-        if state and state.values:
-            all_messages = state.values.get("messages", [])
-
-            current_resources = []
-
-            for msg in all_messages:
-                msg_type = type(msg).__name__
-                if msg_type == "HumanMessage":
-                    content = msg.content if isinstance(msg.content, str) else _flatten_content(msg.content)
-                    messages.append(HistoryMessage(role="user", content=content))
-                    current_resources = []
-                elif msg_type == "ToolMessage":
-                    current_resources.extend(_extract_resources([msg]))
-                elif msg_type == "AIMessage" and msg.content:
-                    content = msg.content if isinstance(msg.content, str) else _flatten_content(msg.content)
-                    messages.append(HistoryMessage(
-                        role="assistant",
-                        content=content,
-                        resources=current_resources
-                    ))
-                    current_resources = []
+        for m in store.list_messages(db, conv.id):
+            if m.role not in ("user", "assistant"):
+                continue
+            kwargs = m.additional_kwargs or {}
+            resources = [
+                ResourceItem(**r) for r in kwargs.get("resources", [])
+                if isinstance(r, dict) and r.get("title")
+            ]
+            messages.append(HistoryMessage(
+                role=m.role,
+                content=m.content,
+                resources=resources,
+                model=m.model,
+                status=m.status,
+            ))
 
         return HistoryResponse(session_id=session_id, messages=messages)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("History endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# DELETE /chat/sessions/{session_id}
+# DELETE /chat/sessions/{session_id}  – owned only; removes app rows + checkpoints
 # ---------------------------------------------------------------------------
 @router.delete("/chat/sessions/{session_id}")
-async def delete_session(session_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_session(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
-        stmt = delete(ChatSession).where(ChatSession.id == session_id)
-        await db.execute(stmt)
-        await db.commit()
+        conv = _load_conversation(db, user, session_id)
+        store.delete_conversation(db, conv)  # cascades chat_messages
 
         try:
             with pool.connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (session_id,))
-                    cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (session_id,))
-                    cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (session_id,))
+                    cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (conv.thread_id,))
+                    cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (conv.thread_id,))
+                    cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (conv.thread_id,))
         except Exception as checkpoint_err:
             logger.warning(f"Failed to clean checkpointer tables for {session_id}: {checkpoint_err}")
 
         return {"status": "deleted"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to delete session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/stream  – send a message and stream the response (SSE)
+# POST /chat/stream  – SSE streaming with reliable persistence
+#
+# Lifecycle:
+#   validate user + ownership → persist user message → backfill (legacy) →
+#   run graph in a worker thread streaming tokens to the client while
+#   accumulating the final content server-side → on success persist the
+#   completed assistant message exactly once → on failure emit error and
+#   persist a failed/partial assistant row (never a fake success).
 # ---------------------------------------------------------------------------
 @router.post("/chat/stream")
-async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat_stream_endpoint(
+    request: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
+    model, temperature = _resolve_generation_params(request)
     try:
         config = {"configurable": {"thread_id": request.session_id}}
         existing_state = await asyncio.to_thread(graph.get_state, config)
-        existing_len = len(existing_state.values.get("messages", [])) if existing_state and existing_state.values else 0
+        existing_len = _checkpoint_len(existing_state)
 
-        # Upsert session
-        stmt = select(ChatSession).where(ChatSession.id == request.session_id)
-        res = await db.execute(stmt)
-        session = res.scalar_one_or_none()
-
-        if session is None:
+        # Conversation (owned) — create if missing
+        conv = _load_conversation(db, user, request.session_id, require=False)
+        if conv is None:
+            if store.get_conversation_any_owner(db, request.session_id) is not None:
+                raise api_error(404, "not_found", "Session not found")
             title = await _generate_session_title(request.message)
-            session = ChatSession(id=request.session_id, title=title)
-            db.add(session)
-            await db.commit()
+            conv = store.create_conversation(db, user, request.session_id, title=title, selected_model=model)
         else:
-            session.updated_at = datetime.utcnow()
-            await db.commit()
+            if conv.selected_model != model:
+                store.update_conversation(db, conv, selected_model=model)
+            store.touch_conversation(db, conv)
+
+        _ensure_backfilled(db, conv, _checkpoint_messages(existing_state))
+
+        # Idempotency: reject duplicate logical requests before any work
+        if request.request_id and store.get_user_message_by_request_id(db, conv.id, request.request_id):
+            raise api_error(409, "duplicate_request", "A message with this request_id already exists")
+
+        # Persist the user message BEFORE graph execution
+        store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
 
         # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
         ctx = _run_pipeline(request.message, request.session_id, document=request.document)
@@ -637,6 +714,7 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                 ctx.trace.total_latency_ms = 0.0
             if _pipeline_config.get("trace_enabled", True):
                 _pipeline.tracer.store(ctx.trace)
+            store.persist_assistant_message(db, conv, msg, model, status=store.MESSAGE_STATUS_COMPLETED)
 
             async def clarify_generator():
                 yield f"data: {json.dumps({'type': 'content', 'content': msg})}\n\n"
@@ -666,12 +744,33 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
             "answer_mode": ctx.answer_mode,
+            "session_id": request.session_id,
+            "model": model,
+            "temperature": temperature,
         }
 
         q: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_event_loop()
+        # Session factory bound to THIS request's engine: the stream thread
+        # must never touch the global app engine (unbounded connect time),
+        # and tests overriding the dependency get their engine here too.
+        request_session_factory = sessionmaker(bind=db.get_bind(), expire_on_commit=False)
 
         def stream_in_thread():
+            accumulated: list[str] = []
+            persisted = False
+
+            def persist_assistant(content: str, status: str, error: str | None = None) -> None:
+                nonlocal persisted
+                if persisted:
+                    return
+                try:
+                    with request_session_factory() as sdb:
+                        store.persist_assistant_message(sdb, conv, content, model, status=status, error=error)
+                    persisted = True
+                except Exception as exc:
+                    logger.error("assistant_persist_failed conversation=%s error=%s", conv.id, exc)
+
             try:
                 for stream_mode, stream_event in graph.stream(
                     initial_state,
@@ -681,7 +780,11 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                     if stream_mode == "messages":
                         msg_chunk, _ = stream_event
                         if hasattr(msg_chunk, "content") and msg_chunk.content and msg_chunk.type == "AIMessageChunk":
-                            loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": msg_chunk.content}))
+                            chunk = msg_chunk.content
+                            if isinstance(chunk, list):
+                                chunk = _flatten_content(chunk)
+                            accumulated.append(chunk)
+                            loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": chunk}))
                     elif stream_mode == "updates":
                         for node_name, node_output in stream_event.items():
                             if node_name == "tools" and isinstance(node_output, dict):
@@ -695,14 +798,11 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                                             tname = tc.get("name") or tc.get("function", {}).get("name", "tool")
                                             loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "tool_start", "tool": tname}))
 
-                # Post-processing after streaming completes
+                # Streaming completed — post-processing + persistence
                 final_state = graph.get_state(config)
                 if final_state and final_state.values:
                     new_msgs = final_state.values.get("messages", [])[existing_len:]
-
-                    # Extract response text from the last assistant message
-                    last_msg = new_msgs[-1] if new_msgs else None
-                    response_text = str(last_msg.content) if last_msg and hasattr(last_msg, "content") else ""
+                    response_text = "".join(accumulated).strip()
 
                     # Build evidence items from what the LLM actually cited
                     evidence_result = _pipeline._evidence_builder.build(
@@ -728,7 +828,7 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                         "answer_mode_metadata": ctx.answer_mode_metadata,
                     }))
 
-# Citation contract check
+                    # Citation contract check
                     ref_indices = _parse_chunk_references(response_text)
                     validator = SourceValidator()
                     validation_result = validator.validate(
@@ -780,7 +880,15 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                     # Stages 8-9: Validate + trace
                     record_id = ""
                     if response_text:
-                        record_id = _post_process(ctx, response_text, new_msgs)
+                        record_id = _post_process(ctx, response_text, new_msgs, model=model, temperature=temperature)
+
+                    # Persist the completed assistant message exactly once
+                    if response_text:
+                        persist_assistant(response_text, store.MESSAGE_STATUS_COMPLETED)
+                    else:
+                        # Generation finished but produced nothing visible —
+                        # do not fabricate an assistant message.
+                        logger.warning("empty_assistant_response conversation=%s", conv.id)
 
                     # Emit the learning record_id for feedback correlation
                     if record_id:
@@ -835,6 +943,11 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                     loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": friendly}))
                 else:
                     loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "error", "message": err_msg}))
+                partial = "".join(accumulated).strip()
+                if partial:
+                    # Case C: partial output exists → preserve it, marked failed.
+                    persist_assistant(partial, store.MESSAGE_STATUS_FAILED, error=err_msg[:2000])
+                # Case B: no output → no fake assistant message.
             finally:
                 loop.call_soon_threadsafe(q.put_nowait, "[DONE]")
 
@@ -856,13 +969,17 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
             }
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Chat streaming endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/evaluate  – run pipeline + agent, return structured evaluation
+# POST /chat/evaluate  – run pipeline + agent, return structured evaluation.
+# Evaluation runs use eval-* thread ids and are NOT user conversations: they
+# are not persisted to chat_messages.
 # ---------------------------------------------------------------------------
 class EvaluateRequest(BaseModel):
     message: str
@@ -871,12 +988,20 @@ class EvaluateRequest(BaseModel):
 
 
 @router.post("/chat/evaluate")
-async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = Depends(get_db)):
+async def chat_evaluate_endpoint(
+    request: EvaluateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
         session_id = request.session_id or f"eval-{int(time.time())}"
+        # If a real conversation id is given, enforce ownership.
+        if request.session_id and not request.session_id.startswith("eval-"):
+            _load_conversation(db, user, request.session_id)
+
         config = {"configurable": {"thread_id": session_id}}
         existing_state = await asyncio.to_thread(graph.get_state, config)
-        existing_len = len(existing_state.values.get("messages", [])) if existing_state and existing_state.values else 0
+        existing_len = _checkpoint_len(existing_state)
 
         # Stage 1-7: Run pre-processing pipeline (with optional retriever mode)
         ctx = _run_pipeline(request.message, session_id, retriever_mode=request.retriever)
@@ -905,6 +1030,9 @@ async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = De
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
             "answer_mode": ctx.answer_mode,
+            "session_id": session_id,
+            "model": resolve_model(None),
+            "temperature": settings.TEMPERATURE_DEFAULT,
         }
 
         final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
@@ -925,6 +1053,8 @@ async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = De
         result = build_evaluation_result(ctx, answer=response)
         return result.to_dict()
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Evaluate endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")

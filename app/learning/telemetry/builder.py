@@ -18,6 +18,12 @@ from ..pii.sanitizer import sanitize
 logger = logging.getLogger(__name__)
 
 
+def _default_model() -> str:
+    from app.core.config import settings
+
+    return settings.DEFAULT_MODEL
+
+
 def build_learning_record(
     ctx: PipelineContext,
     response: str = "",
@@ -35,6 +41,7 @@ def build_learning_record(
         A populated LearningRecord ready for storage.
     """
     sanitized = sanitize(ctx.question)
+    model = (ctx.trace.model if ctx.trace and ctx.trace.model else None) or _default_model()
     record = LearningRecord(
         session_id=ctx.session_id,
         question=ctx.question,
@@ -45,7 +52,7 @@ def build_learning_record(
         intent_confidence=ctx.intent.confidence if ctx.intent else 0.0,
         retriever=ctx.answer_mode_metadata.get("retrieval_method", ""),
         answer_mode=ctx.answer_mode,
-        model="gpt-4o-mini",
+        model=model,
         latency_ms=ctx.trace.total_latency_ms if ctx.trace else 0.0,
         tokens_in=ctx.trace.prompt_tokens if ctx.trace else 0,
         tokens_out=ctx.trace.completion_tokens if ctx.trace else 0,

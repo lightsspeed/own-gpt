@@ -21,6 +21,7 @@ const OwnRecommendationsPage = lazy(() => import('./components/own-platform/OwnR
 const OwnDecisionsPage = lazy(() => import('./components/own-platform/OwnDecisionsPage'))
 const OwnArtifactsPage = lazy(() => import('./components/own-platform/OwnArtifactsPage'))
 const OwnConfigPage = lazy(() => import('./components/own-platform/OwnConfigPage'))
+const OwnMemoriesPage = lazy(() => import('./components/own-platform/OwnMemoriesPage'))
 const PlaceholderPage = lazy(() => import('./components/own-platform/PlaceholderPage'))
 
 function RouteSuspense({ children }: { children: React.ReactNode }) {
@@ -65,6 +66,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="capabilities" element={<RouteSuspense><OwnCapabilitiesPage /></RouteSuspense>} />
           <Route path="artifacts" element={<RouteSuspense><OwnArtifactsPage /></RouteSuspense>} />
           <Route path="history" element={<RouteSuspense><PlaceholderPage title="Conversation History" description="Browse and search past conversations." /></RouteSuspense>} />
+          <Route path="memories" element={<RouteSuspense><OwnMemoriesPage /></RouteSuspense>} />
           <Route path="settings" element={<RouteSuspense><PlaceholderPage title="Settings" description="Configure platform preferences and model parameters." /></RouteSuspense>} />
         </Route>
       </Routes>

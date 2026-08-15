@@ -19,6 +19,10 @@ from ..telemetry.collector import learning_collector
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# OpenAI pricing per 1K tokens (gpt-4o-mini) — mirrors app/evaluation/benchmark.py
+COST_PER_1K_INPUT = 0.150
+COST_PER_1K_OUTPUT = 0.600
+
 
 class EventRequest(BaseModel):
     type: str
@@ -77,6 +81,13 @@ async def get_dashboard():
     copies = by_type.get("copy", 0)
     regens = by_type.get("regenerate", 0)
 
+    usage = store.usage_totals()
+    total_tokens = usage["tokens_in"] + usage["tokens_out"]
+    estimated_cost = (
+        usage["tokens_in"] / 1000 * COST_PER_1K_INPUT
+        + usage["tokens_out"] / 1000 * COST_PER_1K_OUTPUT
+    )
+
     return {
         "learning_records": records,
         "user_events": events,
@@ -87,4 +98,13 @@ async def get_dashboard():
         "regenerations": regens,
         "events_by_type": by_type,
         "records_by_intent": by_intent,
+        "usage": {
+            "records": usage["records"],
+            "tokens_in": usage["tokens_in"],
+            "tokens_out": usage["tokens_out"],
+            "total_tokens": total_tokens,
+            "estimated_cost_usd": round(estimated_cost, 6),
+            "cost_per_1k_input": COST_PER_1K_INPUT,
+            "cost_per_1k_output": COST_PER_1K_OUTPUT,
+        },
     }

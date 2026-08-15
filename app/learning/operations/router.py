@@ -16,6 +16,7 @@ from ..evidence.engine import EvidenceEngine
 from ..config.manager import ConfigManager
 from .review_store import ReviewStore
 from .tool_execution import ToolExecutionStore
+from .memory import MemoryStore
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/operations", tags=["operations"])
@@ -611,3 +612,52 @@ async def reject_tool_execution(
         raise HTTPException(status_code=400, detail=f"Execution is {execution.status}, not pending")
     execution = store.transition(execution_id, "rejected", note=f"Rejected by {operator}")
     return {"status": "rejected", "execution_id": execution_id}
+
+
+# ── Memory Workspace (agent semantic memory) ────────────────────────────
+
+
+@router.get("/memories", response_model=dict)
+async def memories_workspace(
+    scope: Optional[str] = Query(None),
+    include_superseded: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Agent memory workspace — active facts with scopes; optionally archived."""
+    store = MemoryStore()
+    if include_superseded:
+        facts = store.list_all(scope=scope, limit=limit)
+    else:
+        facts = store.list_active(scope=scope)[:limit]
+    return {
+        "workspace": "memories",
+        "total": len(facts),
+        "active_count": store.active_count(),
+        "scopes": ["global", "session"],
+        "facts": [f.to_dict() for f in facts],
+    }
+
+
+@router.get("/memories/{fact_id}", response_model=dict)
+async def memory_detail(fact_id: str):
+    """Full record for one memory fact — lifecycle events and lineage."""
+    store = MemoryStore()
+    fact = store.get(fact_id)
+    if not fact:
+        raise HTTPException(status_code=404, detail=f"Memory fact {fact_id} not found")
+    return fact.to_dict()
+
+
+@router.post("/memories/{fact_id}/forget", response_model=dict)
+async def forget_memory(
+    fact_id: str,
+    operator: str = Query("operator"),
+    note: str = Query(""),
+):
+    """Operator forgets a memory fact. Append-only: the artifact is marked
+    superseded with an event; history is never rewritten."""
+    store = MemoryStore()
+    fact = store.forget(fact_id, operator=operator, note=note)
+    if not fact:
+        raise HTTPException(status_code=404, detail=f"Memory fact {fact_id} not found")
+    return {"status": fact.status, "fact": fact.to_dict()}

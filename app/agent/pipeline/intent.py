@@ -75,6 +75,12 @@ _RULES: list[Rule] = [
         r"\bi am\b.{0,30}\band\b.{0,30}\bi\b",
         r"\bforget\b.{0,20}\b(this|that|everything)\b",
         r"\bwhat do you (know|remember) about me\b",
+        r"\bwhat('| i)?s my\b.{0,40}\b(\w+)\b",          # "what's my name" / "what is my favorite color"
+        r"\b(do you|did you|have you) (remember|forgot(ten)?|noticed|known)\b",
+        r"\bwhat (did|have) i (tell|say|told|shared|mentioned|said)( you)?\b",
+        r"\bcall me\b.{0,20}\b(\w+)\b",                  # "call me Akhi"
+        r"\bin (this|our) (conversation|chat|discussion)\b",   # "in this conversation" → context recall
+        r"\bwhat (are|were|did|have) we\b",              # "what are we building here" / "what did we discuss"
     ]),
     Rule("CODING_WRITE", Intent.CODING, [
         r"\b(write|create|generate|fix|debug|refactor|implement|build)\b.{0,30}\b(code|function|class|method|script|program|module|api)\b",
@@ -196,6 +202,18 @@ Return ONLY valid JSON — no explanation, no markdown:
         )
 
     # ── Public interface ─────────────────────────────────────────────────────
+
+    def rule_classify(self, query: str) -> Optional[IntentResult]:
+        """Rule-based intent classification only — deterministic, no LLM.
+
+        Returns None when no rule matches. Used by consumers that must avoid
+        non-deterministic classification (e.g. episodic memory filtering).
+        """
+        result = self._rule_classify(query)
+        if result is None:
+            return None
+        result.latency_ms = 0.0
+        return result
 
     @traceable(name="intent_classify", metadata={"stage": 1})
     def classify(self, query: str) -> IntentResult:

@@ -304,6 +304,34 @@ register(Capability(
     api_prefix="/api/v1/operations/explore",
 ))
 
+register(Capability(
+    id="agent_memory", name="Agent Semantic Memory",
+    description="Immutable, scoped memory facts (global/conversation) with dedupe, lifecycle events, and operator-governed forgetting",
+    owner="learning.operations", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("architecture_governance", "tool_sandboxing"),
+    artifacts=("MemoryFact",), api_prefix="/api/v1/operations/memories",
+))
+
+register(Capability(
+    id="episodic_memory", name="Episodic Conversation Memory",
+    description="Cross-session recall: past conversations consolidated into durable summary artifacts (lazy, capped) and retrieved by cosine similarity for memory-intent queries in new sessions",
+    owner="learning.operations", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_memory",),
+    artifacts=("SessionSummary",), api_prefix="",
+))
+
+register(Capability(
+    id="memory_v2", name="Memory V2 — Governed Memory Store",
+    description="Durable, scoped, curated memories with authority-aware conflict resolution, lifecycle events, and vector retrieval",
+    owner="services.memory", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("architecture_governance", "agent_memory"),
+    artifacts=("MemoryEntity", "MemoryEvent"),
+    api_prefix="/api/v1/memory",
+))
+
 # Automation
 register(Capability(
     id="continuous_evaluation", name="Continuous Evaluation",

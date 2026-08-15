@@ -24,6 +24,21 @@ class TestIntentClassifier:
         assert result.intent == Intent.MEMORY
         assert not result.used_llm
 
+    @pytest.mark.parametrize("query", [
+        "what is my name?",
+        "what's my name",
+        "what did I say about the parser",
+        "do you remember what I like?",
+        "call me Akhi",
+        "what are we building in this conversation?",
+        "what did we discuss last time?",
+        "in this chat we agreed on the plan",
+    ])
+    def test_memory_recall(self, classifier, query):
+        result = classifier.classify(query)
+        assert result.intent == Intent.MEMORY
+        assert not result.used_llm
+
     def test_coding_request(self, classifier):
         result = classifier.classify("write a python function to sort a list")
         assert result.intent == Intent.CODING

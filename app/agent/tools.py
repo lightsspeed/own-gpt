@@ -4,6 +4,8 @@ from app.agent.tool_impls import (
     search_knowledge_base_impl,
     sm_integration_impl,
     remember_user_fact_impl,
+    remember_session_fact_impl,
+    forget_user_fact_impl,
 )
 
 
@@ -34,5 +36,25 @@ def remember_user_fact(fact: str) -> str:
     return remember_user_fact_impl(fact)
 
 
+@tool
+def remember_session_fact(fact: str) -> str:
+    """
+    Saves a fact about the current conversation (e.g., what was discussed, decided, or planned here)
+    into conversation memory for THIS session only.
+    Use this tool when the user says something that is only relevant to this conversation.
+    """
+    return remember_session_fact_impl(fact)
+
+
+@tool
+def forget_user_fact(fact: str) -> str:
+    """
+    Removes a previously saved memory fact (e.g., "my name is Alice") — from long-term
+    memory first, or the current conversation if it was saved there.
+    Use this tool when the user asks you to forget something you remember about them.
+    """
+    return forget_user_fact_impl(fact)
+
+
 # All tools available to the agent (web search disabled)
-tools = [search_knowledge_base, sm_integration, remember_user_fact]
+tools = [search_knowledge_base, sm_integration, remember_user_fact, remember_session_fact, forget_user_fact]

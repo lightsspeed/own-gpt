@@ -1,12 +1,13 @@
 """Tool gate — the single guarded entry point for every agent tool call.
 
-Pipeline (per the roadmap):
-    LLM Tool Request -> Guardrail -> [HITL Approval if Mutating] -> Sandboxed Execution -> Record
+Flow:
+    LLM Tool Request -> Guardrail -> [Sandboxed Execution] -> Record
 
-Read-only calls execute immediately in-process (they have no side effects).
-Mutating calls are recorded as pending and return a message to the agent;
-a human operator approves them via the operations API, which triggers the
-sandboxed execution. Every call is persisted as a ToolExecution artifact.
+  - Read-only tools and low-risk memory tools execute immediately in-process
+    (auto-applied chat personalization; every call is recorded as a
+    ToolExecution artifact for audit).
+  - Mutating side-effect tools are recorded as pending; a human operator
+    approves via the operations API, which triggers sandboxed execution.
 """
 
 from __future__ import annotations
@@ -25,10 +26,13 @@ IMPL_FUNCS = {
     "search_knowledge_base": "search_knowledge_base_impl",
     "sm_integration": "sm_integration_impl",
     "remember_user_fact": "remember_user_fact_impl",
+    "remember_session_fact": "remember_session_fact_impl",
+    "forget_user_fact": "forget_user_fact_impl",
 }
 
-# Mutating tools run sandboxed; read-only tools run in-process.
-MUTATING_TOOLS = frozenset({"sm_integration", "remember_user_fact"})
+# Mutating side-effect tools run sandboxed after human approval; read-only
+# and low-risk memory tools run in-process (auto-applied).
+MUTATING_TOOLS = frozenset({"sm_integration"})
 
 
 def _record(store: ToolExecutionStore, tool_name: str, args: dict, **kwargs) -> ToolExecution:
@@ -37,7 +41,7 @@ def _record(store: ToolExecutionStore, tool_name: str, args: dict, **kwargs) -> 
 
 
 def _run_in_process(execution: ToolExecution, store: ToolExecutionStore) -> ToolExecution:
-    """Execute a read-only tool in-process (safe, no side effects)."""
+    """Execute an allowed tool in-process (read-only or low-risk memory write)."""
     import time
     fn_name = IMPL_FUNCS.get(execution.tool_name)
     start = time.perf_counter()

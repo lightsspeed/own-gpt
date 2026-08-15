@@ -12,10 +12,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-import redis
-
 from app.services.vector_store import similarity_search
-from app.core.config import settings
+from app.learning.operations.memory import MemoryStore, SCOPE_GLOBAL, session_scope, SOURCE_TOOL_CALL
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +43,30 @@ def sm_integration_impl(action: str, target: str, content: Optional[str] = None)
 
 
 def remember_user_fact_impl(fact: str) -> str:
-    """Mutating: persist a user fact into long-term memory (Redis)."""
-    r = redis.from_url(settings.REDIS_URL)
-    r.rpush("user:global:memories", fact)
-    return f"Successfully saved fact to long-term memory: '{fact}'"
+    """Mutating: persist a user fact into long-term memory (global scope)."""
+    record = MemoryStore().store_fact(fact, scope=SCOPE_GLOBAL, source=SOURCE_TOOL_CALL)
+    return f"Successfully saved fact to long-term memory ({record.id}): '{fact}'"
+
+
+def remember_session_fact_impl(fact: str, session_id: str = "") -> str:
+    """Mutating: persist a fact scoped to the current conversation only."""
+    scope = session_scope(session_id) if session_id else SCOPE_GLOBAL
+    record = MemoryStore().store_fact(fact, scope=scope, source=SOURCE_TOOL_CALL)
+    return f"Successfully saved fact to conversation memory ({record.id}): '{fact}'"
+
+
+def forget_user_fact_impl(fact: str, session_id: str = "") -> str:
+    """Mutating: supersede an active fact matching the given text.
+
+    Searches global scope first, then the current conversation scope.
+    """
+    store = MemoryStore()
+    target = store.find_active_fact(fact, scope=SCOPE_GLOBAL)
+    scope_label = "long-term memory"
+    if target is None and session_id:
+        target = store.find_active_fact(fact, scope=session_scope(session_id))
+        scope_label = "conversation memory"
+    if target is None:
+        return f"No matching memory found for: '{fact}'. Nothing was forgotten."
+    store.forget(target.id, operator="agent_tool", note="forgotten via forget_user_fact tool")
+    return f"Successfully forgotten {scope_label} ({target.id}): '{target.fact}'"

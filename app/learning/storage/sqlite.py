@@ -314,6 +314,21 @@ class LearningStore:
             ).fetchall()
         return {r["intent"]: r["cnt"] for r in rows}
 
+    def usage_totals(self) -> dict:
+        """Aggregate token usage and record count across the learning ledger."""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(tokens_in), 0)   AS tokens_in, "
+                "       COALESCE(SUM(tokens_out), 0)  AS tokens_out, "
+                "       COUNT(*)                      AS records "
+                "FROM learning_records"
+            ).fetchone()
+        return {
+            "tokens_in": int(row["tokens_in"]),
+            "tokens_out": int(row["tokens_out"]),
+            "records": int(row["records"]),
+        }
+
     # ── Raw SQL for analytics ────────────────────────────────────────────
 
     def query_sql(self, sql: str, params: list | None = None) -> list[dict]:

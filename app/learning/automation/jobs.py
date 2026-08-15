@@ -13,7 +13,6 @@ from ..experiments.models import ExperimentDefinition
 from .models import AutomationRun, JobType, JobStatus, EvaluationSnapshot, BenchmarkBaseline
 from .state import SnapshotStore, BaselineStore
 from .health import compute_all
-
 logger = logging.getLogger(__name__)
 
 # Benchmark regression job defaults
@@ -118,6 +117,33 @@ def run_calibration_check() -> AutomationRun:
         run.status = JobStatus.FAILED
         run.error = str(e)
 
+    return run
+
+
+def run_memory_retention() -> AutomationRun:
+    """Archive expired memory entities in their own sync session.
+
+    Orchestrates the memory service (business logic lives there); a failure
+    is logged, never fatal. Never deletes anything.
+    """
+    run = AutomationRun(job_type=JobType.MEMORY_RETENTION, status=JobStatus.RUNNING)
+    start = time.time()
+    try:
+        from app.core.database import SyncSessionLocal
+        from app.services import memory
+
+        with SyncSessionLocal() as db:
+            archived = memory.archive_expired_memories(db)
+        run.status = JobStatus.COMPLETED
+        run.completed_at = datetime.now(timezone.utc).isoformat()
+        run.duration_ms = (time.time() - start) * 1000
+        run.records_processed = archived
+        run.findings_generated = 0
+    except Exception as e:
+        logger.exception("Memory retention failed")
+        run.status = JobStatus.FAILED
+        run.completed_at = str(time.time())
+        run.error = str(e)
     return run
 
 

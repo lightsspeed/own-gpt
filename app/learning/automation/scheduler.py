@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Optional
 
 from .models import JobType, JobStatus, AutomationRun
-from .jobs import run_daily_evaluation, run_calibration_check, run_benchmark_regression
+from .jobs import run_daily_evaluation, run_calibration_check, run_benchmark_regression, run_memory_retention
 from .state import SnapshotStore, RunStore
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,12 @@ DEFAULT_SCHEDULES: list[ScheduleDef] = [
         description="Benchmark regression detection",
         timeout_minutes=60,
     ),
+    ScheduleDef(
+        job_type=JobType.MEMORY_RETENTION,
+        cadence=ScheduleCadence.DAILY,
+        description="Archive expired memory entities (never deletes)",
+        timeout_minutes=10,
+    ),
 ]
 
 
@@ -90,6 +96,7 @@ def run_job(job_type: JobType) -> AutomationRun:
         JobType.DAILY_EVALUATION: run_daily_evaluation,
         JobType.CALIBRATION_CHECK: run_calibration_check,
         JobType.BENCHMARK_REGRESSION: run_benchmark_regression,
+        JobType.MEMORY_RETENTION: run_memory_retention,
     }
     runner = runner_map.get(job_type)
     if not runner:

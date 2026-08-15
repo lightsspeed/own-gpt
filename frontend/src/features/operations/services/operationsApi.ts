@@ -120,6 +120,32 @@ export interface ArtifactTrace {
   depth: number
 }
 
+export interface MemoryEventRow {
+  status: string
+  at: string
+  note: string
+}
+
+export interface MemoryFactRow {
+  id: string
+  fact: string
+  scope: string
+  source: string
+  created_at: string
+  status: string
+  version: number
+  supersedes: string[]
+  events: MemoryEventRow[]
+}
+
+export interface MemoriesWorkspace {
+  workspace: string
+  total: number
+  active_count: number
+  scopes: string[]
+  facts: MemoryFactRow[]
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`)
   if (!res.ok) throw new Error(`HTTP ${res.status} — ${path}`)
@@ -217,5 +243,25 @@ export const operationsApi = {
 
   async exploreArtifact(artifactId: string): Promise<ArtifactTrace> {
     return get<ArtifactTrace>(`/operations/explore/${encodeURIComponent(artifactId)}`)
+  },
+
+  async getMemories(params: { scope?: string; includeSuperseded?: boolean; limit?: number } = {}): Promise<MemoriesWorkspace> {
+    const qs = new URLSearchParams()
+    if (params.scope) qs.set('scope', params.scope)
+    if (params.includeSuperseded) qs.set('include_superseded', 'true')
+    if (params.limit) qs.set('limit', String(params.limit))
+    const q = qs.toString()
+    return get<MemoriesWorkspace>(`/operations/memories${q ? `?${q}` : ''}`)
+  },
+
+  async getMemory(factId: string): Promise<MemoryFactRow> {
+    return get<MemoryFactRow>(`/operations/memories/${encodeURIComponent(factId)}`)
+  },
+
+  async forgetMemory(factId: string, note: string = ''): Promise<{ status: string; fact: MemoryFactRow }> {
+    const qs = new URLSearchParams()
+    if (note) qs.set('note', note)
+    const q = qs.toString()
+    return post(`/operations/memories/${encodeURIComponent(factId)}/forget${q ? `?${q}` : ''}`)
   },
 }

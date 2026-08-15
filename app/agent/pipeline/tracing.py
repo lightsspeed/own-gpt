@@ -108,6 +108,10 @@ class PipelineTrace:
     prompt_tokens: int = 0
     completion_tokens: int = 0
 
+    # Generation configuration (what actually ran)
+    model: str = ""
+    temperature: float = 0.0
+
     # Stage 8: Validation
     validation_valid: bool = True
     validation_used_llm: bool = False

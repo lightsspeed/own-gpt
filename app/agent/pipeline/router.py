@@ -6,7 +6,7 @@ Purpose: Decide whether retrieval is needed based on intent.
 
 Routing table:
   knowledge → RETRIEVAL     (vector search needed)
-  memory    → MEMORY        (Redis read/write, skip vector search)
+  memory    → MEMORY        (memory store read/write, skip vector search)
   general   → DIRECT_LLM    (chitchat ONLY when rule-matched: greetings/thanks/arithmetic)
               RETRIEVAL     (LLM-classified "general" is informational — must be grounded)
   coding    → RETRIEVAL     (KB-only policy: answer only from knowledge base)

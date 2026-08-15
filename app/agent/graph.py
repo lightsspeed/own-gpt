@@ -7,7 +7,8 @@ from app.agent.tools import tools
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from app.core.config import settings
-import redis
+from app.core.model_config import DEFAULT_MODEL
+from app.learning.operations.memory import MemoryStore, MemoryEmbeddingIndex, SCOPE_GLOBAL, session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,17 @@ def _strip_images(content) -> str:
     return str(content)
 
 
-DB_CONNINFO = f"host={settings.PG_HOST} port=5432 dbname=owngpt user=postgres password=postgres"
+# Connection parameters come from configuration (environment) — never
+# hardcoded credentials. k8s/deployments override via PG_* env vars.
+def _build_conninfo() -> str:
+    return (
+        f"host={settings.PG_HOST} port={settings.PG_PORT} "
+        f"dbname={settings.PG_DB} user={settings.PG_USER} "
+        f"password={settings.PG_PASSWORD}"
+    )
+
+
+DB_CONNINFO = _build_conninfo()
 
 pool = ConnectionPool(
     conninfo=DB_CONNINFO,
@@ -41,10 +52,22 @@ pool = ConnectionPool(
 )
 
 checkpointer = PostgresSaver(pool)
-checkpointer.setup()
 
-model = ChatOpenAI(model="gpt-4o-mini", temperature=0.4, openai_api_key=settings.OPENAI_API_KEY)
-model_with_tools = model.bind_tools(tools)
+
+def setup_checkpointer() -> None:
+    """Create LangGraph checkpoint tables. Deferred to app startup so a
+    database outage at import time does not block the process."""
+    checkpointer.setup()
+
+
+def build_model(model_name: str, temperature: float) -> ChatOpenAI:
+    """Construct the agent LLM for a request. Model is server-validated by
+    the API layer (allowlist) before reaching this point."""
+    return ChatOpenAI(
+        model=model_name,
+        temperature=temperature,
+        openai_api_key=settings.OPENAI_API_KEY,
+    )
 
 
 def should_continue(state: AgentState) -> str:
@@ -74,6 +97,10 @@ def action_node(state: AgentState) -> dict:
     for tool_call in last_message.tool_calls:
         tool_name = tool_call.get("name", "")
         args = tool_call.get("args", {}) or {}
+        # Session-scoped memory tools need the current conversation id, which
+        # the model cannot know — inject it from the graph state.
+        if tool_name in {"remember_session_fact", "forget_user_fact"} and "session_id" not in args:
+            args = {**args, "session_id": state.get("session_id", "")}
         execution = request_tool_execution(tool_name, args)
 
         if execution.status == "executed":
@@ -101,7 +128,9 @@ def call_model(state: AgentState) -> dict:
     answer_mode_directive = state.get("answer_mode_directive", "")
     answer_mode = state.get("answer_mode", "")
 
-    RETRIEVAL_INTENTS = {"knowledge", "unknown", "memory", "coding", "reasoning"}
+    # Memory recalls skip retrieval by design — they must never hit the
+    # knowledge-base boundary; they are answered from the memory sections below.
+    RETRIEVAL_INTENTS = {"knowledge", "unknown", "coding", "reasoning"}
 
     if (answer_mode == "no_evidence" and not pipeline_context) or (
         intent in RETRIEVAL_INTENTS and not pipeline_context
@@ -150,21 +179,61 @@ def call_model(state: AgentState) -> dict:
             # Strip KB directive to avoid confusing the model
             sections = [s for s in sections if "Answer Mode" not in s]
 
-    # Long-term memory from Redis
+    # Long-term memory from the memory store (global + current session scope)
     memories_str = ""
     try:
-        r = redis.from_url(settings.REDIS_URL)
-        memories = r.lrange("user:global:memories", 0, -1)
-        if memories:
-            memories_list = "\n".join([f"- {m.decode('utf-8')}" for m in memories])
-            memories_str = (
-                f"\nLong-Term Memory:\n"
-                f"You have learned the following persistent facts about the user from previous sessions. "
-                f"Use these to personalize your responses:\n{memories_list}"
+        store = MemoryStore()
+        memory_sections = []
+        query_text = ""
+        for m in reversed(state.get("messages", [])):
+            if type(m).__name__ == "HumanMessage":
+                query_text = _strip_images(m.content)
+                break
+        global_facts = store.list_active(scope=SCOPE_GLOBAL)
+        if global_facts:
+            # Vectored recall: inject only the facts most relevant to this query,
+            # keeping the context window bounded as memory grows.
+            try:
+                selected = MemoryEmbeddingIndex().select_for_query(query_text, global_facts, k=5)
+            except Exception:
+                selected = global_facts[:5]
+            if selected:
+                facts_list = "\n".join(f"- {f.fact}" for f in selected)
+                memory_sections.append(
+                    f"Long-Term Memory:\n"
+                    f"You have learned the following persistent facts about the user from previous sessions. "
+                    f"Use these to personalize your responses:\n{facts_list}"
+                )
+        session_id = state.get("session_id", "") or ""
+        session_facts = store.list_active(scope=session_scope(session_id)) if session_id else []
+        if session_facts:
+            facts_list = "\n".join(f"- {f.fact}" for f in session_facts)
+            memory_sections.append(
+                f"Conversation Memory:\n"
+                f"The user shared the following facts in THIS conversation. "
+                f"Use them for context, but do not carry them to other conversations:\n{facts_list}"
             )
+        elif intent == "memory" and query_text:
+            # Episodic recall: memory-intent questions in a conversation with no
+            # facts of its own may draw on summaries of past conversations.
+            try:
+                from app.learning.operations.episodic import EpisodicRecallService
+
+                past = EpisodicRecallService().recall(query_text, session_id)
+                if past:
+                    past_list = "\n".join(f"- {f.fact}" for f in past)
+                    memory_sections.append(
+                        f"Past Conversations:\n"
+                        f"You discussed the following topics in earlier conversations. "
+                        f"Use them to answer questions about what was discussed previously:\n{past_list}"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to recall episodic memory: {e}")
+        if memory_sections:
+            memories_str = "\n" + "\n\n".join(memory_sections)
             sections.append(memories_str)
     except Exception as e:
-        logger.error(f"Failed to fetch long-term memories: {e}")
+        logger.error(f"Failed to fetch memories: {e}")
 
     full_prompt = "\n".join(sections)
 
@@ -173,6 +242,14 @@ def call_model(state: AgentState) -> dict:
         if isinstance(m.content, list):
             m.content = _strip_images(m.content)
     payload = [SystemMessage(content=full_prompt)] + safe_messages
+
+    # Per-request model selection — the model field flows through the graph
+    # state from the validated request; never a module-level hardcode.
+    model_name = state.get("model") or DEFAULT_MODEL
+    temperature = state.get("temperature")
+    if temperature is None:
+        temperature = 0.4
+    model_with_tools = build_model(model_name, temperature).bind_tools(tools)
 
     response = model_with_tools.invoke(payload)
     return {"messages": [response]}

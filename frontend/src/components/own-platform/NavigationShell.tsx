@@ -4,7 +4,7 @@ import {
   Sparkles, History, Settings, HelpCircle, LogOut,
   Menu, Activity, Search, PanelLeftClose, Zap, Monitor,
   BookOpen, Beaker, BarChart3, GitBranch, Archive, Cog,
-  ChevronDown,
+  Brain, ChevronDown,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -81,6 +81,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: 'OwnLab',
         icon: <Beaker size={18} />,
         path: '/experiments',
+      },
+      {
+        id: 'ownmemory',
+        label: 'OwnMemory',
+        icon: <Brain size={18} />,
+        path: '/memories',
       },
       {
         id: 'ownflow',

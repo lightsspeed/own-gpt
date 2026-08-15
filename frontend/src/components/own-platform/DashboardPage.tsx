@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
-  MessageSquare, Activity, AlertTriangle, Clock, RefreshCw,
-  Zap, Monitor, BookOpen, Beaker, BarChart3, GitBranch, Archive, Cog,
+  MessageSquare, Activity, AlertTriangle, RefreshCw,
+  Zap, Monitor, BookOpen, BarChart3, GitBranch,
   TrendingUp, TrendingDown, Minus, Sparkles, ChevronRight,
-  Lightbulb, FlaskConical, Brain, ArrowRight,
+  Lightbulb, FlaskConical, Brain, ArrowRight, Coins,
 } from 'lucide-react'
-import { dashboardApi, type DailyBriefData } from '@/features/dashboard/services/dashboardApi'
+import { dashboardApi, type DailyBriefData, type UsageData } from '@/features/dashboard/services/dashboardApi'
 import type { BriefTrigger } from '@/features/automation/services/automationApi'
 import { useCountUp } from '@/lib/useCountUp'
 
@@ -51,11 +51,16 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [brief, setBrief] = useState<DailyBriefData | null>(null)
+  const [usage, setUsage] = useState<UsageData | null>(null)
 
   const fetchAll = useCallback(async () => {
     try {
-      const b = await dashboardApi.getDailyBrief()
+      const [b, c] = await Promise.all([
+        dashboardApi.getDailyBrief(),
+        dashboardApi.getCounters(),
+      ])
       setBrief(b)
+      setUsage(c?.usage ?? null)
     } catch {
       // keep state
     }
@@ -241,7 +246,68 @@ export function DashboardPage() {
           )}
         </div>
 
-        {/* ── 3+4. Service Health + AI Insights ── */}
+        {/* ── 3. Usage & Cost ── */}
+        <Section title="Usage & Cost" icon={Coins}>
+          {loading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-20 bg-muted/20 rounded-lg animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <UsageStat
+                  icon={<Coins size={14} />}
+                  label="Estimated Cost"
+                  value={usage?.estimated_cost_usd != null ? `$${usage.estimated_cost_usd.toFixed(4)}` : '—'}
+                  sub={usage?.records ? `${usage.records.toLocaleString()} interactions` : 'No usage yet'}
+                  accent="text-primary"
+                />
+                <UsageStat
+                  icon={<BarChart3 size={14} />}
+                  label="Total Tokens"
+                  value={usage?.total_tokens != null ? usage.total_tokens.toLocaleString() : '—'}
+                  sub={`$${usage?.cost_per_1k_input ?? 0}/1K in · $${usage?.cost_per_1k_output ?? 0}/1K out`}
+                  accent="text-info"
+                />
+                <UsageStat
+                  icon={<ArrowRight size={14} />}
+                  label="Prompt Tokens"
+                  value={usage?.tokens_in != null ? usage.tokens_in.toLocaleString() : '—'}
+                  sub="Input"
+                  accent="text-warning"
+                />
+                <UsageStat
+                  icon={<Sparkles size={14} />}
+                  label="Completion Tokens"
+                  value={usage?.tokens_out != null ? usage.tokens_out.toLocaleString() : '—'}
+                  sub="Output"
+                  accent="text-success"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-caption text-muted-foreground/60">
+                  <span>Token split</span>
+                  <span>{usage && usage.total_tokens > 0 ? `${Math.round(usage.tokens_in / usage.total_tokens * 100)}% prompt · ${Math.round(usage.tokens_out / usage.total_tokens * 100)}% completion` : '—'}</span>
+                </div>
+                <div className="flex h-2 rounded-full bg-muted/50 overflow-hidden">
+                  <div
+                    className="bg-warning/70 transition-all"
+                    style={{ width: usage && usage.total_tokens > 0 ? `${usage.tokens_in / usage.total_tokens * 100}%` : '0%' }}
+                    title="Prompt tokens"
+                  />
+                  <div
+                    className="bg-success/70 transition-all"
+                    style={{ width: usage && usage.total_tokens > 0 ? `${usage.tokens_out / usage.total_tokens * 100}%` : '0%' }}
+                    title="Completion tokens"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* ── 4+5. Service Health + AI Insights ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Service Health */}
           <Section title="Service Health" icon={Monitor}>
@@ -430,6 +496,25 @@ function KpiCard({ icon: Icon, value, label, trend, status, danger }: {
       <p className={cn('text-h3 text-foreground', danger && 'text-danger')}>{value}</p>
       <p className="text-small text-muted-foreground mt-0.5">{label}</p>
       <p className="text-caption text-muted-foreground/50 mt-0.5">{trend}</p>
+    </div>
+  )
+}
+
+function UsageStat({ icon, label, value, sub, accent }: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  sub: string
+  accent: string
+}) {
+  return (
+    <div className="p-4 rounded-lg bg-muted/20 border border-border/40 hover:bg-hover transition-all">
+      <div className="flex items-center gap-2 mb-2">
+        <span className={accent}>{icon}</span>
+        <span className="text-caption text-muted-foreground uppercase tracking-wider">{label}</span>
+      </div>
+      <p className="text-h3 text-foreground">{value}</p>
+      <p className="text-caption text-muted-foreground/60 mt-0.5 truncate">{sub}</p>
     </div>
   )
 }

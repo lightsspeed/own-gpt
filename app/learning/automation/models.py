@@ -16,6 +16,7 @@ class JobType(str, Enum):
     CALIBRATION_CHECK = "calibration_check"
     BENCHMARK_REGRESSION = "benchmark_regression"
     RECOMMENDATION_REFRESH = "recommendation_refresh"
+    MEMORY_RETENTION = "memory_retention"
 
 
 class JobStatus(str, Enum):
