@@ -18,6 +18,9 @@ def _default_sync_url(async_url: str) -> str:
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "OwnGPT"
+    # Structured logging level for the JSON logging foundation (P2.1):
+    # DEBUG | INFO | WARNING | ERROR. Applies at startup via setup_logging().
+    LOG_LEVEL: str = "INFO"
     DATABASE_URL: str
     REDIS_URL: str
 

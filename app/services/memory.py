@@ -22,6 +22,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.metrics import safe_count
 from app.models.memory import (
     AUTHORITY_CONSOLIDATED,
     AUTHORITY_EXTRACTED,
@@ -255,9 +256,18 @@ def create_memory(
     metadata: Optional[dict] = None,
     now: Callable[[], datetime] = utc_now,
     embed: Optional[Embed] = None,
+    extraction_run_id: Optional[str] = None,
 ) -> MemoryEntity:
     """Create a memory. Idempotent on identical (user, scope, statement);
-    authority-aware potential-conflict handling per contract §5/§7."""
+    authority-aware potential-conflict handling per contract §5/§7.
+
+    Observability (P2.1): when extraction_run_id is provided it is written
+    into the entity metadata_ and the MemoryEvent metadata_ of this
+    write's events, giving the full lineage
+    extraction attempt -> entity -> events without a schema change.
+    Outcome counters (memory_created/deduplicated/conflict/superseded)
+    reflect ALL create_memory writes — the single chokepoint — and are
+    documented in docs/v22_p2_observability_implementation.md."""
     normalized = _normalize(statement)
     if not normalized:
         raise ValueError("statement is required")
@@ -282,6 +292,17 @@ def create_memory(
         dedupe_q = dedupe_q.where(MemoryEntity.project_id == project_id)
     existing = db.execute(dedupe_q).scalars().all()
     if existing:
+        safe_count("memory_deduplicated_total")
+        if extraction_run_id:
+            logger.info(
+                "memory_extraction_deduplicated",
+                extra={
+                    "event": "memory_extraction_deduplicated",
+                    "run_id": extraction_run_id,
+                    "entity": str(existing[0].id),
+                    "status": existing[0].status,
+                },
+            )
         return existing[0]
 
     if authority is None:
@@ -307,6 +328,9 @@ def create_memory(
         if source == SOURCE_USER_DECLARED or authority == AUTHORITY_OPERATOR
         else STATUS_PENDING
     )
+
+    if extraction_run_id:
+        metadata = {**(metadata or {}), "extraction_run_id": extraction_run_id}
 
     entity = MemoryEntity(
         user_id=user_id,
@@ -342,19 +366,25 @@ def create_memory(
     if embed is not None:
         entity.embedding = embed([normalized])[0]
 
+    event_metadata = {"extraction_run_id": extraction_run_id} if extraction_run_id else None
+
     if supersede_target is not None:
         supersede_target.status = STATUS_SUPERSEDED
         entity.supersedes_id = supersede_target.id
         _append_event(db, supersede_target, EVENT_SUPERSEDED, actor=user_id,
-                      note=f"superseded by {entity.id}")
+                      note=f"superseded by {entity.id}", metadata=event_metadata)
+        safe_count("memory_superseded_total")
 
-    _append_event(db, entity, EVENT_STORED, actor=user_id)
+    _append_event(db, entity, EVENT_STORED, actor=user_id, metadata=event_metadata)
     if candidates and supersede_target is None:
         _append_event(db, entity, EVENT_CONFLICT, actor=user_id,
-                      note=f"potential conflict candidate: {candidates[0].id}")
+                      note=f"potential conflict candidate: {candidates[0].id}",
+                      metadata=event_metadata)
+        safe_count("memory_conflict_total")
 
     db.commit()
     db.refresh(entity)
+    safe_count("memory_created_total", status=entry_status)
     return entity
 
 

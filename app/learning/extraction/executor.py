@@ -25,6 +25,7 @@ import threading
 from typing import Callable, Optional
 
 from app.core.config import settings
+from app.core import metrics as core_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,8 @@ class BoundedDaemonExecutor:
         self._lock = threading.Lock()
         self._running = True
         self._workers: list[threading.Thread] = []
+        core_metrics.safe_set("queue_capacity", max_queue)
+        core_metrics.safe_set("queue_depth", 0)
         for i in range(max_workers):
             t = threading.Thread(
                 target=self._run,
@@ -63,10 +66,14 @@ class BoundedDaemonExecutor:
             task = self._queue.get()
             if task is None:
                 return  # shutdown sentinel
+            core_metrics.safe_set("queue_depth", self._queue.qsize())
+            core_metrics.safe_gauge_inc("inflight")
             try:
                 task()
             except Exception as exc:  # defensive: tasks must never raise out
                 logger.error("memory_extraction_task_error error=%s", exc, exc_info=True)
+            finally:
+                core_metrics.safe_gauge_dec("inflight")
 
     def submit(self, fn: Callable[..., None], *args) -> bool:
         """Enqueue a task. Returns True when accepted, False when the pool is
@@ -77,6 +84,7 @@ class BoundedDaemonExecutor:
                 return False
             try:
                 self._queue.put_nowait(task)
+                core_metrics.safe_set("queue_depth", self._queue.qsize())
                 return True
             except queue.Full:
                 return False
@@ -110,6 +118,7 @@ class BoundedDaemonExecutor:
                     self._queue.get_nowait()
                 except queue.Empty:
                     break
+            core_metrics.safe_set("queue_depth", 0)
             for _ in self._workers:
                 self._queue.put_nowait(None)
 

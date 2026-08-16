@@ -237,7 +237,7 @@ def test_schedule_duplicate_turn_second_is_skipped(executor, monkeypatch):
     started = threading.Event()
     release = threading.Event()
 
-    def fake_run(_session_id, _user_id, _project_id, user_msg_id):
+    def fake_run(_session_id, _user_id, _project_id, user_msg_id, *args, **kwargs):
         calls.append(user_msg_id)
         started.set()
         release.wait(5)
@@ -263,7 +263,7 @@ def test_concurrent_duplicate_scheduling_runs_once(executor, monkeypatch):
     started = threading.Event()
     release = threading.Event()
 
-    def fake_run(_session_id, _user_id, _project_id, user_msg_id):
+    def fake_run(_session_id, _user_id, _project_id, user_msg_id, *args, **kwargs):
         calls.append(user_msg_id)
         started.set()
         release.wait(5)
@@ -441,7 +441,7 @@ def test_run_extraction_extracts_only_its_own_turn(engine, user, coord, monkeypa
 
     exchange_seen: list[str] = []
 
-    def fake_llm(exchange):
+    def fake_llm(exchange, run_id=None):
         exchange_seen.append(exchange)
         return [{"statement": "durable fact", "domain": "semantic", "importance": 0.5}]
 
@@ -466,7 +466,7 @@ def test_run_extraction_skips_turn_without_completed_reply(engine, user, coord, 
             ("user", "fact without reply", "completed"),
         ])
     monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
-    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange: [])
+    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange, **kwargs: [])
 
     assert ex.run_extraction("sess-inc", user.id, None, msgs[0].id) == 0
 
@@ -482,7 +482,7 @@ def test_run_extraction_skips_turn_with_failed_reply(engine, user, coord, monkey
             ("assistant", "Partial", "failed"),
         ])
     monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
-    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange: [])
+    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange, **kwargs: [])
 
     assert ex.run_extraction("sess-fail", user.id, None, msgs[0].id) == 0
 
@@ -497,6 +497,6 @@ def test_run_extraction_unknown_turn_is_noop(engine, user, coord, monkeypatch):
             ("assistant", "ok", "completed"),
         ])
     monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
-    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange: [])
+    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange, **kwargs: [])
 
     assert ex.run_extraction("sess-u", user.id, None, 999999) == 0   # no such message

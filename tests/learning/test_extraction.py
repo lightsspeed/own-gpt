@@ -95,28 +95,37 @@ def test_throttle_one_per_interval():
 # ── Gate 3: validation (batch-atomic) ────────────────────────────────────
 
 def test_valid_candidates_pass_gate3():
-    got = ex._validate_candidates([
+    got, reason = ex._validate_candidates([
         {"statement": "the user prefers kotlin", "domain": "preference", "importance": 0.8},
     ])
+    assert reason is None
     assert len(got) == 1
     assert got[0]["domain"] == "preference"
 
 
 def test_gate3_drops_whole_batch_on_any_violation():
     good = {"statement": "valid fact", "domain": "semantic", "importance": 0.5}
-    assert ex._validate_candidates([good]) == [good]
-    assert ex._validate_candidates([good, {"statement": "x" * 501, "domain": "semantic", "importance": 0.5}]) == []
-    assert ex._validate_candidates([good, {"statement": "bad", "domain": "astrology", "importance": 0.5}]) == []
-    assert ex._validate_candidates([good, {"statement": "bad", "domain": "semantic", "importance": 9}]) == []
-    assert ex._validate_candidates("not a list") == []
-    assert ex._validate_candidates([good] * 4) == []
+    got, reason = ex._validate_candidates([good])
+    assert reason is None
+    assert got == [good]
+    got, reason = ex._validate_candidates([good, {"statement": "x" * 501, "domain": "semantic", "importance": 0.5}])
+    assert got == [] and reason == "INVALID_CANDIDATE"
+    got, reason = ex._validate_candidates([good, {"statement": "bad", "domain": "astrology", "importance": 0.5}])
+    assert got == [] and reason == "INVALID_CANDIDATE"
+    got, reason = ex._validate_candidates([good, {"statement": "bad", "domain": "semantic", "importance": 9}])
+    assert got == [] and reason == "INVALID_CANDIDATE"
+    got, reason = ex._validate_candidates("not a list")
+    assert got == [] and reason == "INVALID_CANDIDATE"
+    got, reason = ex._validate_candidates([good] * 4)
+    assert got == [] and reason == "INVALID_CANDIDATE"
 
 
 def test_gate3_drops_batch_containing_secret_material():
-    got = ex._validate_candidates([
+    got, reason = ex._validate_candidates([
         {"statement": "the api key is sk-1234567890abcdefghij", "domain": "semantic", "importance": 0.5},
     ])
     assert got == []
+    assert reason == "SECRET_DETECTED"
 
 
 # ── End-to-end run_extraction ────────────────────────────────────────────
@@ -159,7 +168,7 @@ def test_run_extraction_writes_pending_memories(engine, user, project, coord, mo
         "app.services.embeddings.build_embedding_provider", lambda: fake_provider
     )
 
-    def fake_llm(exchange):
+    def fake_llm(exchange, run_id=None):
         return [
             {"statement": "the user prefers kotlin", "domain": "preference", "importance": 0.8},
             {"statement": "the user works at acme", "domain": "semantic", "importance": 0.6},
@@ -187,7 +196,7 @@ def test_run_extraction_skips_eval_sessions(engine, user, coord, monkeypatch):
 
     S = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
     monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
-    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange: [])
+    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange, **kwargs: [])
 
     assert ex.run_extraction("eval-9", user.id, None, 12345) == 0
 
@@ -207,7 +216,7 @@ def test_run_extraction_malformed_llm_output_writes_nothing(engine, user, coord,
         db.commit()
 
     monkeypatch.setattr("app.core.database.SyncSessionLocal", S)
-    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange: [{"statement": "x" * 600, "domain": "semantic", "importance": 0.5}])
+    monkeypatch.setattr(ex, "_extract_with_llm", lambda exchange, **kwargs: [{"statement": "x" * 600, "domain": "semantic", "importance": 0.5}])
 
     assert ex.run_extraction("sess-2", user.id, None, user_msg.id) == 0
 

@@ -40,6 +40,9 @@ import threading
 from typing import Optional
 
 from app.core.config import settings
+from app.core.logging_config import sanitize_exception_message
+from app.core import metrics as core_metrics
+from app.learning.extraction import observability
 
 logger = logging.getLogger(__name__)
 
@@ -115,27 +118,53 @@ class ExecutionCoordinator:
 
     # -- Single-flight claim -----------------------------------------------
 
-    def claim_turn(self, session_id: str, user_msg_id: object, owner: str = "worker") -> bool:
+    def claim_turn(
+        self,
+        session_id: str,
+        user_msg_id: object,
+        owner: str = "worker",
+        run_id: Optional[str] = None,
+    ) -> bool:
         """Claim the exclusive right to extract this turn. Returns True when
         this caller may proceed. Atomic across workers via SET NX EX; falls
-        back to in-process state when Redis is unreachable."""
+        back to in-process state when Redis is unreachable.
+
+        Metrics contract: every claim call counts exactly once as
+        redis_claim_success_total or redis_claim_conflict_total; a Redis
+        failure additionally counts redis_fallback_total{operation=claim}.
+        """
         r = self._get_redis()
         if r is not None:
             try:
                 claimed = bool(
                     r.set(_claim_key(session_id, user_msg_id), owner, ex=self._sf_ttl, nx=True)
                 )
-                return claimed
             except Exception as exc:
-                logger.warning("memory_extraction_redis_unavailable op=claim error=%s", exc)
+                observability.emit_redis_unavailable(
+                    op="claim",
+                    error_class=type(exc).__name__,
+                    error_message=sanitize_exception_message(str(exc)),
+                    run_id=run_id,
+                )
+                claimed = None
+            else:
+                if claimed:
+                    core_metrics.safe_count("redis_claim_success_total")
+                else:
+                    core_metrics.safe_count("redis_claim_conflict_total")
+                return claimed
         with self._memory_lock:
             key = (session_id, user_msg_id)
             if key in self._memory_claims:
+                core_metrics.safe_count("redis_claim_conflict_total")
                 return False
             self._memory_claims.add(key)
+            core_metrics.safe_count("redis_claim_success_total")
             return True
 
-    def release_turn(self, session_id: str, user_msg_id: object) -> None:
+    def release_turn(
+        self, session_id: str, user_msg_id: object, run_id: Optional[str] = None
+    ) -> None:
         """Best-effort release after the extraction task finishes. The Redis
         TTL is the authoritative cleanup for crashed workers; releasing on
         completion simply allows a legitimate later re-schedule sooner."""
@@ -144,13 +173,20 @@ class ExecutionCoordinator:
             try:
                 r.delete(_claim_key(session_id, user_msg_id))
             except Exception as exc:
-                logger.warning("memory_extraction_redis_unavailable op=release error=%s", exc)
+                observability.emit_redis_unavailable(
+                    op="release",
+                    error_class=type(exc).__name__,
+                    error_message=sanitize_exception_message(str(exc)),
+                    run_id=run_id,
+                )
         with self._memory_lock:
             self._memory_claims.discard((session_id, user_msg_id))
 
     # -- Distributed throttle ----------------------------------------------
 
-    def throttle_allowed(self, session_id: str, sequence: int) -> bool:
+    def throttle_allowed(
+        self, session_id: str, sequence: int, run_id: Optional[str] = None
+    ) -> bool:
         """True when an extraction may run for this turn given the per-session
         interval throttle. Atomic across workers (Lua read-compare-set);
         TTL-protected against crashed workers; in-process fallback otherwise."""
@@ -164,7 +200,12 @@ class ExecutionCoordinator:
                 )
                 return bool(result)
             except Exception as exc:
-                logger.warning("memory_extraction_redis_unavailable op=throttle error=%s", exc)
+                observability.emit_redis_unavailable(
+                    op="throttle",
+                    error_class=type(exc).__name__,
+                    error_message=sanitize_exception_message(str(exc)),
+                    run_id=run_id,
+                )
         with self._memory_lock:
             last = self._memory_throttle.get(session_id)
             if last is not None and (sequence - last) < self._interval:

@@ -6,10 +6,12 @@ import app.patch_uuid  # noqa: F401
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from app.core.config import settings
 from app.core.database import engine, sync_engine, Base
 from app.core.langsmith import setup_langsmith
+from app.core.logging_config import setup_logging
+from app.core.metrics import render_metrics
 from app.core.migrations import run_migrations
 from app.core.observability import RequestLoggingMiddleware
 from contextlib import asynccontextmanager
@@ -19,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Structured JSON logging foundation (V2.2 P2.1) — before anything logs.
+    setup_logging(settings.LOG_LEVEL)
+
     # Setup - init LangSmith tracing
     setup_langsmith()
 
@@ -143,6 +148,15 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    """Prometheus exposition for the memory-extraction registry (P2.1)."""
+    return Response(
+        content=render_metrics(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 from app.api.endpoints import chat, documents, index, system, ingestion, auth
