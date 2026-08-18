@@ -24,10 +24,13 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 from app.core.llm_provider import build_llm  # eager for patching
+from app.agent.pipeline.cost import TokenBudget
+from app.agent.pipeline.trace import record_trace
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +92,15 @@ class AnswerValidator:
         execution: Optional[object] = None,
     ) -> ValidationResult:
         """Validate an answer. Returns a structured ValidationResult."""
+        _validation_start = time.monotonic()
         result = self._deterministic(question, answer, context, execution)
         if not self._use_llm or not result.valid:
+            record_trace(
+                context, "validation", "validation_completed",
+                status="valid" if result.valid else "invalid",
+                duration_ms=round((time.monotonic() - _validation_start) * 1000, 2),
+                metadata={"grounded": result.grounded, "issues": len(result.issues)},
+            )
             return result
         llm_result = self._llm_check(
             question=question,
@@ -98,7 +108,14 @@ class AnswerValidator:
             context=context,
             deterministic=result,
         )
-        return llm_result if llm_result is not None else result
+        final = llm_result if llm_result is not None else result
+        record_trace(
+            context, "validation", "validation_completed",
+            status="valid" if final.valid else "invalid",
+            duration_ms=round((time.monotonic() - _validation_start) * 1000, 2),
+            metadata={"grounded": final.grounded, "issues": len(final.issues)},
+        )
+        return final
 
     # ── Deterministic core (no LLM, no tools, no I/O) ──────────────────────
 
@@ -157,6 +174,28 @@ class AnswerValidator:
                 ):
                     issues.append("Execution completed but produced no usable output.")
 
+        # V4.7: structured tool outcomes — a tool that technically executed
+        # but returned empty/failed/timeout/blocked must never count as
+        # usable evidence, and must never ground the response.
+        degraded = []
+        if execution is not None:
+            for r in (getattr(execution, "step_results", None) or []):
+                tr = getattr(r, "tool_result", None)
+                if tr is None:
+                    continue
+                tool_status = getattr(tr, "status", None)
+                if tool_status not in (None, "completed"):
+                    degraded.append((getattr(r, "step_id", None), tool_status))
+
+        for step_id, tool_status in degraded:
+            issues.append(
+                f"Step {step_id} produced no usable tool result (status={tool_status})."
+            )
+        if grounding_required and degraded:
+            grounded = False
+            issues.append("Answer relies on failed or empty tool results.")
+            missing.append("Reliable source evidence from tool execution")
+
         # Grounding policy: optional for general/coding/reasoning — never reject.
         if not grounding_required:
             return ValidationResult(
@@ -186,6 +225,16 @@ class AnswerValidator:
     ) -> Optional[ValidationResult]:
         """Optional deep check. Returns None on any failure → deterministic fallback."""
         try:
+            # ── V4.9: budget gate BEFORE the LLM call ───────────────────────
+            # An exhausted TokenBudget skips the LLM escalation entirely and
+            # degrades to the deterministic result — no LLM call past budget.
+            budget = None
+            if context is not None:
+                budget = getattr(context, "token_budget", None)
+            if isinstance(budget, TokenBudget) and budget.check() is not None:
+                logger.info("answer_validator_llm_skipped reason=budget_exhausted")
+                return None
+
             llm = self._llm if self._llm is not None else build_llm(
                 model=self._model_name, temperature=0, max_tokens=128
             )
@@ -215,6 +264,18 @@ class AnswerValidator:
                     block.get("text", "") for block in content if isinstance(block, dict)
                 )
             data = json.loads(str(content).strip())
+
+            # ── V4.9: account provider usage into the TokenBudget ───────────
+            usage_meta = getattr(response, "usage_metadata", None)
+            if isinstance(budget, TokenBudget) and isinstance(usage_meta, dict):
+                model = getattr(llm, "model_name", "")
+                if not isinstance(model, str):
+                    model = ""
+                budget.record(
+                    model=model,
+                    input_tokens=int(usage_meta.get("input_tokens", 0) or 0),
+                    output_tokens=int(usage_meta.get("output_tokens", 0) or 0),
+                )
 
             llm_grounded = bool(data.get("grounded", True))
             try:

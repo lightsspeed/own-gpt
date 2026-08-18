@@ -24,12 +24,15 @@ Synthesis routing:
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 from app.agent.pipeline.executor import ExecutionResult, StepResult
 from app.agent.pipeline.planner import Plan, PlanStep
 from app.agent.pipeline.context import RetrievedContext
+from app.agent.pipeline.trace import record_trace
+from app.agent.pipeline.cost import TokenBudget
 from app.core.llm_provider import build_llm  # eager for patching
 
 logger = logging.getLogger(__name__)
@@ -44,6 +47,9 @@ class StepSummary:
     action: str
     status: str
     output_preview: str = ""    # first 200 chars of output
+    # V4.7: structured tool outcome for audit/synthesis transparency.
+    tool_status: str = ""       # completed | failed | blocked | empty | timeout
+    error_code: Optional[str] = None
 
 
 @dataclass
@@ -57,6 +63,16 @@ class SynthesisResult:
 
 # ── Failure / partial-failure message helpers ────────────────────────────────
 
+def _tool_outcome(r: StepResult) -> str:
+    """Structured outcome of one step: step status, or ToolResult status
+    when present (V4.7). Legacy steps without a ToolResult fall back to
+    their step status, preserving historical synthesis behavior."""
+    tr = getattr(r, "tool_result", None)
+    if tr is not None:
+        return getattr(tr, "status", r.status) or r.status
+    return r.status
+
+
 _FAILURE_MESSAGES: dict[str, str] = {
     "failed":  "I wasn't able to complete that step.",
     "blocked": "This step could not run because a required earlier step failed.",
@@ -64,16 +80,33 @@ _FAILURE_MESSAGES: dict[str, str] = {
 
 
 def _graceful_failure(execution: ExecutionResult, plan: Plan) -> str:
-    """Build a user-friendly explanation for all-failure or full-block outcomes."""
+    """Build a user-friendly explanation for all-failure or full-block outcomes.
+
+    Distinguishes, from structured outcomes: failed action, timed-out
+    action, empty (no usable result) action, and blocked action — never
+    exposing internal codes, provider text, or tool names.
+    """
     lines = []
     step_map: dict[int, PlanStep] = {s.step_id: s for s in plan.steps}
     for r in execution.step_results:
         step = step_map.get(r.step_id)
         action = step.action if step else "step"
-        if r.status == "failed":
+        outcome = _tool_outcome(r)
+        if outcome == "failed":
             lines.append(f"• The {action} step encountered an error.")
-        elif r.status == "blocked":
-            lines.append(f"• The {action} step was skipped because an earlier step failed.")
+        elif outcome == "timeout":
+            lines.append(f"• The {action} step timed out.")
+        elif outcome == "empty":
+            lines.append(f"• The {action} step returned no usable result.")
+        elif outcome == "blocked":
+            if r.status == "blocked":
+                lines.append(
+                    f"• The {action} step was skipped because an earlier step failed."
+                )
+            else:
+                lines.append(
+                    f"• The {action} step could not run because it was not permitted."
+                )
 
     if lines:
         return (
@@ -136,6 +169,7 @@ class Synthesizer:
         Returns:
             SynthesisResult with `.answer`, `.success`, `.sources`, etc.
         """
+        _synthesis_start = time.monotonic()
         agent_state = getattr(context, "agent_state", None)
         if agent_state:
             agent_state.synthesis_status = "running"
@@ -156,8 +190,17 @@ class Synthesizer:
                 action=step_map[r.step_id].action if r.step_id in step_map else "unknown",
                 status=r.status,
                 output_preview=r.output[:200] if r.output else "",
+                tool_status=getattr(getattr(r, "tool_result", None), "status", ""),
+                error_code=getattr(getattr(r, "tool_result", None), "error_code", None),
             )
             for r in execution.step_results
+        ]
+
+        # Steps that "completed" at step level but produced no usable tool
+        # outcome (V4.7: empty / timeout / blocked / failed ToolResult).
+        non_usable = [
+            r for r in completed
+            if _tool_outcome(r) != "completed"
         ]
 
         # ── All steps failed / blocked ───────────────────────────────────────
@@ -176,26 +219,41 @@ class Synthesizer:
             r = completed[0]
             step = step_map.get(r.step_id)
             action = step.action if step else "direct_answer"
-            answer, sources = self._single_step_answer(action, r.output, question)
-            if r_context and r_context.sources:
-                context_sources = [s.title for s in r_context.sources if s.source_type in ("knowledge", "document", "web")]
-                sources = list(set(sources + context_sources))
-            logger.info("synthesizer outcome=single_step action=%s", action)
-            res = SynthesisResult(
-                answer=answer,
-                success=True,
-                used_execution_results=True,
-                sources=sources,
-                step_summaries=summaries,
-            )
+            if _tool_outcome(r) != "completed":
+                # Tool executed but produced nothing usable: no fabricated claim.
+                answer = _graceful_failure(execution, plan)
+                logger.info(
+                    "synthesizer outcome=single_step_empty action=%s tool_status=%s",
+                    action, _tool_outcome(r),
+                )
+                res = SynthesisResult(
+                    answer=answer,
+                    success=False,
+                    used_execution_results=True,
+                    sources=[],
+                    step_summaries=summaries,
+                )
+            else:
+                answer, sources = self._single_step_answer(action, r.output, question)
+                if r_context and r_context.sources:
+                    context_sources = [s.title for s in r_context.sources if s.source_type in ("knowledge", "document", "web")]
+                    sources = list(set(sources + context_sources))
+                logger.info("synthesizer outcome=single_step action=%s", action)
+                res = SynthesisResult(
+                    answer=answer,
+                    success=True,
+                    used_execution_results=True,
+                    sources=sources,
+                    step_summaries=summaries,
+                )
         # ── Partial: some failed or blocked ─────────────────────────────────
-        elif failed or blocked:
+        elif failed or blocked or non_usable:
             answer = self._partial_answer(
-                completed, failed, blocked, step_map, question
+                completed, failed, blocked, step_map, question, non_usable
             )
             logger.info(
-                "synthesizer outcome=partial completed=%d failed=%d blocked=%d",
-                len(completed), len(failed), len(blocked),
+                "synthesizer outcome=partial completed=%d failed=%d blocked=%d non_usable=%d",
+                len(completed), len(failed), len(blocked), len(non_usable),
             )
             sources = []
             if r_context and r_context.sources:
@@ -209,7 +267,7 @@ class Synthesizer:
             )
         # ── All steps completed — LLM synthesis for multi-step ──────────────
         else:
-            answer = self._llm_synthesize(question, completed, step_map)
+            answer = self._llm_synthesize(question, completed, step_map, context=context)
             logger.info("synthesizer outcome=multi_step_synthesis steps=%d", len(completed))
             sources = []
             if r_context and r_context.sources:
@@ -227,6 +285,13 @@ class Synthesizer:
             from app.agent.pipeline.state import finalize_timing
             finalize_timing(agent_state)
             logger.info("agent.request.completed %s", agent_state.summary())
+
+        record_trace(
+            context, "synthesis", "synthesis_completed",
+            status="completed" if res.success else "failed",
+            duration_ms=round((time.monotonic() - _synthesis_start) * 1000, 2),
+            metadata={"success": res.success},
+        )
 
         return res
 
@@ -267,6 +332,7 @@ class Synthesizer:
         blocked: list[StepResult],
         step_map: dict[int, PlanStep],
         question: str,
+        non_usable: Optional[list[StepResult]] = None,
     ) -> str:
         parts: list[str] = []
 
@@ -293,6 +359,25 @@ class Synthesizer:
                 f"Unfortunately, I couldn't complete the {action} part of your request."
             )
 
+        # V4.7: completed steps whose tool outcome was empty/timeout — the
+        # Agent must not silently present missing results as answers.
+        for r in non_usable or []:
+            step = step_map.get(r.step_id)
+            action = step.action if step else "step"
+            outcome = _tool_outcome(r)
+            if outcome == "timeout":
+                parts.append(
+                    f"The {action} part of your request timed out."
+                )
+            elif outcome == "empty":
+                parts.append(
+                    f"I couldn't find any usable results for the {action} part of your request."
+                )
+            else:
+                parts.append(
+                    f"Unfortunately, the {action} part of your request did not complete."
+                )
+
         # Blocked steps — dependency failure downstream
         for r in blocked:
             step = step_map.get(r.step_id)
@@ -310,8 +395,14 @@ class Synthesizer:
         question: str,
         completed: list[StepResult],
         step_map: dict[int, PlanStep],
+        context: object = None,
     ) -> str:
-        """Use existing build_llm to combine multiple completed step outputs."""
+        """Use existing build_llm to combine multiple completed step outputs.
+
+        V4.9: when a TokenBudget is present and exhausted, the LLM call is
+        SKIPPED and the deterministic concatenation fallback is used — no
+        LLM call happens past the budget (graceful, never raises).
+        """
         from langchain_core.messages import HumanMessage, SystemMessage
 
         # Build structured context from step outputs (ordered by step_id)
@@ -328,7 +419,20 @@ class Synthesizer:
             "Please combine these into a single, natural response for the user."
         )
 
+        def _fallback() -> str:
+            return "\n\n".join(
+                r.output for r in sorted(completed, key=lambda x: x.step_id)
+            )
+
         try:
+            # ── V4.9: budget gate BEFORE the LLM call ───────────────────────
+            budget = None
+            if context is not None:
+                budget = getattr(context, "token_budget", None)
+            if isinstance(budget, TokenBudget) and budget.check() is not None:
+                logger.info("synthesizer_llm_skipped reason=budget_exhausted")
+                return _fallback()
+
             llm = build_llm(temperature=0.3, max_tokens=1024)
             response = llm.invoke([
                 SystemMessage(content=self._SYNTHESIS_SYSTEM),
@@ -339,11 +443,24 @@ class Synthesizer:
                 content = "".join(
                     block.get("text", "") for block in content if isinstance(block, dict)
                 )
-            return str(content).strip()
+            text = str(content).strip()
+
+            # ── V4.9: account provider usage into the TokenBudget ───────────
+            usage_meta = getattr(response, "usage_metadata", None)
+            if isinstance(budget, TokenBudget) and isinstance(usage_meta, dict):
+                model = getattr(llm, "model_name", "")
+                if not isinstance(model, str):
+                    model = ""
+                budget.record(
+                    model=model,
+                    input_tokens=int(usage_meta.get("input_tokens", 0) or 0),
+                    output_tokens=int(usage_meta.get("output_tokens", 0) or 0),
+                )
+            return text
         except Exception as exc:
             logger.warning("synthesizer_llm_failed error=%s", exc)
             # Graceful fallback: concatenate outputs
-            return "\n\n".join(r.output for r in sorted(completed, key=lambda x: x.step_id))
+            return _fallback()
 
     # ── Source extraction helpers ─────────────────────────────────────────────
 

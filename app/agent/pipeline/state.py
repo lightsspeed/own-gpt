@@ -98,6 +98,11 @@ class AgentState:
     execution_status: str = "pending"   # pending | running | completed | failed | partial
     synthesis_status: Optional[str] = None  # pending | running | completed | failed
 
+    # V4.11: request-level reliability flags (set only by the lifecycle
+    # helpers below — never mutated directly from the outside).
+    cancelled: bool = False
+    request_timed_out: bool = False
+
     # Timing (perf_counter monotonic)
     started_at: float = field(default_factory=time.perf_counter)
     completed_at: Optional[float] = None
@@ -117,6 +122,8 @@ class AgentState:
             "steps": [s.to_dict() for s in self.steps],
             "execution_status": self.execution_status,
             "synthesis_status": self.synthesis_status,
+            "cancelled": self.cancelled,
+            "request_timed_out": self.request_timed_out,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "total_duration_ms": self.total_duration_ms,
@@ -253,6 +260,16 @@ def mark_step_blocked(
         "agent.step.blocked request_id=%s step_id=%d reason=%s",
         state.request_id, step_id, (reason or "")[:120],
     )
+
+
+def mark_request_cancelled(state: AgentState) -> None:
+    """V4.11: flag a cooperatively cancelled request (terminal, additive)."""
+    state.cancelled = True
+
+
+def mark_request_timed_out(state: AgentState) -> None:
+    """V4.11: flag a request that exceeded its timeout (terminal, additive)."""
+    state.request_timed_out = True
 
 
 def finalize_execution_status(state: AgentState) -> None:

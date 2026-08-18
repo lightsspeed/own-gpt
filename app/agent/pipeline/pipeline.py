@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from app.core.langsmith import traceable
+from .trace import AgentTrace, record_trace
 from .confidence import ConfidenceEvaluator, ConfidenceResult
 from .intent import Intent, IntentClassifier, IntentResult
 from .planner import Planner, AnswerMode, Plan, PlanStep
@@ -68,6 +69,24 @@ from .learning import AgentLearner, LearningResult
 from .capabilities import CapabilitySelector, CapabilitySelection
 from .tool_selection import ToolSelector, ToolSelection
 from .loop import AgentExecutionLoop, LoopResult
+from .cost import (
+    TokenBudget,
+    DEFAULT_REQUEST_BUDGET_TOKENS,
+    DEFAULT_STEP_BUDGET_TOKENS,
+)
+from .security import (
+    record_security,
+    sanitize_content,
+    sanitize_retrieved_context,
+)
+from .reliability import (
+    IdempotencyLedger,
+    ReliabilityGuard,
+    TimeoutPolicy,
+    DEFAULT_REQUEST_TIMEOUT_S,
+    DEFAULT_STEP_TIMEOUT_S,
+    DEFAULT_TOOL_TIMEOUT_S,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +160,28 @@ class PipelineContext:
 
     # V3.5: Structured agent state (observability / tracing)
     agent_state: Optional[AgentState] = None
+
+    # V4.6: Execution identity for StepContext lineage (distinct from
+    # request_id — one request may drive one execution run).
+    execution_id: Optional[str] = None
+
+    # V4.8: Event-based agent execution trace (passive observability).
+    agent_trace: Optional[AgentTrace] = None
+
+    # V4.9: Per-request + per-step token budgets with model-aware estimated
+    # cost. Enforcement is passive and happens at LLM call boundaries —
+    # a context without a budget behaves exactly as before V4.9.
+    token_budget: Optional[TokenBudget] = None
+
+    # V4.11: Reliability & Cancellation. Timeout policy guard (tool / step /
+    # request boundaries on an injectable clock) + idempotency ledger
+    # (first terminal outcome per execution_id+step_id wins). Cooperative
+    # cancellation: the API/operator layer sets cancel_requested; the loop
+    # and executor honor it before any new handler starts. All passive —
+    # a context without these behaves exactly as before V4.11.
+    reliability: Optional[ReliabilityGuard] = None
+    idempotency: Optional[IdempotencyLedger] = None
+    cancel_requested: bool = False
 
     # Grounding (claim-level validation)
     grounding_result: Optional[GroundingResult] = None
@@ -320,6 +361,51 @@ class RAGPipeline:
             request_id, session_id, question[:80],
         )
 
+        # ── V4.6: Execution identity (StepContext lineage) ───────────────────
+        # Distinct from request_id: identifies this execution run so every
+        # propagated step output can be traced back to its origin.
+        ctx.execution_id = str(uuid.uuid4())
+
+        # ── V4.8: Event-based agent execution trace (passive) ────────────────
+        # Correlates request/execution/session/project. Records lifecycle
+        # decisions only — never prompts, outputs, or secrets.
+        ctx.agent_trace = AgentTrace(
+            request_id=request_id,
+            execution_id=ctx.execution_id,
+            session_id=session_id,
+            project_id=project_id or "",
+        )
+        record_trace(ctx, "execution", "request_started")
+
+        # ── V4.9: Token budgets (request + per-step) ────────────────────────
+        # Caps are fixed per request; enforcement happens at the executor /
+        # LLM call boundary — this stage only attaches the budget.
+        ctx.token_budget = TokenBudget(
+            request_budget_tokens=int(
+                self._cfg.get("request_token_budget", DEFAULT_REQUEST_BUDGET_TOKENS)
+            ),
+            per_step_budget_tokens=int(
+                self._cfg.get("step_token_budget", DEFAULT_STEP_BUDGET_TOKENS)
+            ),
+        )
+
+        # ── V4.11: Reliability & Cancellation ─────────────────────────────
+        # Timeout policy (tool / step / request) measured on an injectable
+        # clock; the ledger prevents duplicate execution once an
+        # (execution_id, step_id) pair has a terminal outcome.
+        ctx.reliability = ReliabilityGuard(policy=TimeoutPolicy(
+            tool_timeout_s=float(
+                self._cfg.get("tool_timeout_s", DEFAULT_TOOL_TIMEOUT_S)
+            ),
+            step_timeout_s=float(
+                self._cfg.get("step_timeout_s", DEFAULT_STEP_TIMEOUT_S)
+            ),
+            request_timeout_s=float(
+                self._cfg.get("request_timeout_s", DEFAULT_REQUEST_TIMEOUT_S)
+            ),
+        ))
+        ctx.idempotency = IdempotencyLedger()
+
         # ── Stage 1: Intent Classification ──────────────────────────────────
         t1 = time.monotonic()
         if self._cfg.get("intent_enabled", True):
@@ -347,6 +433,12 @@ class RAGPipeline:
                 ctx.agent_state.request_id, ctx.agent_state.intent,
                 ctx.agent_state.intent_confidence or 0.0,
             )
+            record_trace(
+                ctx, "intent", "intent_classified",
+                status=ctx.agent_state.intent,
+                metadata={"confidence": ctx.intent.confidence,
+                          "used_llm": bool(ctx.intent.used_llm)},
+            )
 
         # ── Stage 2: Request Routing ─────────────────────────────────────────
         t2 = time.monotonic()
@@ -359,6 +451,11 @@ class RAGPipeline:
             logger.debug(
                 "agent.route.selected request_id=%s route=%s",
                 ctx.agent_state.request_id, ctx.agent_state.route,
+            )
+            record_trace(
+                ctx, "routing", "route_selected",
+                status=ctx.agent_state.route,
+                metadata={"skip_retrieval": bool(getattr(ctx.route, "skip_retrieval", False))},
             )
 
         # ── Stage 2b: Planner (creates execution plan & source policy) ────────
@@ -381,10 +478,25 @@ class RAGPipeline:
                 "agent.plan.created request_id=%s goal=%r steps=%d",
                 ctx.agent_state.request_id, ctx.plan.goal, len(ctx.plan.steps),
             )
+            record_trace(
+                ctx, "planning", "plan_created",
+                status="created",
+                metadata={"steps": len(ctx.plan.steps),
+                          "requires_tools": bool(ctx.plan.requires_tools)},
+            )
 
         # ── Stage 2.5: Context Orchestrator (V3.6) ───────────────────────────
         ctx.context_request = self._context_orchestrator.build_request(question, ctx.intent, ctx.plan)
         ctx.context = self._context_orchestrator.retrieve(ctx.context_request, ctx)
+
+        # ── V4.10: untrusted retrieved content boundary ─────────────────────
+        # KB/web/document content is DATA, never instructions: secrets/PII
+        # are redacted, instruction-like phrases neutralized, and the rest
+        # wrapped in explicit untrusted-content delimiters. Every decision
+        # is recorded on the existing AgentTrace (same V4.8 correlation IDs).
+        ctx.context, content_findings = sanitize_retrieved_context(ctx.context)
+        if content_findings:
+            record_security(ctx, "flag", content_findings)
         ctx.context_text = ctx.context.to_prompt_context()
 
         # ── Stage 2b+: Capability Selection (V3.9) ───────────────────────────
@@ -398,6 +510,11 @@ class RAGPipeline:
                 "capability_selection_failed session_id=%s error_type=%s error=%s",
                 session_id, type(exc).__name__, exc,
             )
+        record_trace(
+            ctx, "capability_selection", "capability_selected",
+            status="selected",
+            metadata={"selections": len(ctx.capability_selections or [])},
+        )
 
         # ── Stage 2b+.2: Tool Selection (V3.11) ──────────────────────────────
         # Turns allowed capabilities into concrete registered tools + validated
@@ -413,6 +530,11 @@ class RAGPipeline:
                 "tool_selection_failed session_id=%s error_type=%s error=%s",
                 session_id, type(exc).__name__, exc,
             )
+        record_trace(
+            ctx, "tool_selection", "tool_selected",
+            status="selected",
+            metadata={"selections": len(ctx.tool_selections or [])},
+        )
 
         # ── Stage 2c': Agent Execution Loop (V3.12) ──────────────────────────
         # Bounded, deterministic: one eligible step per iteration through the
@@ -440,7 +562,9 @@ class RAGPipeline:
                 step_results=[],
                 outputs={},
                 final_output=None,
-                error=f"execution loop failed: {exc}",
+                # Stable, capped: raw exception text never enters the trace
+                # that is persisted to Redis (V4 review finding).
+                error=f"execution loop failed: {type(exc).__name__}"[:500],
             )
 
         # ── V3.5: Finalize execution status in AgentState ────────────────────
@@ -635,6 +759,13 @@ class RAGPipeline:
         # ── Stage 7: Context Construction ────────────────────────────────────
         t7 = time.monotonic()
         ctx.context_text = self._build_context(ctx)
+        # ── V4.10: final LLM-bound context is sanitized the same way ────────
+        # (covers the ranked-chunk path built outside the retrieved context).
+        if ctx.context_text:
+            cleaned_text, text_findings = sanitize_content(ctx.context_text)
+            if text_findings:
+                ctx.context_text = cleaned_text
+                record_security(ctx, "flag", text_findings)
         trace.context_ms = round((time.monotonic() - t7) * 1000, 2)
 
         # ── Answer Transparency Mode ─────────────────────────────────────────
@@ -681,6 +812,25 @@ class RAGPipeline:
             ctx.route.decision.value,
             ctx.confidence.overall,
             ctx.confidence_decision,
+        )
+
+        # ── V4.8: Close the execution trace (passive) ────────────────────────
+        # V4.9: request-level cost totals attach to the SAME correlation IDs
+        # (no new tracking mechanism).
+        exec_status = getattr(ctx.execution, "status", "completed") or "completed"
+        if ctx.validation is not None and not ctx.validation.valid:
+            exec_status = "failed"
+        budget_meta: dict = {}
+        if ctx.token_budget is not None:
+            budget_meta = {
+                "estimated_cost_usd": round(ctx.token_budget.total_cost_usd(), 6),
+                "models": ",".join(ctx.token_budget.models_used()) or "none",
+            }
+        record_trace(
+            ctx, "execution", "request_completed",
+            status=exec_status,
+            duration_ms=round((time.monotonic() - ctx._start_time) * 1000, 2),
+            metadata=budget_meta or None,
         )
         return ctx
 

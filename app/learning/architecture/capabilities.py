@@ -247,6 +247,16 @@ register(Capability(
     api_prefix="/api/v1/experiments",
 ))
 
+register(Capability(
+    id="experiment_checkout", name="Experiment Checkout Lane (V3.13-3.15)",
+    description="Single-use AuthorizationCode artifacts gate experiment execution: operator approval bound to experiment_id, idempotent exchange, revocation, and a fail-closed sandbox boundary that never bypasses existing capability or tool gates; every outcome is recorded as an immutable ExecutionResult with an append-only audit trail, and read-only query endpoints expose results and audit history per experiment with secrets redacted (404 on unknown)",
+    owner="learning.experiments", lifecycle_stage="validate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("experimentation",),
+    artifacts=("AuthorizationCode", "AuthorizationEvent", "ExperimentResult"),
+    api_prefix="/api/v1/experiments",
+))
+
 # Runtime tooling
 register(Capability(
     id="tool_sandboxing", name="Tool Sandboxing & HITL Gate",
@@ -375,6 +385,60 @@ register(Capability(
     maturity=MaturityLevel.IMPLEMENTED,
     dependencies=("capability_matching", "tool_selection"),
     artifacts=("LoopResult", "ExecutionResult"),
+))
+
+register(Capability(
+    id="step_context", name="Step Context & Execution Continuity (V4.6)",
+    description="Structured dependency-scoped context for plan steps: a step receives ONLY outputs of its declared dependencies, size-bounded with safe truncation; every propagated entry retains originating step_id + execution_id for synthesis and audit; reuses Memory V2 and AgentState, introduces no new memory system",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("execution_loop",),
+    artifacts=("StepContext", "ContextEntry"),
+))
+
+register(Capability(
+    id="tool_result_standard", name="Tool Result Standardization (V4.7)",
+    description="Standard boundary for every tool outcome: ToolResult with status completed|failed|blocked|empty|timeout and stable error codes (TOOL_FAILED, TOOL_BLOCKED, TOOL_EMPTY, TOOL_TIMEOUT, PROVIDER_UNAVAILABLE, INVALID_TOOL_ARGUMENTS, AUTHORIZATION_REQUIRED); existing tool implementations untouched, normalization at the boundary only; no raw provider text as primary client error",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("step_context", "tool_selection"),
+    artifacts=("ToolResult",),
+))
+
+register(Capability(
+    id="agent_tracing", name="Agent Execution Observability (V4.8)",
+    description="Passive event-based AgentTrace over the execution lifecycle (intent, routing, planning, capability_selection, tool_selection, execution, synthesis, validation, learning); reuses existing logging + TracingService — no new telemetry system; secrets, prompts, memory contents, and raw tool outputs never recorded; derived metrics exposed for the existing observability stack",
+    owner="agent.pipeline", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("tool_result_standard",),
+    artifacts=("AgentTrace", "TraceEvent"),
+))
+
+register(Capability(
+    id="token_governance", name="Cost & Token Governance (V4.9)",
+    description="Per-request and per-step token accounting with provider/model-aware estimated cost and budget enforcement BEFORE LLM calls; blocks further steps when request or step budgets are exhausted (runaway multi-step prevention) and gates optional synthesis/validation escalation; cost data attaches to the existing AgentTrace correlation IDs — no new billing or telemetry system",
+    owner="agent.pipeline", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_tracing", "tool_result_standard"),
+    artifacts=("TokenBudget", "TokenUsage"),
+))
+
+register(Capability(
+    id="agent_security_boundary", name="Agent Security Boundary (V4.10)",
+    description="One boundary where untrusted material enters the agent: tool input validation (scalar-only, secret/PII redaction), tool output sanitization, and retrieved-content containment (prompt-injection phrase neutralization + untrusted-content wrapping); complements existing authorization layers (guardrail, tool_gate, V3.10/V3.11 selections) without duplicating them; every security decision recorded on the existing AgentTrace — no new security or telemetry system",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_tracing", "tool_result_standard", "tool_selection"),
+    artifacts=("SecurityFinding",),
+))
+
+register(Capability(
+    id="production_reliability", name="Production Reliability & Cancellation (V4.11)",
+    description="Timeout boundaries at three levels (per-tool, per-step, request-level) re-labeled onto the existing TOOL_TIMEOUT taxonomy — no new error vocabulary; cooperative cancellation propagating request to execution to current step with nothing left running or pending; partial execution recovery (completed steps stay valid, dependants blocked, independent steps continue once — no automatic retry, no replanning); idempotent execution where the first terminal (execution_id, step_id) outcome wins; all gates order AFTER capability/tool selection and never bypass the security boundary or token budget",
+    owner="agent.pipeline", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_tracing", "tool_result_standard", "token_governance"),
+    artifacts=("ReliabilityGuard", "TimeoutPolicy", "IdempotencyLedger"),
 ))
 
 # Automation

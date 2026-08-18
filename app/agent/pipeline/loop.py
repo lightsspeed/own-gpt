@@ -26,8 +26,9 @@ Safety limits (limits are injectable for testing; defaults are hard caps):
 
 Stop conditions (deterministic `stopped_reason`):
     - all steps completed
-    - a required step fails
-    - a step is blocked (capability / tool policy, or blocked dependency)
+    - a step fails / is blocked (capability / tool policy, or blocked
+      dependency) with NO independent step left executable
+    - request cancelled (operator) or request timed out (V4.11)
     - maximum iterations reached
     - no executable step remains
 
@@ -38,6 +39,17 @@ V3.12 is NOT autonomous reasoning:
     - the same authoritative V3.10 capability selections and V3.11 tool
       selections are passed to the executor for EVERY step — the loop can
       never bypass them.
+
+V4.11 (partial execution recovery + cancellation) [additive]:
+    - a failed/blocked step does not abort the whole run when independent
+      steps remain: dependants are marked blocked (never executed) and
+      independent steps continue once. When nothing independent remains,
+      the loop stops with the SAME `step N failed|blocked` reason V3.12
+      produced — behavior with no independents is unchanged.
+    - the loop checks cancellation and request-timeout before every
+      iteration; remaining steps are settled as blocked with
+      step_cancelled / step_blocked events and one request_cancelled /
+      request_timeout event per run. No step is retried or replanned.
 """
 
 from __future__ import annotations
@@ -50,6 +62,18 @@ from app.core.langsmith import traceable
 from app.agent.pipeline.planner import Plan, PlanStep
 from app.agent.pipeline.capabilities import CapabilitySelection
 from app.agent.pipeline.tool_selection import ToolSelection
+from app.agent.pipeline.state import (
+    mark_request_cancelled,
+    mark_request_timed_out,
+    mark_step_blocked,
+)
+from app.agent.pipeline.trace import record_trace
+from app.agent.pipeline.reliability import (
+    REASON_REQUEST_CANCELLED,
+    REASON_REQUEST_TIMED_OUT,
+    is_cancel_requested,
+    reliability_guard_of,
+)
 from app.agent.pipeline.executor import (
     Executor,
     ExecutionResult,
@@ -158,10 +182,34 @@ class AgentExecutionLoop:
         step_results: dict[int, StepResult] = {}
         iterations = 0
 
+        # V4.11: first failed/blocked outcome drives the final reason when
+        # the run ends with no executable step left (preserves the exact
+        # V3.12 `step N failed|blocked` reason strings).
+        terminal_reason: Optional[str] = None
+
         while True:
             # 1. All steps completed?
             if all(step_status.get(s.step_id) == "completed" for s in steps):
                 return self._finish(True, iterations, "all steps completed",
+                                    steps, step_results, step_outputs)
+
+            # 1a. V4.11: cooperative cancellation (operator intent wins).
+            if is_cancel_requested(context):
+                self._settle_remaining(
+                    "cancelled", REASON_REQUEST_CANCELLED,
+                    steps, step_status, step_results, context,
+                )
+                return self._finish(False, iterations, "request cancelled",
+                                    steps, step_results, step_outputs)
+
+            # 1b. V4.11: request-level timeout.
+            guard = reliability_guard_of(context)
+            if guard is not None and guard.request_expired():
+                self._settle_remaining(
+                    "timed_out", REASON_REQUEST_TIMED_OUT,
+                    steps, step_status, step_results, context,
+                )
+                return self._finish(False, iterations, "request timed out",
                                     steps, step_results, step_outputs)
 
             # 2. Hard iteration cap. No infinite loops.
@@ -172,7 +220,10 @@ class AgentExecutionLoop:
             # 3. Find the next eligible step (dependencies authoritative).
             step = self._find_eligible(steps, step_status)
             if step is None:
-                return self._finish(False, iterations, "no executable step remains",
+                # V4.11: with no step left executable, prefer the first
+                # failure/block as the reason (deterministic, V3.12-compatible).
+                reason = terminal_reason or "no executable step remains"
+                return self._finish(False, iterations, reason,
                                     steps, step_results, step_outputs)
 
             # 4. Execute ONE step through the executor (full V3.10/V3.11
@@ -196,11 +247,104 @@ class AgentExecutionLoop:
                 iterations, step.step_id, result.status,
             )
 
-            # 5. A required step failing or blocking ends the run immediately.
+            # 5. V4.11 partial execution recovery: a failed/blocked step
+            #    blocks its dependants (never executed) but independent
+            #    steps may still run. No retry, no replan.
             if result.status in ("failed", "blocked"):
-                return self._finish(False, iterations,
-                                    f"step {step.step_id} {result.status}",
-                                    steps, step_results, step_outputs)
+                if terminal_reason is None:
+                    terminal_reason = f"step {step.step_id} {result.status}"
+                self._block_dependants(steps, step_status, step_results, context)
+
+    # ── V4.11: settle remaining steps (cancellation / timeout) ───────────────
+
+    def _settle_remaining(
+        self,
+        cause: str,
+        reason: str,
+        steps: list[PlanStep],
+        step_status: dict[int, str],
+        step_results: dict[int, StepResult],
+        context: object,
+    ) -> None:
+        """Mark every not-yet-settled step blocked (never left running/pending).
+
+        Emits one per-step event (step_cancelled on cancellation, otherwise
+        step_blocked) and one request-level event (request_cancelled /
+        request_timeout). State flags are set through the lifecycle helpers.
+        """
+        for s in steps:
+            if step_status.get(s.step_id, "pending") != "pending":
+                continue
+            step_status[s.step_id] = "blocked"
+            step_results[s.step_id] = StepResult(
+                step_id=s.step_id,
+                status="blocked",
+                output="",
+                error=reason,
+                tool=s.tool,
+            )
+            agent_state = getattr(context, "agent_state", None) if context else None
+            if agent_state:
+                mark_step_blocked(agent_state, s.step_id, reason)
+            record_trace(
+                context, "execution",
+                "step_cancelled" if cause == "cancelled" else "step_blocked",
+                status="blocked", step_id=s.step_id, tool=s.tool or "",
+            )
+        agent_state = getattr(context, "agent_state", None) if context else None
+        if agent_state:
+            if cause == "cancelled":
+                mark_request_cancelled(agent_state)
+            else:
+                mark_request_timed_out(agent_state)
+        record_trace(
+            context, "execution",
+            "request_cancelled" if cause == "cancelled" else "request_timeout",
+            status="blocked",
+            step_id=None, tool="",
+        )
+
+    # ── V4.11: block dependants of terminal failures ─────────────────────────
+
+    def _block_dependants(
+        self,
+        steps: list[PlanStep],
+        step_status: dict[int, str],
+        step_results: dict[int, StepResult],
+        context: object,
+    ) -> None:
+        """Mark pending steps with a failed/blocked dependency as blocked.
+
+        They are never handed to the executor (the loop's eligibility rule
+        already requires completed dependencies; this pass settles them so
+        the final ExecutionResult carries their outcome).
+        """
+        for s in steps:
+            if step_status.get(s.step_id, "pending") != "pending":
+                continue
+            if any(
+                step_status.get(dep) not in (None, "completed")
+                for dep in s.dependencies
+            ):
+                error = (
+                    f"Blocked: dependency step(s) {s.dependencies} "
+                    "did not complete successfully."
+                )
+                step_status[s.step_id] = "blocked"
+                step_results[s.step_id] = StepResult(
+                    step_id=s.step_id,
+                    status="blocked",
+                    output="",
+                    error=error,
+                    tool=s.tool,
+                )
+                agent_state = getattr(context, "agent_state", None) if context else None
+                if agent_state:
+                    mark_step_blocked(agent_state, s.step_id, error)
+                record_trace(
+                    context, "execution", "step_blocked",
+                    status="blocked", step_id=s.step_id, tool=s.tool or "",
+                )
 
     @staticmethod
     def _finish(
