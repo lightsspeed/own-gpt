@@ -95,6 +95,7 @@ async def create_memory_endpoint(
     request: MemoryCreateRequest,
     user: User = Depends(get_current_user),
     db=Depends(get_sync_db),
+    provider=Depends(get_embedding_provider),
 ):
     try:
         body = request.model_dump(exclude_unset=True)
@@ -110,6 +111,7 @@ async def create_memory_endpoint(
             # expires_at only when the key was present (absent -> domain TTL).
             expires_at=body.get("expires_at"),
             apply_domain_ttl=True,
+            embed=provider.embed if provider is not None else None,
         )
         return _entity_payload(entity)
     except mem.ProjectNotFoundError:

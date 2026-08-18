@@ -436,7 +436,7 @@ def test_search_k_cap_and_max_tokens(db, user):
 
 def test_search_lazy_embedding_backfill(db, user):
     mem.create_memory(db, user_id=user.id, statement="user's name is alice",
-                      domain=DOMAIN_SEMANTIC, now=utc_now_fixed)  # no embed at creation
+                      domain=DOMAIN_SEMANTIC, now=utc_now_fixed, embed=None)  # no embed at creation
     calls: list[list[str]] = []
 
     def counting_embedder(texts):

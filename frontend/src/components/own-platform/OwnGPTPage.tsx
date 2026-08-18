@@ -43,7 +43,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     setToolMode,
   } = useChat({
     sessionId,
-    model: 'gpt-4o-mini',
+    model: import.meta.env.VITE_DEFAULT_MODEL || '',
     temperature: 0.7,
     systemPrompt: `You are a helpful AI engineering assistant on the Own Platform. Today's date is ${new Date().toISOString().split('T')[0]}.`,
   })

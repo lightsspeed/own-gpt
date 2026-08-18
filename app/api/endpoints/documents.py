@@ -93,6 +93,96 @@ async def get_document_content(filename: str, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ChunkByIndexResponse(BaseModel):
+    filename: str
+    chunk_index: int
+    content: str
+    page: int | None
+    section: str | None
+    total_chunks: int
+
+
+@router.get("/{filename:path}/chunks/{chunk_index}", response_model=ChunkByIndexResponse)
+async def get_chunk_by_index(filename: str, chunk_index: int, db: AsyncSession = Depends(get_db)):
+    """Fetch a single chunk by its document chunk_index.
+
+    Used by the Source Inspector modal to display the exact supporting chunk.
+    Falls back gracefully if the chunk or document no longer exists (404).
+    """
+    try:
+        # Try the exact chunk_index first
+        query = text("""
+            SELECT cmetadata, document
+            FROM langchain_pg_embedding
+            WHERE (cmetadata->>'filename' = :filename OR cmetadata->>'source' = :filename2)
+              AND (cmetadata->>'chunk_index')::int = :chunk_index
+            LIMIT 1
+        """)
+        result = await db.execute(query, {
+            "filename": filename,
+            "filename2": filename,
+            "chunk_index": chunk_index,
+        })
+        row = result.fetchone()
+
+        # Count total chunks for this document
+        count_query = text("""
+            SELECT count(*)
+            FROM langchain_pg_embedding
+            WHERE cmetadata->>'filename' = :filename OR cmetadata->>'source' = :filename2
+        """)
+        total = (await db.execute(count_query, {"filename": filename, "filename2": filename})).scalar() or 0
+
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chunk {chunk_index} not found for document '{filename}'."
+            )
+
+        meta = row.cmetadata or {}
+        page_val = meta.get("page")
+        try:
+            page_val = int(page_val) if page_val is not None else None
+        except (ValueError, TypeError):
+            page_val = None
+
+        section_val = meta.get("chapter") or meta.get("section") or None
+
+        return ChunkByIndexResponse(
+            filename=filename,
+            chunk_index=chunk_index,
+            content=row.document or "",
+            page=page_val,
+            section=section_val,
+            total_chunks=int(total),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch chunk {chunk_index} for {filename}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{filename:path}/exists")
+async def document_exists(filename: str, db: AsyncSession = Depends(get_db)):
+    """Check whether a document is still present in the knowledge base.
+
+    Returns {exists: bool, chunk_count: int}. Used by SourceInspectorModal
+    to gracefully handle documents that have been deleted after citation.
+    """
+    try:
+        count_query = text("""
+            SELECT count(*)
+            FROM langchain_pg_embedding
+            WHERE cmetadata->>'filename' = :filename OR cmetadata->>'source' = :filename2
+        """)
+        total = (await db.execute(count_query, {"filename": filename, "filename2": filename})).scalar() or 0
+        return {"exists": int(total) > 0, "chunk_count": int(total)}
+    except Exception as e:
+        logger.error(f"Failed to check existence for {filename}: {e}")
+        return {"exists": False, "chunk_count": 0}
+
+
 class PageContent(BaseModel):
     page_number: int
     text: str
@@ -153,26 +243,13 @@ async def get_original_file(filename: str):
 @router.delete("/{filename:path}")
 async def delete_document(filename: str, db: AsyncSession = Depends(get_db)):
     try:
-        query = text("""
-            DELETE FROM langchain_pg_embedding
-            WHERE cmetadata->>'filename' = :filename
-               OR cmetadata->>'source' = :filename2
-        """)
-        await db.execute(query, {"filename": filename, "filename2": filename})
-        await db.commit()
-
-        try:
-            from app.core.whoosh_manager import delete_from_whoosh_index
-            delete_from_whoosh_index(filename)
-        except Exception as whoosh_err:
-            logger.warning("whoosh_delete_failed error=%s", whoosh_err)
-
-        file_path = UPLOAD_DIR / filename
-        if file_path.exists():
-            file_path.unlink()
-
-        return {"status": "success", "message": f"Deleted {filename}"}
+        from app.ingestion.processor import purge_document_lifecycle
+        stats = await purge_document_lifecycle(filename)
+        return {
+            "status": "success",
+            "message": f"Successfully deleted {filename} and synchronized document lifecycle.",
+            "stats": stats,
+        }
     except Exception as e:
         logger.error(f"Failed to delete document {filename}: {e}")
-        await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

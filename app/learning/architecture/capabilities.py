@@ -341,6 +341,42 @@ register(Capability(
     artifacts=("MemoryEntity",),
 ))
 
+register(Capability(
+    id="pipeline_learning", name="Pipeline Memory Learning (V3.8)",
+    description="In-pipeline learning stage that persists explicit, durable user statements (preferences, facts, corrections) through Memory V2 after validation; runs only on validated answers and never executes tools",
+    owner="agent.pipeline", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("memory_v2",),
+    artifacts=("LearningResult", "MemoryEntity"),
+))
+
+register(Capability(
+    id="capability_matching", name="Capability Selection & Tool Matching (V3.9)",
+    description="Deterministic pre-execution stage that matches PlanSteps to existing registered capabilities and tools, verifies the Capability Registry, tool registration, source policy, and configuration-driven availability — never executes tools",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("tool_sandboxing", "architecture_governance"),
+    artifacts=("CapabilitySelection",),
+))
+
+register(Capability(
+    id="tool_selection", name="Tool Selection & Argument Construction (V3.11)",
+    description="Deterministic pre-execution stage that turns allowed capability selections into concrete registered tool + validated arguments (query, project_id, fact, user/session scope) — never executes tools",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("capability_matching", "tool_sandboxing"),
+    artifacts=("ToolSelection",),
+))
+
+register(Capability(
+    id="execution_loop", name="Controlled Agent Execution Loop (V3.12)",
+    description="Bounded deterministic loop that executes one eligible plan step per iteration through the executor, never bypassing capability or tool selection; hard caps on steps and iterations, no retries or replanning",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("capability_matching", "tool_selection"),
+    artifacts=("LoopResult", "ExecutionResult"),
+))
+
 # Automation
 register(Capability(
     id="continuous_evaluation", name="Continuous Evaluation",

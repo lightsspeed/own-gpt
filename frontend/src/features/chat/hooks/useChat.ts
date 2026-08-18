@@ -218,98 +218,110 @@ export function useChat(options: UseChatOptions): UseChatReturn {
           const dataStr = line.slice(6).trim();
           if (dataStr === '[DONE]') continue;
 
+          let payload: any;
           try {
-            const payload = JSON.parse(dataStr);
-            if (payload.type === 'content') {
-              if (!hasContent.current) {
-                hasContent.current = true;
-                setPipelineStages(prev => advanceTo(prev, 'generating'));
-              }
-              contentBuffer.current += payload.content;
-              if (!rafPending.current) {
-                rafPending.current = true;
-                requestAnimationFrame(() => {
-                  const chunk = contentBuffer.current;
-                  contentBuffer.current = '';
-                  rafPending.current = false;
-                  if (!chunk) return;
-                  setMessages(prev => prev.map(m => {
-                    if (m.id === assistantIdRef.current) {
-                      return { ...m, content: m.content + chunk };
-                    }
-                    return m;
-                  }));
-                });
-              }
-            } else if (payload.type === 'tool_start') {
-              if (payload.tool === 'search_knowledge_base' || payload.tool === 'search_web') {
-                setPipelineStages(prev => advanceTo(prev, 'retrieving'));
-              }
-              setMessages(prev => {
-                const idx = prev.findIndex(m => m.id === assistantMessageId);
-                if (idx !== -1) {
-                  const copy = [...prev];
-                  copy.splice(idx, 0, {
-                    id: `tool-${Date.now()}-${Math.random()}`,
-                    role: 'tool_event',
-                    content: '',
-                    tool: { name: payload.tool, status: 'calling' },
-                  });
-                  return copy;
-                }
-                return prev;
-              });
-            } else if (payload.type === 'tool_end') {
-              if (payload.tool === 'search_knowledge_base' || payload.tool === 'search_web') {
-                setPipelineStages(prev => advanceTo(prev, 'reranking'));
-              }
-              setMessages(prev => prev.map(m => {
-                if (m.role === 'tool_event' && m.tool?.name === payload.tool && m.tool?.status === 'calling') {
-                  return { ...m, tool: { ...m.tool, status: 'done' } };
-                }
-                return m;
-              }));
-            } else if (payload.type === 'tool_used') {
-              setMessages(prev => prev.map(m => {
-                if (m.id === assistantMessageId) {
-                  const existing = m.usedTools || [];
-                  return { ...m, usedTools: existing.includes(payload.tool) ? existing : [...existing, payload.tool] };
-                }
-                return m;
-              }));
-            } else if (payload.type === 'evidence') {
-              setMessages(prev => prev.map(m => {
-                if (m.id === assistantMessageId) {
-                  return { ...m, evidence: payload.evidence, answerMode: payload.answer_mode };
-                }
-                return m;
-              }));
-            } else if (payload.type === 'resources') {
-              setMessages(prev => prev.map(m => {
-                if (m.id === assistantMessageId) {
-                  return { ...m, resources: payload.resources, answerMode: payload.answer_mode, answerModeMetadata: payload.answer_mode_metadata };
-                }
-                return m;
-              }));
-            } else if (payload.type === 'artifacts') {
-              setMessages(prev => prev.map(m => {
-                if (m.id === assistantMessageId) {
-                  return { ...m, artifacts: payload.artifacts };
-                }
-                return m;
-              }));
-            } else if (payload.type === 'record_id') {
-              setMessages(prev => prev.map(m => {
-                if (m.id === assistantMessageId) {
-                  return { ...m, recordId: payload.record_id };
-                }
-                return m;
-              }));
-            } else if (payload.type === 'error') {
-              throw new Error(payload.message);
-            }
+            payload = JSON.parse(dataStr);
           } catch (err) {
-            console.error('Error parsing SSE line', err);
+            console.error('Error parsing SSE JSON:', err, dataStr);
+            continue;
+          }
+
+          if (payload.type === 'content') {
+            if (!hasContent.current) {
+              hasContent.current = true;
+              setPipelineStages(prev => advanceTo(prev, 'generating'));
+            }
+            contentBuffer.current += payload.content;
+            if (!rafPending.current) {
+              rafPending.current = true;
+              requestAnimationFrame(() => {
+                const chunk = contentBuffer.current;
+                contentBuffer.current = '';
+                rafPending.current = false;
+                if (!chunk) return;
+                setMessages(prev => prev.map(m => {
+                  if (m.id === assistantIdRef.current) {
+                    return { ...m, content: m.content + chunk };
+                  }
+                  return m;
+                }));
+              });
+            }
+          } else if (payload.type === 'tool_start') {
+            if (payload.tool === 'search_knowledge_base' || payload.tool === 'search_web') {
+              setPipelineStages(prev => advanceTo(prev, 'retrieving'));
+            }
+            setMessages(prev => {
+              const idx = prev.findIndex(m => m.id === assistantMessageId);
+              if (idx !== -1) {
+                const copy = [...prev];
+                copy.splice(idx, 0, {
+                  id: `tool-${Date.now()}-${Math.random()}`,
+                  role: 'tool_event',
+                  content: '',
+                  tool: { name: payload.tool, status: 'calling' },
+                });
+                return copy;
+              }
+              return prev;
+            });
+          } else if (payload.type === 'tool_end') {
+            if (payload.tool === 'search_knowledge_base' || payload.tool === 'search_web') {
+              setPipelineStages(prev => advanceTo(prev, 'reranking'));
+            }
+            setMessages(prev => prev.map(m => {
+              if (m.role === 'tool_event' && m.tool?.name === payload.tool && m.tool?.status === 'calling') {
+                return { ...m, tool: { ...m.tool, status: 'done' } };
+              }
+              return m;
+            }));
+          } else if (payload.type === 'tool_used') {
+            setMessages(prev => prev.map(m => {
+              if (m.id === assistantMessageId) {
+                const existing = m.usedTools || [];
+                return { ...m, usedTools: existing.includes(payload.tool) ? existing : [...existing, payload.tool] };
+              }
+              return m;
+            }));
+          } else if (payload.type === 'evidence') {
+            setMessages(prev => prev.map(m => {
+              if (m.id === assistantMessageId) {
+                return { ...m, evidence: payload.evidence, answerMode: payload.answer_mode };
+              }
+              return m;
+            }));
+          } else if (payload.type === 'resources') {
+            setMessages(prev => prev.map(m => {
+              if (m.id === assistantMessageId) {
+                return { ...m, resources: payload.resources, answerMode: payload.answer_mode, answerModeMetadata: payload.answer_mode_metadata };
+              }
+              return m;
+            }));
+          } else if (payload.type === 'artifacts') {
+            setMessages(prev => prev.map(m => {
+              if (m.id === assistantMessageId) {
+                return { ...m, artifacts: payload.artifacts };
+              }
+              return m;
+            }));
+          } else if (payload.type === 'record_id') {
+            setMessages(prev => prev.map(m => {
+              if (m.id === assistantMessageId) {
+                return { ...m, recordId: payload.record_id };
+              }
+              return m;
+            }));
+          } else if (payload.type === 'error') {
+            const safeMsg = payload.message || 'An error occurred during generation.';
+            setError(safeMsg);
+            setMessages(prev => prev.map(m => {
+              if (m.id === assistantMessageId) {
+                const existing = m.content ? m.content + '\n\n' : '';
+                return { ...m, content: existing + `⚠️ **Error:** ${safeMsg}`, status: 'failed' };
+              }
+              return m;
+            }));
+            break;
           }
         }
       }

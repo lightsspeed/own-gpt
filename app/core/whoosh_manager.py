@@ -61,6 +61,7 @@ def rebuild_whoosh_index(vector_store, batch_size: int = 500) -> int:
                     "content": doc.page_content,
                     "source": doc.metadata.get("filename", doc.metadata.get("source", "unknown")),
                     "collection": doc.metadata.get("collection_name", "own_gpt_docs"),
+                    "project_id": doc.metadata.get("project_id", ""),
                 })
                 count += 1
                 if len(docs) >= batch_size:
@@ -89,6 +90,7 @@ def add_to_whoosh_index(chunks: list) -> None:
             "content": chunk.page_content,
             "source": chunk.metadata.get("filename", chunk.metadata.get("source", "unknown")),
             "collection": chunk.metadata.get("collection_name", "own_gpt_docs"),
+            "project_id": chunk.metadata.get("project_id", ""),
         })
     if docs:
         bm25.add_documents(docs)

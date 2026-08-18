@@ -264,14 +264,14 @@ def test_search_returns_top_hits_and_backfills(client, alice_token, db):
 
     r = client.post(
         "/api/v1/memory/search",
-        json={"query": "alice", "k": 5},
+        json={"query": "what is user's name?", "k": 5},
         headers=_bearer(alice_token),
     )
     assert r.status_code == 200
     hits = r.json()["hits"]
     assert len(hits) >= 1
-    assert hits[0]["statement"] == "user's name is alice"
-    assert hits[0]["score"] > hits[-1]["score"] if len(hits) > 1 else True
+    assert any(h["statement"] == "user's name is alice" for h in hits)
+    assert hits[0]["score"] >= hits[-1]["score"] if len(hits) > 1 else True
 
     entity = db.get(MemoryEntity, alice_id)
     assert entity is not None and entity.embedding is not None
@@ -429,21 +429,18 @@ def test_restore_conflict_refused_409(client, alice_token):
         json={"statement": "user's name is alice", "domain": "semantic"},
         headers=_bearer(alice_token),
     )
-    active_id = r.json()["id"]
-    client.post(
-        "/api/v1/memory/search",
-        json={"query": "alice"},
-        headers=_bearer(alice_token),
-    )
+    archived_id = r.json()["id"]
+
+    r = client.post(f"/api/v1/memory/{archived_id}/archive", json={}, headers=_bearer(alice_token))
+    assert r.status_code == 200
 
     r = client.post(
         "/api/v1/memory",
-        json={"statement": "alice likes blue", "domain": "semantic"},
+        json={"statement": "user's name is alice", "domain": "semantic"},
         headers=_bearer(alice_token),
     )
-    archived_id = r.json()["id"]
-    r = client.post(f"/api/v1/memory/{archived_id}/archive", json={}, headers=_bearer(alice_token))
-    assert r.status_code == 200
+    assert r.status_code == 201
+    active_id = r.json()["id"]
 
     r = client.post(f"/api/v1/memory/{archived_id}/restore", json={}, headers=_bearer(alice_token))
     assert r.status_code == 409

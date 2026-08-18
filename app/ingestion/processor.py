@@ -12,6 +12,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
@@ -86,21 +87,88 @@ def _embed_batch(texts: list[str]) -> list[list[float]]:
     raise RuntimeError(f"Embedding failed after {EMBED_MAX_RETRIES} attempts: {last_error}")
 
 
-async def delete_chunks(filename: str) -> None:
-    """Remove all stored chunks for a filename (pgvector + whoosh)."""
+async def purge_document_lifecycle(filename: str, project_id: Optional[str] = None) -> dict:
+    """Purge all document records and index entries across the entire platform lifecycle.
+
+    Synchronizes deletion across:
+    1. PGVector chunks (langchain_pg_embedding table)
+    2. Whoosh BM25 index (delete_from_whoosh_index)
+    3. IngestedFile DB model (ingested_files table)
+    4. IngestionJob DB models (ingestion_jobs table)
+    5. Physical upload file on disk (data/uploads/<filename>)
+
+    Resilient to partial failures and safe for idempotent retries.
+    """
+    from sqlalchemy import delete
+    from app.models.ingestion import IngestionJob
+
+    stats = {
+        "filename": filename,
+        "pgvector_deleted": 0,
+        "whoosh_deleted": 0,
+        "ingested_file_deleted": False,
+        "ingestion_jobs_deleted": 0,
+        "file_unlinked": False,
+    }
+
+    # 1. Clean PGVector chunks, IngestedFile DB record, and IngestionJob records
     async with AsyncSessionLocal() as db:
-        await db.execute(
-            text(
-                "DELETE FROM langchain_pg_embedding "
-                "WHERE cmetadata->>'filename' = :name OR cmetadata->>'source' = :name2"
-            ),
-            {"name": filename, "name2": filename},
+        if project_id:
+            res_pg = await db.execute(
+                text(
+                    "DELETE FROM langchain_pg_embedding "
+                    "WHERE (cmetadata->>'filename' = :name OR cmetadata->>'source' = :name2) "
+                    "AND cmetadata->>'project_id' = :pid"
+                ),
+                {"name": filename, "name2": filename, "pid": project_id},
+            )
+        else:
+            res_pg = await db.execute(
+                text(
+                    "DELETE FROM langchain_pg_embedding "
+                    "WHERE cmetadata->>'filename' = :name OR cmetadata->>'source' = :name2"
+                ),
+                {"name": filename, "name2": filename},
+            )
+        stats["pgvector_deleted"] = res_pg.rowcount or 0
+
+        # Delete from ingested_files table
+        res_file = await db.execute(
+            delete(IngestedFile).where(IngestedFile.filename == filename)
         )
+        stats["ingested_file_deleted"] = (res_file.rowcount or 0) > 0
+
+        # Delete from ingestion_jobs table
+        res_job = await db.execute(
+            delete(IngestionJob).where(IngestionJob.filename == filename)
+        )
+        stats["ingestion_jobs_deleted"] = res_job.rowcount or 0
+
         await db.commit()
+
+    # 2. Clean Whoosh BM25 index
     try:
-        delete_from_whoosh_index(filename)
+        whoosh_count = delete_from_whoosh_index(filename)
+        stats["whoosh_deleted"] = whoosh_count
     except Exception as exc:
-        logger.warning("whoosh_delete_failed error=%s", exc)
+        logger.warning("whoosh_delete_failed filename=%s error=%s", filename, exc)
+
+    # 3. Clean physical upload file from disk
+    file_path = UPLOAD_DIR / filename
+    if file_path.exists():
+        try:
+            file_path.unlink()
+            stats["file_unlinked"] = True
+        except Exception as exc:
+            logger.warning("file_unlink_failed filename=%s error=%s", filename, exc)
+
+    logger.info("purge_document_lifecycle_completed stats=%s", stats)
+    return stats
+
+
+async def delete_chunks(filename: str) -> None:
+    """Backwards-compatible wrapper that purges all traces of a document lifecycle."""
+    await purge_document_lifecycle(filename)
 
 
 async def _upsert_ingested(filename: str, sha256: str, chunks: int) -> None:
@@ -116,7 +184,12 @@ async def _upsert_ingested(filename: str, sha256: str, chunks: int) -> None:
         await db.commit()
 
 
-async def process_file(filename: str, force: bool = False) -> dict:
+async def process_file(
+    filename: str,
+    force: bool = False,
+    project_id: Optional[str] = None,
+    owner_id: Optional[str] = None,
+) -> dict:
     """Ingest one file into pgvector + whoosh.
 
     Returns {"chunks": int, "sha256": str, "duplicate": bool}.
@@ -143,7 +216,7 @@ async def process_file(filename: str, force: bool = False) -> dict:
         return {"chunks": existing.chunks, "sha256": sha256, "duplicate": True}
     if existing is not None:
         logger.info("ingestion_changed_reembed filename=%s", filename)
-        await delete_chunks(filename)
+        await purge_document_lifecycle(filename, project_id=project_id)
 
     docs = _load_documents(filename, ext)
     splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
@@ -153,6 +226,10 @@ async def process_file(filename: str, force: bool = False) -> dict:
         chunk.metadata["filename"] = filename
         chunk.metadata["chunk_id"] = str(uuid.uuid4())
         chunk.metadata["chunk_index"] = idx
+        if project_id:
+            chunk.metadata["project_id"] = project_id
+        if owner_id:
+            chunk.metadata["owner_id"] = owner_id
 
     texts = [c.page_content for c in splits]
     ids = [c.metadata["chunk_id"] for c in splits]

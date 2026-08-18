@@ -26,6 +26,7 @@ from typing import Callable, Optional
 
 from app.core.config import settings
 from app.core import metrics as core_metrics
+from app.learning.extraction import observability
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,14 @@ class BoundedDaemonExecutor:
         process exit). Workers exit on the sentinel after the queue is
         drained; queued tasks are dropped (abandoned safely — single-flight
         TTL + idempotent writes allow a later re-execution).
+
+        Observability: emits one structured event with the number of queued
+        tasks abandoned (`dropped`) — queued-only, never in-flight work. The
+        `inflight` gauge is owned by the workers and deliberately NOT reset
+        here: a daemon task still executing after this call is a true
+        in-flight task, not an abandoned one.
         """
+        drained = 0
         with self._lock:
             if not self._running:
                 return
@@ -118,9 +126,20 @@ class BoundedDaemonExecutor:
                     self._queue.get_nowait()
                 except queue.Empty:
                     break
+                drained += 1
             core_metrics.safe_set("queue_depth", 0)
             for _ in self._workers:
                 self._queue.put_nowait(None)
+        observability.log_event(
+            logging.INFO,
+            "extraction_executor_shutdown",
+            dropped=drained,
+            queue_depth=0,
+        )
+        logger.info(
+            "extraction_executor_shutdown_detached abandoned=%d in_flight_tasks_finish_outside_shutdown",
+            drained,
+        )
 
 
 # Process-wide singleton. Workers are daemon threads and start at import time;

@@ -26,7 +26,6 @@ import os
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from app.core.config import settings
 from app.learning.operations.memory import (
     MemoryEmbeddingIndex,
     MemoryFact,
@@ -120,7 +119,8 @@ def default_summarize(transcripts: list[SessionTranscript]) -> list[str]:
     """Consolidate transcripts into 2-3 sentence summaries (one per transcript)."""
     from app.core.llm_provider import build_llm  # deferred — heavy import
 
-    model = build_llm(model=settings.DEFAULT_MODEL, temperature=0.0)
+    # Provider-resolved default (build_llm(None)); never a hardcoded name.
+    model = build_llm(model=None, temperature=0.0)
     results: list[str] = []
     for transcript in transcripts:
         prompt = (

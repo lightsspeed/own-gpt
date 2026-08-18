@@ -151,10 +151,11 @@ class FakePipeline:
         self.tracer = type("T", (), {"store": lambda self, t: None})()
         self.source_policy = None
 
-    def process(self, question, session_id, retriever_mode=None, filename=None):
+    def process(self, question, session_id, retriever_mode=None, filename=None, project_id=None, **kwargs):
         return FakePipelineContext(
             question=question,
             session_id=session_id,
+            project_id=project_id,
             confidence=None,
             source_policy=None,
             intent_label="general",
@@ -213,6 +214,7 @@ class FakePipelineContext:
     retrieved_chunks: list
     answer_mode_metadata: dict
     trace: Any
+    project_id: Optional[str] = None
 
 
 def _install_fakes() -> None:

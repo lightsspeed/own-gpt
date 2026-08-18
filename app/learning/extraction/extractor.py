@@ -55,10 +55,26 @@ from app.learning.extraction.executor import extraction_executor
 
 logger = logging.getLogger(__name__)
 
-# Extraction LLM: the provider default when running on Ollama, the classic
-# OpenAI extraction model otherwise. Structured-JSON reliability differs by
-# provider — Gate 3 validation is provider-agnostic and batch-atomic.
-EXTRACTION_MODEL = settings.LLM_MODEL if settings.LLM_PROVIDER == "ollama" else "gpt-4o-mini"
+def resolve_extraction_model() -> str:
+    """Resolve extraction LLM model dynamically based on LLM_PROVIDER.
+
+    - ollama -> settings.LLM_MODEL
+    - groq   -> settings.GROQ_MODEL
+    - gemini -> settings.GEMINI_MODEL
+    - openai / fallback -> settings.DEFAULT_MODEL or 'gpt-4o-mini'
+    """
+    provider = settings.LLM_PROVIDER
+    if provider == "ollama":
+        return settings.LLM_MODEL
+    if provider == "groq":
+        return settings.GROQ_MODEL
+    if provider == "gemini":
+        return settings.GEMINI_MODEL
+    return settings.DEFAULT_MODEL or "gpt-4o-mini"
+
+
+EXTRACTION_MODEL = resolve_extraction_model()
+
 MAX_CANDIDATES = 3
 MAX_STATEMENT_CHARS = 500
 
@@ -163,10 +179,11 @@ def _extract_with_llm(exchange: str, run_id: Optional[str] = None) -> Optional[l
     from langchain_core.messages import HumanMessage, SystemMessage
     from app.core.llm_provider import build_llm
 
+    extraction_model = resolve_extraction_model()
     provider = core_metrics.provider_label()
-    model = core_metrics.model_label(EXTRACTION_MODEL)
+    model = core_metrics.model_label(extraction_model)
 
-    model_obj = build_llm(model=EXTRACTION_MODEL, temperature=0.0)
+    model_obj = build_llm(model=extraction_model, temperature=0.0)
     system = (
         "You are a memory extraction service. From the conversation turn below, "
         "extract at most %d durable facts about the user or their projects "

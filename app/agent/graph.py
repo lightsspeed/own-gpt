@@ -7,7 +7,7 @@ from app.agent.tools import tools
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_core.language_models import BaseChatModel
 from app.core.config import settings
-from app.core.llm_provider import build_llm
+from app.core.llm_provider import build_llm, invoke_model_with_retry
 from app.core.model_config import DEFAULT_MODEL
 from app.services.memory import search_memories as _search_memories
 from app.services.embeddings import build_embedding_provider as _build_embedding_provider
@@ -134,14 +134,14 @@ def call_model(state: AgentState) -> dict:
     pipeline_context = state.get("pipeline_context", "")
     answer_mode_directive = state.get("answer_mode_directive", "")
     answer_mode = state.get("answer_mode", "")
+    is_doc_scoped = bool(state.get("document"))
 
-    # Memory recalls skip retrieval by design — they must never hit the
-    # knowledge-base boundary; they are answered from the memory sections below.
-    RETRIEVAL_INTENTS = {"knowledge", "unknown", "coding", "reasoning"}
+    # Strict KB boundary is ONLY enforced when document-scoped chat is active
+    # OR when intent is explicitly 'knowledge' and answer_mode is grounded/no_evidence.
+    # General LLM chat, coding, memory, and reasoning questions must answer naturally.
+    is_strict_kb = is_doc_scoped or (intent == "knowledge" and answer_mode in ("grounded", "no_evidence"))
 
-    if (answer_mode == "no_evidence" and not pipeline_context) or (
-        intent in RETRIEVAL_INTENTS and not pipeline_context
-    ):
+    if is_strict_kb and not pipeline_context:
         # STRICT KNOWLEDGE BASE BOUNDARY
         # When retrieval ran but 0 relevant documents matched, replace prompt sections completely
         # to eliminate conflicting directives asking for detailed/comprehensive answers.
@@ -207,7 +207,13 @@ def call_model(state: AgentState) -> dict:
         temperature = 0.4
     model_with_tools = build_model(model_name, temperature).bind_tools(tools)
 
-    response = model_with_tools.invoke(payload)
+    # One bounded retry for retryable provider failures (max 2 attempts).
+    # Safe for tool calling: an exception here means the model produced no
+    # tool call, so no tool side effect has occurred; successful generations
+    # (including ones carrying tool_calls) are never retried.
+    response = invoke_model_with_retry(
+        model_with_tools, payload, provider=settings.LLM_PROVIDER
+    )
     return {"messages": [response]}
 
 

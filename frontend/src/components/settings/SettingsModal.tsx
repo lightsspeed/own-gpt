@@ -23,10 +23,13 @@ export interface AppSettings {
   systemPrompt: string;
 }
 
+const DEFAULT_MODEL = import.meta.env.VITE_DEFAULT_MODEL || '';
+
 const MODELS = [
-  { id: 'gpt-4o-mini', label: 'GPT-4o Mini', desc: 'Fast & cheap — great for most tasks' },
-  { id: 'gpt-4o', label: 'GPT-4o', desc: 'Most capable — slower & more expensive' },
-  { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', desc: 'Legacy — fast but less capable' },
+  { id: '', label: 'Gemini 3.6 Flash (Default)', desc: 'Google Gemini 3.6 Flash — active default model' },
+  { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', desc: 'Google Gemini 3.6 Flash — fast & intelligent' },
+  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', desc: 'Google Gemini 3 Flash Preview' },
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', desc: 'Google Gemini 2.5 Pro — high reasoning' },
 ];
 
 export function SettingsModal({ open, onClose, onClearHistory, settings, onSettingsChange }: SettingsProps) {

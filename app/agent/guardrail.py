@@ -39,7 +39,7 @@ class GuardrailDecision:
 #   call is still recorded as an auditable ToolExecution artifact.
 #   Real side-effect tools (external integrations) require explicit human
 #   approval per the platform constitution.
-READ_ONLY_TOOLS = frozenset({"search_knowledge_base"})
+READ_ONLY_TOOLS = frozenset({"search_knowledge_base", "web_search"})
 AUTO_TOOLS = frozenset({"remember_user_fact", "remember_session_fact", "forget_user_fact"})
 MUTATING_TOOLS = frozenset({"sm_integration"})
 DENY_TOOLS = frozenset()  # reserved for future dangerous tools

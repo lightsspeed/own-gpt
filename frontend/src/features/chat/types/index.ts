@@ -5,10 +5,16 @@ interface ToolCall {
 }
 
 export interface ResourceItem {
-  type: 'web' | 'file';
+  type: 'web' | 'file' | 'knowledge';
   title: string;
   url?: string;
   snippet?: string;
+  // V3 Phase 5: citation transparency fields
+  document_id?: string | null;
+  chunk_index?: number | null;
+  page?: number | null;
+  section?: string | null;
+  confidence_label?: 'high' | 'medium' | 'low' | 'no_evidence' | null;
 }
 
 export interface ArtifactAction {
@@ -78,6 +84,7 @@ export interface MessageData {
     doc_count: number;
     confidence: number;
     retrieval_method: string;
+    retrieved_count?: number;  // V3 Phase 5: how many chunks were retrieved before reranking
   };
 }
 

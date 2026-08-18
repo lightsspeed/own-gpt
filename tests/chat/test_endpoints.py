@@ -3,8 +3,10 @@ model validation, duplicate requests, history from application persistence."""
 
 from __future__ import annotations
 
+import json
 import sys
 
+import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -115,8 +117,8 @@ def test_history_backfills_legacy_checkpoint_conversation(client, alice_token, d
 # Model selection
 # ---------------------------------------------------------------------------
 
-def test_invalid_model_rejected_with_error_envelope(client, alice_token, db):
-    r = client.post("/chat", json={"session_id": "m1", "message": "hi", "model": "gpt-99"}, headers=_bearer(alice_token))
+def test_invalid_temperature_rejected_with_error_envelope(client, alice_token, db):
+    r = client.post("/chat", json={"session_id": "m1", "message": "hi", "temperature": 99.0}, headers=_bearer(alice_token))
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "invalid_generation_config"
     assert store.get_conversation(db, "m1", None) is None  # no conversation leaked
@@ -173,9 +175,33 @@ def test_stream_failure_before_output_persists_no_fake_assistant(client, alice_t
     events = _consume_stream(client.post(
         "/chat/stream", json={"session_id": "s2", "message": "hi"}, headers=_bearer(alice_token)
     ))
-    assert any("provider down" in e for e in events)
+    # Classified error event: stable code + safe message, NEVER raw text.
+    error_events = [json.loads(e) for e in events if e != "[DONE]" and json.loads(e).get("type") == "error"]
+    assert len(error_events) == 1
+    assert error_events[0]["code"] == "APPLICATION_ERROR"
+    assert error_events[0]["retryable"] is False
+    assert error_events[0]["message"] == "An internal error occurred."
+    assert not any("provider down" in e for e in events)
+    assert events[-1] == "[DONE]"
     rows = store.list_messages(db, "s2")
     assert [m.role for m in rows] == ["user"]  # NO fake assistant message
+
+
+def test_stream_groq_tool_failure_emits_classified_code(client, alice_token, fake_graph, db):
+    import openai
+
+    body = {"error": {"message": "Failed to call a function. Please adjust your prompt. See 'failed_generation' for more details.", "type": "invalid_request_error", "code": "tool_use_failed"}}
+    fake_graph.stream_error = openai.BadRequestError(
+        "Failed to call a function.", response=httpx.Response(400, request=httpx.Request("POST", "http://x")), body=body
+    )
+    events = _consume_stream(client.post(
+        "/chat/stream", json={"session_id": "s5", "message": "hi"}, headers=_bearer(alice_token)
+    ))
+    error_events = [json.loads(e) for e in events if e != "[DONE]" and json.loads(e).get("type") == "error"]
+    assert error_events[0]["code"] == "TOOL_CALL_FAILED"
+    assert error_events[0]["retryable"] is True
+    assert "failed_generation" not in error_events[0]["message"]
+    assert events[-1] == "[DONE]"
 
 
 def test_stream_partial_failure_preserves_partial_marked_failed(client, alice_token, fake_graph, db):
@@ -184,7 +210,10 @@ def test_stream_partial_failure_preserves_partial_marked_failed(client, alice_to
     events = _consume_stream(client.post(
         "/chat/stream", json={"session_id": "s3", "message": "hi"}, headers=_bearer(alice_token)
     ))
-    assert any("timeout mid-stream" in e for e in events)
+    error_events = [json.loads(e) for e in events if e != "[DONE]" and json.loads(e).get("type") == "error"]
+    assert error_events[0]["code"] == "APPLICATION_ERROR"
+    assert not any("timeout mid-stream" in e for e in events)
+    assert events[-1] == "[DONE]"
     rows = store.list_messages(db, "s3")
     assert [(m.role, m.status, m.content) for m in rows] == [
         ("user", "completed", "hi"),
@@ -212,6 +241,7 @@ def test_stream_reaches_done_when_extraction_scheduled(client, alice_token, fake
 
 
 def test_stream_clarification_persisted(client, alice_token, db, chat_module):
+    """Clarification short-circuit fires only in document-scoped chat with no matching chunks."""
     class Conf:
         decision = "clarification"
 
@@ -221,11 +251,15 @@ def test_stream_clarification_persisted(client, alice_token, db, chat_module):
         trace = None
         answer_mode = "grounded"
         answer_mode_metadata = {}
+        source_policy = None
+        context_text = ""
 
     chat_module._pipeline.process = lambda *a, **k: Ctx()
     chat_module._pipeline.kb_not_covered_message = lambda: "Not covered."
     events = _consume_stream(client.post(
-        "/chat/stream", json={"session_id": "s4", "message": "unknown topic"}, headers=_bearer(alice_token)
+        "/chat/stream",
+        json={"session_id": "s4", "message": "unknown topic", "document": "some_doc.pdf"},
+        headers=_bearer(alice_token),
     ))
     rows = store.list_messages(db, "s4")
     assert [(m.role, m.content, m.status) for m in rows] == [

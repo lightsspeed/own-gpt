@@ -26,7 +26,7 @@ export function DocumentChat({ filename, currentPage, onClose, onCitationClick }
     stop,
   } = useChat({
     sessionId: `doc-chat-${filename}`,
-    model: 'gpt-4o-mini',
+    model: import.meta.env.VITE_DEFAULT_MODEL || 'gpt-4o-mini',
     temperature: 0.7,
     document: filename,
     systemPrompt: `You are a helpful assistant reading the document "${filename}" in the Knowledge Base. Today's date is ${new Date().toISOString().split('T')[0]}.`,

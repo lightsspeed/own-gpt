@@ -1,0 +1,16 @@
+# OwnGPT Grafana file-based dashboard provisioning (V2.2 P2.2).
+# Dashboards live as versioned JSON under ops/grafana/dashboards (dashboard-as-
+# code) and are registered here; UI edits are disabled so the code stays the
+# single source of truth.
+apiVersion: 1
+
+providers:
+  - name: owngpt
+    orgId: 1
+    folder: OwnGPT
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

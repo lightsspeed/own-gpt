@@ -17,10 +17,10 @@ from app.services.vector_store import similarity_search
 logger = logging.getLogger(__name__)
 
 
-def search_knowledge_base_impl(query: str) -> str:
+def search_knowledge_base_impl(query: str, project_id: str = "") -> str:
     """Read-only: search the RAG knowledge base for uploaded documents."""
     try:
-        results = similarity_search(query, k=3)
+        results = similarity_search(query, k=3, project_id=project_id or None)
         if not results:
             return (
                 "No relevant information found in the knowledge base for this query. "
@@ -34,6 +34,93 @@ def search_knowledge_base_impl(query: str) -> str:
         return f"Found the following information:\n\n{context}"
     except Exception as e:
         return f"Error searching knowledge base: {str(e)}"
+
+
+def web_search_impl(query: str, max_results: int = 5) -> str:
+    """Read-only: search the live web via Tavily API for real-time external information.
+
+    Safety Bounds:
+    - Query length: max 300 characters
+    - Max results: clamped 1..5
+    - Request timeout: 10.0 seconds
+    - Response size: max 3000 characters total
+
+    Returns formatted structured search results including Title, URL, Domain, and Snippet.
+    Fails gracefully if TAVILY_API_KEY is missing or request times out/errors.
+    """
+    from app.core.config import settings
+
+    api_key = settings.TAVILY_API_KEY.strip()
+    if not api_key:
+        return "Web search is currently unavailable: TAVILY_API_KEY is not configured in the server environment."
+
+    clean_query = query.strip()[:300]
+    if not clean_query:
+        return "Web search query cannot be empty."
+
+    clamped_max_results = max(1, min(max_results, 5))
+
+    try:
+        import requests
+        import re
+        from urllib.parse import urlparse
+
+        def _do_search(q: str):
+            return requests.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": api_key,
+                    "query": q,
+                    "max_results": clamped_max_results,
+                    "search_depth": "basic",
+                    "include_answer": False,
+                    "include_raw_content": False,
+                },
+                headers={"Content-Type": "application/json"},
+                timeout=10.0,
+            )
+
+        resp = _do_search(clean_query)
+
+        # Retry once if Tavily 400 error due to site: operator formatting
+        if resp.status_code == 400 and "site:" in clean_query.lower():
+            fallback_q = re.sub(r"site:\S+", "", clean_query, flags=re.IGNORECASE).strip()
+            if fallback_q:
+                resp = _do_search(fallback_q)
+
+        if resp.status_code != 200:
+            logger.warning("tavily_search_http_error status=%d body=%s", resp.status_code, resp.text[:200])
+            return f"Web search failed (HTTP {resp.status_code}). Please rephrase your query or try again."
+
+        data = resp.json()
+        raw_results = data.get("results", [])
+        if not raw_results:
+            return f"No web search results found for query: '{clean_query}'."
+
+        formatted_items = []
+        for i, item in enumerate(raw_results, 1):
+            title = item.get("title", "Untitled").strip()
+            url = item.get("url", "").strip()
+            content = item.get("content", "").strip()[:500]
+            domain = urlparse(url).netloc if url else "unknown"
+
+            formatted_items.append(
+                f"[{i}] Title: {title}\n"
+                f"    URL: {url}\n"
+                f"    Domain: {domain}\n"
+                f"    Snippet: {content}"
+            )
+
+        output = f"Web Search Results for '{clean_query}':\n\n" + "\n\n".join(formatted_items)
+        return output[:3000]
+
+    except requests.Timeout:
+        logger.warning("tavily_search_timeout query=%r", clean_query[:50])
+        return "Web search request timed out after 10 seconds. Please try again."
+    except Exception as exc:
+        logger.error("tavily_search_failed query=%r error=%s", clean_query[:50], exc)
+        return f"Web search encountered an error: {str(exc)[:150]}"
+
 
 
 def sm_integration_impl(action: str, target: str, content: Optional[str] = None) -> str:

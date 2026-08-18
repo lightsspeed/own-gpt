@@ -1,0 +1,199 @@
+# Promtool rule unit tests for ops/prometheus/rules/extraction.yml (V2.2 P2.2).
+#
+# Deterministic by design: fixed input series, fixed evaluation times —
+# no wall-clock dependence (AGENTS.md Testing). Run via:
+#   docker run --rm --entrypoint promtool -v ${PWD}/ops/prometheus:/ops/prometheus \
+#     prom/prometheus:v3.13.2 test rules /ops/prometheus/tests/extraction_test.yml
+# (wrapped in scripts/verify_p2_2_observability.ps1)
+#
+# Time model: 1m input steps; 1m rule evaluation. `for:` durations are honored
+# by promtool >= 3.4; every eval_time is far beyond the longest `for` so the
+# tests assert on the OUTCOME, not on timing edges.
+
+# Rule files are referenced from the verification mount point
+# (/ops/prometheus/...), not the runtime container path — promtool resolves
+# exactly what scripts/verify_p2_2_observability.ps1 provides.
+rule_files:
+  - /ops/prometheus/rules/extraction.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: extraction_failure_rate_high_fires_on_sustained_failures
+    interval: 1m
+    input_series:
+      - series: 'owngpt_memory_extraction_failed_total'
+        values: '0+1x299'
+      - series: 'owngpt_memory_extraction_scheduled_total'
+        values: '1+1x299'
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: ExtractionFailureRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+            exp_annotations:
+              summary: "Extraction failure rate is high"
+              description: "More than half of extraction attempts failed over the last 15m. Check LLM provider, database, and recent extraction logs (event=memory_extraction_failed)."
+
+  - name: extraction_failure_rate_high_stays_silent_on_occasional_failures
+    interval: 1m
+    input_series:
+      - series: 'owngpt_memory_extraction_failed_total'
+        values: '0+0x299'
+      - series: 'owngpt_memory_extraction_scheduled_total'
+        values: '1+1x299'
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: ExtractionFailureRateHigh
+        exp_alerts: []
+
+  - name: extraction_inflight_stuck_fires_on_hung_workers
+    interval: 1m
+    input_series:
+      - series: 'owngpt_memory_extraction_inflight'
+        values: '1+0x299'
+      - series: 'owngpt_memory_extraction_completed_total'
+        values: '0+0x299'
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: ExtractionInflightStuck
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: platform
+            exp_annotations:
+              summary: "Extractions are stuck in-flight"
+              description: "Workers hold inflight task(s) but zero extractions completed for 30m. Investigate hung LLM calls or worker threads (executor host)."
+
+  - name: extraction_inflight_stuck_stays_silent_when_work_completes
+    interval: 1m
+    input_series:
+      - series: 'owngpt_memory_extraction_inflight'
+        values: '1+0x299'
+      - series: 'owngpt_memory_extraction_completed_total'
+        values: '0+1x299'
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: ExtractionInflightStuck
+        exp_alerts: []
+
+  - name: extraction_queue_backlog_fires_on_sustained_saturation
+    interval: 1m
+    input_series:
+      - series: 'owngpt_memory_extraction_queue_depth'
+        values: '45+0x299'
+      - series: 'owngpt_memory_extraction_queue_capacity'
+        values: '50+0x299'
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: ExtractionQueueBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+            exp_annotations:
+              summary: "Extraction queue is near capacity"
+              description: "The bounded extraction queue has been >= 90% full for 5m. Scheduling is outpacing workers; check LLM latency and worker health."
+
+  - name: extraction_queue_backlog_stays_silent_at_normal_load
+    interval: 1m
+    input_series:
+      - series: 'owngpt_memory_extraction_queue_depth'
+        values: '10+0x299'
+      - series: 'owngpt_memory_extraction_queue_capacity'
+        values: '50+0x299'
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: ExtractionQueueBacklog
+        exp_alerts: []
+
+  - name: redis_coordination_degraded_fires_on_sustained_fallback
+    interval: 1m
+    input_series:
+      - series: 'owngpt_memory_extraction_redis_fallback_total{operation="claim"}'
+        values: '0+1x299'
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: RedisCoordinationDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+              operation: claim
+            exp_annotations:
+              summary: "Redis coordination is falling back to in-process state"
+              description: "Extraction continues (fail-open) but Redis claims/throttle are failing. Check the redis service and the memory_extraction_redis_unavailable events."
+
+  - name: redis_coordination_degraded_stays_silent_when_healthy
+    interval: 1m
+    input_series:
+      - series: 'owngpt_memory_extraction_redis_fallback_total{operation="claim"}'
+        values: '0+0x299'
+    alert_rule_test:
+      - eval_time: 300m
+        alertname: RedisCoordinationDegraded
+        exp_alerts: []
+
+  - name: extraction_silently_stopped_fires_only_with_chat_and_no_scheduling
+    interval: 1m
+    input_series:
+      - series: 'owngpt_http_requests_total{endpoint="chat"}'
+        values: '1+1x899'
+      - series: 'owngpt_memory_extraction_scheduled_total'
+        values: '0+0x899'
+      - series: 'owngpt_memory_extraction_info{enabled="1"}'
+        values: '1+0x899'
+    alert_rule_test:
+      - eval_time: 900m
+        alertname: ExtractionSilentlyStopped
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: platform
+            exp_annotations:
+              summary: "Extraction stopped while chat traffic continues"
+              description: "Chat requests happened in the last 12h but no extraction was scheduled. Check MEMORY_V2_GRAPH config, the executor, and scheduling events (event=memory_extraction_scheduled)."
+
+  - name: extraction_silently_stopped_stays_silent_without_chat_traffic
+    interval: 1m
+    input_series:
+      - series: 'owngpt_http_requests_total{endpoint="chat"}'
+        values: '0+0x899'
+      - series: 'owngpt_memory_extraction_scheduled_total'
+        values: '0+0x899'
+      - series: 'owngpt_memory_extraction_info{enabled="1"}'
+        values: '1+0x899'
+    alert_rule_test:
+      - eval_time: 900m
+        alertname: ExtractionSilentlyStopped
+        exp_alerts: []
+
+  - name: extraction_silently_stopped_stays_silent_when_disabled_by_config
+    interval: 1m
+    input_series:
+      - series: 'owngpt_http_requests_total{endpoint="chat"}'
+        values: '1+1x899'
+      - series: 'owngpt_memory_extraction_scheduled_total'
+        values: '0+0x899'
+      - series: 'owngpt_memory_extraction_info{enabled="0"}'
+        values: '1+0x899'
+    alert_rule_test:
+      - eval_time: 900m
+        alertname: ExtractionSilentlyStopped
+        exp_alerts: []
+
+  - name: extraction_silently_stopped_stays_silent_when_scheduling_is_healthy
+    interval: 1m
+    input_series:
+      - series: 'owngpt_http_requests_total{endpoint="chat"}'
+        values: '1+1x899'
+      - series: 'owngpt_memory_extraction_scheduled_total'
+        values: '1+1x899'
+      - series: 'owngpt_memory_extraction_info{enabled="1"}'
+        values: '1+0x899'
+    alert_rule_test:
+      - eval_time: 900m
+        alertname: ExtractionSilentlyStopped
+        exp_alerts: []

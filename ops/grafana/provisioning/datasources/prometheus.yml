@@ -1,0 +1,13 @@
+# OwnGPT Grafana datasource provisioning (V2.2 P2.2).
+# Grafana reads Prometheus only; it is visualization, never part of the
+# OwnGPT request path. Consumed by the `monitoring` compose profile.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: owngpt_prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

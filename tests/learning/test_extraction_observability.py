@@ -572,7 +572,7 @@ def test_no_forbidden_ids_in_metric_labels():
         for metric in group.values():
             seen.update(getattr(metric, "_labelnames", ()))
     assert not (seen & _FORBIDDEN_LABELS)
-    assert seen <= {"reason", "gate", "operation", "kind", "provider", "model", "status"}
+    assert seen <= {"reason", "gate", "operation", "kind", "provider", "model", "status", "enabled"}
 
 
 def test_metrics_render_has_no_content(engine, user, monkeypatch):
@@ -857,3 +857,108 @@ def test_logs_never_contain_conversation_content(engine, user, monkeypatch, json
     joined = " ".join(json.dumps(_formatted(json_logs, i)) for i in range(len(json_logs)))
     assert marker not in joined
     assert "password123" not in joined
+
+
+# ---------------------------------------------------------------------------
+# 8. V2.2 P2.2: extraction_info gauge, executor shutdown, HTTP traffic counter
+# ---------------------------------------------------------------------------
+
+def test_extraction_info_gauge_reflects_config_enabled(mreg, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "MEMORY_V2_GRAPH", True)
+    core_metrics.record_extraction_enabled()
+    assert mreg.extraction_info.labels(enabled="1")._value.get() == 1.0
+    assert mreg.extraction_info.labels(enabled="0")._value.get() == 0.0
+
+
+def test_extraction_info_gauge_reflects_config_disabled(mreg, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "MEMORY_V2_GRAPH", False)
+    core_metrics.record_extraction_enabled()
+    assert mreg.extraction_info.labels(enabled="0")._value.get() == 1.0
+    assert mreg.extraction_info.labels(enabled="1")._value.get() == 0.0
+
+
+def test_extraction_info_label_is_bounded(mreg):
+    assert mreg.validate("enabled", "1") == "1"
+    assert mreg.validate("enabled", "0") == "0"
+    with pytest.raises(ValueError):
+        mreg.validate("enabled", "2")
+    with pytest.raises(ValueError):
+        mreg.validate("enabled", "yes")
+
+
+def test_extraction_info_gauge_labels_are_finite_and_never_ids():
+    fresh = core_metrics.ExtractionMetrics(CollectorRegistry())
+    assert tuple(fresh.extraction_info._labelnames) == ("enabled",)
+    assert not (set(fresh.extraction_info._labelnames) & _FORBIDDEN_LABELS)
+
+
+def test_executor_shutdown_abandons_only_queued_tasks(json_logs, mreg):
+    """Shutdown drains the queue (dropped=N) and never counts in-flight work;
+    inflight stays owned by the worker until the task finishes."""
+    gate = threading.Event()
+
+    def _blocking():
+        gate.wait(timeout=3.0)
+
+    pool = BoundedDaemonExecutor(max_workers=1, max_queue=10)
+    try:
+        for _ in range(5):
+            assert pool.submit(_blocking)
+        assert _wait_until(lambda: pool.queue_size == 4)  # 1 running, 4 queued
+        assert pool.running
+
+        pool.shutdown()
+
+        assert not pool.running
+        payload = _formatted(json_logs)
+        assert payload["event"] == "extraction_executor_shutdown"
+        assert payload["dropped"] == 4
+        assert payload["queue_depth"] == 0
+        assert core_metrics.metrics.queue_depth._value.get() == 0.0
+        # The in-flight task was NOT counted as abandoned; inflight returns
+        # to zero only when the daemon worker finishes (executor-owned gauge).
+        assert core_metrics.metrics.inflight._value.get() == 1.0
+        gate.set()
+        assert _wait_until(lambda: core_metrics.metrics.inflight._value.get() == 0.0)
+    finally:
+        gate.set()
+        pool.shutdown()
+
+
+def test_executor_shutdown_is_idempotent_and_quiet_when_empty(json_logs):
+    pool = BoundedDaemonExecutor(max_workers=1, max_queue=5)
+    pool.shutdown()
+    pool.shutdown()  # second call must not emit a duplicate event
+    events = [r for r in json_logs if getattr(r, "event", None) == "extraction_executor_shutdown"]
+    assert len(events) == 1
+    assert _formatted(json_logs, json_logs.index(events[0]))["dropped"] == 0
+
+
+def test_executor_shutdown_queue_capacity_gauge_is_preserved(mreg):
+    pool = BoundedDaemonExecutor(max_workers=1, max_queue=10)
+    pool.shutdown()
+    assert core_metrics.metrics.queue_capacity._value.get() == 10.0
+
+
+def test_http_traffic_counter_renders_and_is_bounded():
+    core_metrics.safe_count_http("chat")
+    core_metrics.safe_count_http("other")
+    body = core_metrics.render_metrics().decode()
+    assert 'owngpt_http_requests_total{endpoint="chat"}' in body
+    assert 'owngpt_http_requests_total{endpoint="other"}' in body
+
+
+def test_http_traffic_counter_rejects_unbounded_endpoints_without_raising():
+    core_metrics.safe_count_http("admin-panel")  # fail-open contract
+    body = core_metrics.render_metrics().decode()
+    assert 'endpoint="admin-panel"' not in body
+
+
+def test_request_endpoint_classification_is_bounded():
+    from app.core.observability import request_endpoint
+    assert request_endpoint("/api/v1/chat") == "chat"
+    assert request_endpoint("/api/v1/chat/stream?q=1") == "chat"
+    assert request_endpoint("/health") == "other"
+    assert request_endpoint("/metrics") == "other"

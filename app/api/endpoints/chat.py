@@ -168,7 +168,9 @@ def _extract_tool_names(messages_subset) -> List[str]:
 async def _generate_session_title(message: str) -> str:
     try:
         from app.core.llm_provider import build_llm
-        title_model = build_llm(model=settings.DEFAULT_MODEL, temperature=0)
+        # Provider-resolved default: build_llm(model=None) resolves the
+        # configured provider's default model — never a hardcoded OpenAI name.
+        title_model = build_llm(model=None, temperature=0)
         res = await title_model.ainvoke([
             SystemMessage(content="Summarize the user's query in 3 to 5 words as a conversation title. Output ONLY the title, no punctuation, no quotes, no extra text."),
             HumanMessage(content=message)
@@ -180,9 +182,9 @@ async def _generate_session_title(message: str) -> str:
         return message[:30] + "..." if len(message) > 30 else message
 
 
-def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] = None, document: Optional[str] = None) -> PipelineContext:
+def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] = None, document: Optional[str] = None, project_id: Optional[str] = None) -> PipelineContext:
     """Run the pre-processing pipeline. Returns context with intent, route, context_text."""
-    return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode, filename=document)
+    return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode, filename=document, project_id=project_id)
 
 
 def _post_process(ctx: PipelineContext, response: str, new_messages: list, model: str = "", temperature: float = 0.0) -> str:
@@ -233,6 +235,7 @@ def _resolve_generation_params(request: ChatRequest) -> tuple[str, float]:
         temperature = validate_temperature(request.temperature)
         return model, temperature
     except ModelConfigError as e:
+        logger.error(f"DEBUG _resolve_generation_params failed: model={request.model!r}, temp={request.temperature!r}, error={e}")
         raise api_error(400, "invalid_generation_config", str(e))
 
 
@@ -303,7 +306,7 @@ async def chat_endpoint(
         user_msg = store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
 
         # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
-        ctx = _run_pipeline(request.message, request.session_id, document=request.document)
+        ctx = _run_pipeline(request.message, request.session_id, document=request.document, project_id=conv.project_id)
 
         # Check if we should short-circuit with clarification
         if ctx.confidence and ctx.confidence.decision == "clarification" and not request.document:
@@ -429,7 +432,12 @@ async def chat_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Chat endpoint error: %s\n%s", str(e), traceback.format_exc())
+        from app.core.llm_provider import classify_provider_error
+        info = classify_provider_error(e)
+        logger.error(
+            "Chat endpoint error: code=%s retryable=%s error=%s\n%s",
+            info.code, info.retryable, str(e), traceback.format_exc(),
+        )
         raise api_error(500, "internal_error", "An internal error occurred")
 
 
@@ -690,10 +698,10 @@ async def chat_stream_endpoint(
         # Persist the user message BEFORE graph execution
         user_msg = store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
 
-        # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
-        ctx = _run_pipeline(request.message, request.session_id, document=request.document)
+        # Stage 1-7: Run pre-processing pipeline
+        ctx = _run_pipeline(request.message, request.session_id, document=request.document, project_id=conv.project_id)
 
-        # Override answer_mode based on active_tools (frontend tool toggles)
+        # Apply active_tools restrictions (frontend tool toggles)
         at = request.active_tools or {}
         web_on = at.get("web", False)
         kb_on = at.get("kb", True)
@@ -701,15 +709,13 @@ async def chat_stream_endpoint(
             ctx.answer_mode = "web"
             ctx.context_text = ""
             ctx.ranked_chunks = []
-        elif not web_on and kb_on:
-            ctx.answer_mode = "grounded"
         elif not web_on and not kb_on:
             ctx.answer_mode = "synthesis"
             ctx.context_text = ""
             ctx.ranked_chunks = []
 
-        # Short-circuit for clarification (never when scoped to a document — the scope is known)
-        if ctx.confidence and ctx.confidence.decision == "clarification" and not request.document:
+        # Short-circuit for clarification ONLY when document-scoped chat has no matches
+        if request.document and ctx.confidence and ctx.confidence.decision == "clarification":
             msg = (
                 _pipeline.kb_not_covered_message()
                 if not ctx.ranked_chunks
@@ -734,7 +740,8 @@ async def chat_stream_endpoint(
 
         human_message = HumanMessage(content=request.message)
 
-        base_directive = ctx.source_policy.contract.system_directive if ctx.source_policy else ""
+        _sp = getattr(ctx, "source_policy", None)
+        base_directive = _sp.contract.system_directive if _sp else ""
         if request.document:
             base_directive += (
                 f"\n\nDOCUMENT SCOPE: The user is viewing the document '{request.document}' in the Knowledge Base."
@@ -828,12 +835,30 @@ async def chat_stream_endpoint(
                         "evidence": serialized,
                         "answer_mode": ctx.answer_mode,
                     }))
-                    # Keep backward-compat resources event
+                    # Backward-compat resources event — now carries full citation metadata
+                    enriched_resources = [
+                        {
+                            "type": e.source_type if e.source_type != "knowledge" else "file",
+                            "title": e.title,
+                            "url": e.url,
+                            "snippet": e.chunk[:180] if e.chunk else None,
+                            # V3 Phase 5: rich citation fields
+                            "document_id": e.document_id,
+                            "chunk_index": e.chunk_index,
+                            "page": e.page,
+                            "section": e.section,
+                            "confidence_label": e.confidence_label.value if e.confidence_label else None,
+                        }
+                        for e in evidence_items
+                    ]
+                    # Build enriched answer_mode_metadata with retrieved_count
+                    enriched_metadata = dict(ctx.answer_mode_metadata or {})
+                    enriched_metadata["retrieved_count"] = len(ctx.retrieved_chunks)
                     loop.call_soon_threadsafe(q.put_nowait, json.dumps({
                         "type": "resources",
-                        "resources": [{"type": e.source_type, "title": e.title, "url": e.url, "snippet": e.chunk[:180] if e.chunk else None} for e in evidence_items],
+                        "resources": enriched_resources,
                         "answer_mode": ctx.answer_mode,
-                        "answer_mode_metadata": ctx.answer_mode_metadata,
+                        "answer_mode_metadata": enriched_metadata,
                     }))
 
                     # Citation contract check
@@ -948,17 +973,29 @@ async def chat_stream_endpoint(
                         loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "trace", "trace": trace_dict}))
             except Exception as thread_err:
                 logger.error(f"Stream thread error: {thread_err}", exc_info=True)
-                err_msg = str(thread_err)
+                raw_text = str(thread_err)
                 # Friendly message for image-incompatible models
-                if "does not support image" in err_msg.lower() or "cannot read" in err_msg.lower():
+                if "does not support image" in raw_text.lower() or "cannot read" in raw_text.lower():
                     friendly = "This model doesn't support image analysis. Try using a different model (like gpt-4o) for image tasks, or describe the image in text."
                     loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": friendly}))
                 else:
-                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "error", "message": err_msg}))
+                    # Provider-neutral classification — the client receives a
+                    # stable machine-readable code and a safe message; raw
+                    # provider text stays in server logs only.
+                    from app.core.llm_provider import classify_provider_error
+                    info = classify_provider_error(thread_err)
+                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                        "type": "error",
+                        "code": info.code,
+                        "retryable": info.retryable,
+                        "message": info.safe_message,
+                    }))
                 partial = "".join(accumulated).strip()
                 if partial:
                     # Case C: partial output exists → preserve it, marked failed.
-                    persist_assistant(partial, store.MESSAGE_STATUS_FAILED, error=err_msg[:2000])
+                    # Raw provider text is stored server-side only (never sent
+                    # to the frontend via the SSE error event).
+                    persist_assistant(partial, store.MESSAGE_STATUS_FAILED, error=raw_text[:2000])
                 # Case B: no output → no fake assistant message.
             finally:
                 loop.call_soon_threadsafe(q.put_nowait, "[DONE]")
@@ -984,7 +1021,14 @@ async def chat_stream_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Chat streaming endpoint error: %s\n%s", str(e), traceback.format_exc())
+        from app.core.llm_provider import classify_provider_error
+        info = classify_provider_error(e)
+        logger.error(
+            "Chat streaming endpoint error: code=%s retryable=%s error=%s\n%s",
+            info.code, info.retryable, str(e), traceback.format_exc(),
+        )
+        if info.code == "PROVIDER_UNAVAILABLE" and info.retryable:
+            raise api_error(503, "provider_unavailable", info.safe_message)
         raise api_error(500, "internal_error", "An internal error occurred")
 
 

@@ -17,7 +17,15 @@ import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from app.core import metrics as core_metrics
+
 logger = logging.getLogger("app.request")
+
+
+def request_endpoint(path: str) -> str:
+    """Classify a request path into the bounded endpoint label for the HTTP
+    traffic counter. Finite enum — never include ids, content, or raw paths."""
+    return "chat" if path.startswith("/api/v1/chat") else "other"
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -31,6 +39,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
+            path = request.url.path
+            # Scrape noise must not pollute the traffic signal; everything
+            # else counts once per request regardless of outcome (fail-open).
+            if path != "/metrics":
+                core_metrics.safe_count_http(request_endpoint(path))
             if response is not None:
                 response.headers["X-Request-ID"] = request_id
             logger.info(

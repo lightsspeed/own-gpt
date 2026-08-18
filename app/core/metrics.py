@@ -73,6 +73,10 @@ OPERATIONS: frozenset[str] = frozenset({"claim", "release", "throttle"})
 KINDS: frozenset[str] = frozenset({"input", "output", "total"})
 PROVIDERS: frozenset[str] = frozenset({"openai", "ollama", "unknown"})
 STATUSES: frozenset[str] = frozenset({"pending", "active"})
+# extraction_info gauge: enabled="1" | "0" (constant value 1; the label is the
+# signal). Lets alerting distinguish "extraction disabled by config" from
+# "extraction silently not running" — never an ID, always bounded.
+ENABLE_STATES: frozenset[str] = frozenset({"1", "0"})
 
 _LABEL_SETS: dict[str, frozenset[str]] = {
     "reason": REASONS,
@@ -81,6 +85,7 @@ _LABEL_SETS: dict[str, frozenset[str]] = {
     "kind": KINDS,
     "provider": PROVIDERS,
     "status": STATUSES,
+    "enabled": ENABLE_STATES,
 }
 
 _OTHER_MODEL = "other"
@@ -151,6 +156,13 @@ class ExtractionMetrics:
             "inflight",
             "Extraction tasks currently executing in the bounded executor "
             "(owned by the executor; one increment per running task)",
+        )
+        self.extraction_info = Gauge(
+            "owngpt_memory_extraction_info",
+            "Extraction scheduling enabled state (constant 1, set once at "
+            "startup; enabled=1 when MEMORY_V2_GRAPH is on)",
+            ["enabled"],
+            registry=registry,
         )
 
         # LLM
@@ -225,6 +237,7 @@ class ExtractionMetrics:
             "inflight": self.inflight,
             "queue_depth": self.queue_depth,
             "queue_capacity": self.queue_capacity,
+            "extraction_info": self.extraction_info,
         }
 
     # -- strict validation (tests + pre-flight) -------------------------------
@@ -308,6 +321,70 @@ class ExtractionMetrics:
 # Process-wide singleton (tests build fresh ExtractionMetrics instances).
 metrics = ExtractionMetrics(CollectorRegistry())
 
+# -- API-level registry (request middleware) ----------------------------------
+# One bounded traffic counter, separate from the extraction namespace. Its only
+# purpose is alerting semantics: "is the system receiving chat traffic at all?"
+# — so a stalled-extraction alert can distinguish "no users" (healthy silence)
+# from "users chatting but extraction scheduling stopped" (breakage). Ids and
+# content never appear; endpoint is a finite enum.
+API_REGISTRY = CollectorRegistry()
+HTTP_ENDPOINTS: frozenset[str] = frozenset({"chat", "other"})
+_api_http_requests_total = Counter(
+    "owngpt_http_requests_total",
+    "HTTP requests observed by the request logging middleware (bounded endpoint label)",
+    ["endpoint"],
+    registry=API_REGISTRY,
+)
+
+
+def safe_count_http(endpoint: str, amount: int = 1) -> None:
+    """Fail-open increment for the request-level traffic counter."""
+    try:
+        if endpoint not in HTTP_ENDPOINTS:
+            raise ValueError(f"unbounded http endpoint label {endpoint!r}")
+        _api_http_requests_total.labels(endpoint=endpoint).inc(amount)
+    except Exception as exc:  # pragma: no cover - fail-open contract
+        logger.warning("metrics_count_failed name=owngpt_http_requests_total error=%s", exc)
+
+
+def record_extraction_enabled() -> None:
+    """Emit the extraction-enabled info gauge once at startup.
+
+    enabled="1" when MEMORY_V2_GRAPH is on (extraction is expected to run);
+    enabled="0" when the feature is disabled by configuration. The gauge value
+    is a constant 1 — the label carries the signal. Alert rules compare their
+    queries against this label before concluding extraction "stopped".
+    """
+    safe_set("extraction_info", 1.0, enabled="1" if settings.MEMORY_V2_GRAPH else "0")
+
+
+def registered_metric_names() -> set[str]:
+    """All metric names this process can emit (used by config-as-code tests).
+
+    Derived from the registry objects themselves so a renamed metric cannot
+    silently desync the dashboards/rules validation. Exposed names follow the
+    prometheus_client convention: counters are suffixed `_total`, histograms
+    emit `_bucket/_sum/_count`, gauges emit the bare name.
+    """
+    names: set[str] = set()
+    histogram_metrics = set(metrics._histograms.values())
+    gauge_metrics = set(metrics._gauges.values())
+    for metric in (
+        list(metrics._counters.values())
+        + list(metrics._histograms.values())
+        + list(metrics._gauges.values())
+    ):
+        base = metric._name  # prometheus name without the _total counter suffix
+        if metric in histogram_metrics:
+            for suffix in ("_bucket", "_sum", "_count"):
+                names.add(f"{base}{suffix}")
+        elif metric in gauge_metrics:
+            names.add(base)
+        else:
+            names.add(f"{base}_total")
+    names.add("owngpt_http_requests_total")
+    return names
+
 
 def safe_count(name: str, amount: int = 1, **labels: str) -> None:
     """Fail-open count against the process singleton. Catches a broken
@@ -347,9 +424,11 @@ def safe_gauge_dec(name: str, amount: float = 1.0, **labels: str) -> None:
 
 
 def render_metrics() -> bytes:
-    """Serialize the extraction registry for the /metrics endpoint."""
+    """Serialize both registries for the /metrics endpoint (extraction + API)."""
     try:
-        return generate_latest(metrics.registry)
+        extraction_body = generate_latest(metrics.registry)
+        api_body = generate_latest(API_REGISTRY)
+        return b"".join([extraction_body, api_body])
     except Exception as exc:  # pragma: no cover - fail-open contract
         logger.warning("metrics_render_failed error=%s", exc)
         return b""

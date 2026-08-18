@@ -38,6 +38,22 @@ if settings.LLM_PROVIDER == "ollama":
     # Never fake OpenAI model names against Ollama.
     SUPPORTED_MODELS: list[str] = [settings.LLM_MODEL]
     DEFAULT_MODEL: str = settings.LLM_MODEL
+elif settings.LLM_PROVIDER == "groq":
+    # Same principle: the Groq allowlist is the configured model. Client
+    # model requests must resolve against it, never arbitrary OpenAI names.
+    SUPPORTED_MODELS: list[str] = [settings.GROQ_MODEL]
+    DEFAULT_MODEL: str = settings.GROQ_MODEL
+elif settings.LLM_PROVIDER == "gemini":
+    # Gemini: allowlist of working Google Gemini models.
+    SUPPORTED_MODELS: list[str] = [
+        settings.GEMINI_MODEL if settings.GEMINI_MODEL else "gemini-3.6-flash",
+        "gemini-3.6-flash",
+        "gemini-3-flash-preview",
+        "gemini-2.5-pro",
+    ]
+    # Deduplicate while preserving order
+    SUPPORTED_MODELS = list(dict.fromkeys(SUPPORTED_MODELS))
+    DEFAULT_MODEL: str = SUPPORTED_MODELS[0]
 else:
     SUPPORTED_MODELS = _parse_supported_models(settings.SUPPORTED_MODELS)
     DEFAULT_MODEL: str = settings.DEFAULT_MODEL if settings.DEFAULT_MODEL in SUPPORTED_MODELS else SUPPORTED_MODELS[0]
@@ -48,14 +64,22 @@ def is_supported_model(model: str | None) -> bool:
 
 
 def resolve_model(model: str | None) -> str:
-    """Resolve a client-requested model against the allowlist."""
+    """Resolve a client-requested model against the allowlist.
+
+    If the client requests a model that is supported by the active provider,
+    return it. Otherwise (if the model is empty, legacy OpenAI, Groq, or any
+    stale client-side model name when running a single-model provider like Gemini/Groq),
+    gracefully fall back to DEFAULT_MODEL.
+    """
     if not model:
         return DEFAULT_MODEL
-    if not is_supported_model(model):
-        raise ModelConfigError(
-            f"model '{model}' is not supported. Allowed: {', '.join(SUPPORTED_MODELS)}"
-        )
-    return model
+    if is_supported_model(model):
+        return model
+    logger.warning(
+        "model_fallback provider=%r requested=%r — using default=%r",
+        settings.LLM_PROVIDER, model, DEFAULT_MODEL
+    )
+    return DEFAULT_MODEL
 
 
 def validate_temperature(temperature: float | None) -> float:

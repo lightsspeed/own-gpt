@@ -17,12 +17,10 @@ def test_valid_model_accepted():
     assert model_config.resolve_model(None) == model_config.DEFAULT_MODEL
 
 
-def test_invalid_model_rejected():
-    with pytest.raises(ModelConfigError):
-        model_config.resolve_model("gpt-99-ultra")
-    with pytest.raises(ModelConfigError):
-        model_config.resolve_model("bogus/model-name")
-    # empty string means "not provided" → server default, not an error
+def test_invalid_model_fallback():
+    assert model_config.resolve_model("gpt-99-ultra") == model_config.DEFAULT_MODEL
+    assert model_config.resolve_model("bogus/model-name") == model_config.DEFAULT_MODEL
+    # empty string means "not provided" → server default
     assert model_config.resolve_model("") == model_config.DEFAULT_MODEL
 
 

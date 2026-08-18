@@ -4,17 +4,20 @@ Stage 1: Intent Classification
 Purpose: Determine the type of user request before any retrieval or tool use.
 
 Supported intents:
-  general   — casual chat, greetings, arithmetic, simple facts
-  knowledge — questions about specific topics, concepts, or uploaded documents
-  memory    — requests to store or recall personal facts
-  tool      — requests to perform an external action
-  coding    — requests to write, fix, or debug code
-  reasoning — complex multi-step reasoning or math
-  unknown   — cannot determine
+  general      — casual chat, greetings, arithmetic, simple facts
+  memory       — requests to store or recall personal facts
+  knowledge    — general factual questions, concepts, technology comparisons
+  web          — requests requiring fresh, current, or real-time web information
+  document     — questions about specific uploaded or project documents
+  coding       — requests to write, fix, or debug code/scripts
+  reasoning    — complex multi-step reasoning, math derivations, or proofs
+  multi_intent — requests combining multiple capabilities
+  tool         — requests to perform an external action (legacy backward-compatibility)
+  unknown      — cannot determine
 
 Implementation strategy:
   1. Fast rule-based detection (regex) — <1ms, no LLM cost
-  2. LLM fallback (gpt-4o-mini) — only when rules are insufficient
+  2. LLM fallback — only when rules are inconclusive
 
 Performance targets:
   - Rule match:  <50ms
@@ -39,36 +42,56 @@ logger = logging.getLogger(__name__)
 # ── Supported intents ────────────────────────────────────────────────────────
 
 class Intent(str, Enum):
-    GENERAL   = "general"
-    KNOWLEDGE = "knowledge"
-    MEMORY    = "memory"
-    TOOL      = "tool"
-    CODING    = "coding"
-    REASONING = "reasoning"
-    UNKNOWN   = "unknown"
+    GENERAL      = "general"
+    MEMORY       = "memory"
+    KNOWLEDGE    = "knowledge"
+    WEB          = "web"
+    DOCUMENT     = "document"
+    CODING       = "coding"
+    REASONING    = "reasoning"
+    MULTI_INTENT = "multi_intent"
+    TOOL         = "tool"
+    UNKNOWN      = "unknown"
 
 
 @dataclass
 class IntentResult:
     intent: Intent
     confidence: float
-    reason: str
-    latency_ms: float
-    used_llm: bool
+    reason: str = ""
+    latency_ms: float = 0.0
+    used_llm: bool = False
     matched_rule: str = ""
+    requires_tool: bool = False
+    candidate_tools: list[str] = field(default_factory=list)
+    reasoning: str = ""
+
+    def __post_init__(self):
+        if not self.reasoning and self.reason:
+            self.reasoning = self.reason
+        elif not self.reason and self.reasoning:
+            self.reason = self.reasoning
 
 
 # ── Rule-based patterns (checked in declared order) ──────────────────────────
-# Named rules for provenance tracking — each Rule has a name, intent, and patterns.
-# First match wins — order from most-specific to least-specific.
 
 class Rule(NamedTuple):
     name: str
     intent: Intent
     patterns: list[str]
+    requires_tool: bool = False
+    candidate_tools: list[str] = []
 
 
 _RULES: list[Rule] = [
+    # 0. Multi-intent patterns (must precede single-intent rules)
+    Rule("MULTI_INTENT_COMBINED", Intent.MULTI_INTENT, [
+        r"\b(remember|save|store)\b.{0,60}\band\b.{0,60}\b(search|find|check|look up|write|code)\b",
+        r"\b(search|look up|read)\b.{0,60}\band\b.{0,60}\b(write|create|code|save|remember)\b",
+        r"\b(document|pdf|report)\b.{0,60}\band\b.{0,60}\b(web|internet|latest|news|code)\b",
+    ], requires_tool=True, candidate_tools=["tavily_search", "remember_user_fact", "python_interpreter"]),
+
+    # 1. Memory facts
     Rule("MEMORY_FACTS", Intent.MEMORY, [
         r"\b(remember|memorize|store|save|don[\'']t forget)\b.{0,40}\b(this|that|my|me|it)\b",
         r"\bmy name is\b",
@@ -81,26 +104,45 @@ _RULES: list[Rule] = [
         r"\bcall me\b.{0,20}\b(\w+)\b",                  # "call me Akhi"
         r"\bin (this|our) (conversation|chat|discussion)\b",   # "in this conversation" → context recall
         r"\bwhat (are|were|did|have) we\b",              # "what are we building here" / "what did we discuss"
-    ]),
+    ], requires_tool=False, candidate_tools=["remember_user_fact", "remember_session_fact"]),
+
+    # 2. Web search / fresh information
+    Rule("WEB_SEARCH", Intent.WEB, [
+        r"\b(latest|current|today[\'']s|real-time|recent|fresh|live)\b.{0,40}\b(news|weather|price|stock|update|release|info|version|event|score)\b",
+        r"\b(search|look up|find|check)\b.{0,20}\b(web|online|google|internet|latest)\b",
+        r"\bwhat happened today\b",
+        r"\bcurrent (version|price|weather|status|rate) of\b",
+    ], requires_tool=True, candidate_tools=["tavily_search"]),
+
+    # 3. Document / uploaded file questions
+    Rule("DOCUMENT_DOC", Intent.DOCUMENT, [
+        r"\b(in|from|according to|based on)\b.{0,20}\b(document|file|pdf|report|paper|knowledge base|attachment)\b",
+        r"\bwhat does.{0,30}(say|mention|state|describe)\b",
+        r"\bsummar(ize|y).{0,20}\b(document|file|pdf|report|paper|knowledge base)\b",
+        r"\bsearch (in|inside) (the|my|uploaded) (document|file|pdf)\b",
+    ], requires_tool=False, candidate_tools=[]),
+
+    # 4. Coding / debugging
     Rule("CODING_WRITE", Intent.CODING, [
         r"\b(write|create|generate|fix|debug|refactor|implement|build)\b.{0,30}\b(code|function|class|method|script|program|module|api)\b",
         r"\b(python|javascript|typescript|java|go|rust|c\+\+|sql|bash)\b.{0,20}\b(code|example|snippet|function|class)\b",
         r"\bhow (do i|to) (write|implement|code)\b",
         r"\b(create|write|build)\b.{0,20}\b(dockerfile|makefile|docker-compose)\b",
-    ]),
-    Rule("KNOWLEDGE_DOC", Intent.KNOWLEDGE, [
-        r"\b(in|from|according to|based on)\b.{0,20}\b(document|file|pdf|report|paper|knowledge base)\b",
-        r"\bwhat does.{0,30}(say|mention|state|describe)\b",
-        r"\bsummar(ize|y).{0,20}\b(document|file|pdf|report|paper|knowledge base)\b",
-    ]),
+    ], requires_tool=True, candidate_tools=["python_interpreter"]),
+
+    # 5. External tool actions
     Rule("TOOL_ACTION", Intent.TOOL, [
         r"\b(upload|send|post|email)\b.{0,20}\b(this|that|an?|the|my|file|document|attachment|message)\b",
         r"\b(deploy|publish|schedule)\b.{0,30}\b(app|service|task|workflow|job)\b",
-    ]),
+    ], requires_tool=True, candidate_tools=[]),
+
+    # 6. Reasoning / complex math
     Rule("REASONING_COMPLEX", Intent.REASONING, [
-        r"\b(prove|proof|derive|calculate|compute|solve)\b.{0,30}\b(step|equation|formula|problem|math)\b",
+        r"\b(prove|proof|derive|calculate|compute|solve)\b.{0,60}\b(step|equation|formula|problem|math|even|odd|integer|proof)\b",
         r"\bif.{0,50}then.{0,50}(what|how|will)\b",
-    ]),
+    ], requires_tool=False, candidate_tools=[]),
+
+    # 7. General chat
     Rule("GENERAL_CHAT", Intent.GENERAL, [
         r"^(hello|hi|hey|howdy|greetings|sup|yo)\b",
         r"^(thanks|thank you|thx|ty|appreciate it)\b",
@@ -112,8 +154,9 @@ _RULES: list[Rule] = [
         r"^how are you",
         r"^who (are|r) you",
         r"^what (can|do) you do",
-    ]),
-    # Catch-all knowledge patterns — after specific rules so GENERAL/REASONING fire first.
+    ], requires_tool=False, candidate_tools=[]),
+
+    # 8. Knowledge / explanation catch-all
     Rule("KNOWLEDGE_EXPLAIN", Intent.KNOWLEDGE, [
         r"\bexplain\b.{0,60}\b(\w+)\b",
         r"\bdescribe\b.{0,60}\b(\w+)\b",
@@ -127,7 +170,7 @@ _RULES: list[Rule] = [
         r"\bcompare\b.{0,80}\band\b.{0,80}\b\w+\b",       # "compare X and Y"
         r"\bdifference between\b.{0,60}\band\b",            # "difference between X and Y"
         r"\bvs\.?\b",                                       # "X vs Y"
-    ]),
+    ], requires_tool=False, candidate_tools=[]),
 ]
 
 
@@ -139,32 +182,35 @@ class IntentClassifier:
     falling back to the configured LLM only when rules are inconclusive.
     """
 
-    _SYSTEM_PROMPT = """You are a precise intent classifier for a RAG knowledge-base assistant.
+    _SYSTEM_PROMPT = """You are a precise intent classifier for an AI assistant.
 
 Classify the user query into exactly one of these intents:
-  general   — ONLY for: greetings (hi/hello/thanks/bye), arithmetic (2+2), or pure conversational filler ("how are you", "who are you")
-  knowledge — ANY factual question, how-to, concept explanation, comparison between technologies/topics (e.g. "Kubernetes vs Docker Swarm"), pros/cons, tutorial, or topic-based query
-  memory    — requests to remember, store, or recall personal facts about the user
-  tool      — requests to perform a system action (post, send, email, create file, deploy)
-  coding    — requests to write, fix, explain, or debug code/scripts
-  reasoning — ONLY abstract mathematical derivations, formal logic proofs, or pure math puzzles (e.g. "solve 2x+5=15", "if A > B and B > C...")
-  unknown   — cannot determine
+  general      — greetings (hi/hello/thanks/bye), arithmetic (2+2), or conversational filler ("how are you")
+  memory       — requests to remember, store, or recall personal facts about the user ("my favorite color is blue", "what is my name")
+  knowledge    — general factual questions, concept explanations, technology comparisons ("what is Kubernetes RBAC?")
+  web          — requests requiring fresh, current, or real-time web information ("latest news", "today's weather", "current stock price")
+  document     — questions explicitly asking about uploaded/project documents ("summarize the PDF", "in the uploaded report")
+  coding       — requests to write, fix, refactor, or debug code/scripts ("write a python function to...")
+  reasoning    — mathematical derivations, formal logic proofs, multi-step math problems ("prove that...", "solve 2x+5=15")
+  multi_intent — requests combining multiple distinct capabilities (e.g., "remember X AND search the web for Y")
 
-IMPORTANT: All comparisons of concepts, tools, or technologies MUST be classified as knowledge. When in doubt, choose knowledge.
-
-Return ONLY valid JSON — no explanation, no markdown:
-{"intent": "<intent>", "confidence": <0.0-1.0>, "reason": "<10 words max>"}"""
+Return ONLY valid JSON with no markdown formatting:
+{
+  "intent": "<intent>",
+  "confidence": <0.0-1.0>,
+  "reasoning": "<short rationale>",
+  "requires_tool": <true|false>,
+  "candidate_tools": ["<tool_name>", ...]
+}"""
 
     def __init__(self, model_name: str | None = None) -> None:
-        # None resolves the provider default (LLM_MODEL under Ollama,
-        # DEFAULT_MODEL under OpenAI) via the provider boundary.
         self._model_name = model_name
-        self._llm: object | None = None  # lazy init to avoid import overhead at startup
+        self._llm: object | None = None
 
     def _get_llm(self):
         if self._llm is None:
             from app.core.llm_provider import build_llm
-            self._llm = build_llm(model=self._model_name, temperature=0, max_tokens=64)
+            self._llm = build_llm(model=self._model_name, temperature=0, max_tokens=128)
         return self._llm
 
     # ── Private helpers ──────────────────────────────────────────────────────
@@ -179,17 +225,20 @@ Return ONLY valid JSON — no explanation, no markdown:
                         intent=rule.intent,
                         confidence=0.95,
                         reason=f"Rule: {rule.name}",
+                        reasoning=f"Rule match: {rule.name}",
                         latency_ms=0.0,
                         used_llm=False,
                         matched_rule=rule.name,
+                        requires_tool=rule.requires_tool,
+                        candidate_tools=list(rule.candidate_tools),
                     )
         return None
 
     def _llm_classify(self, query: str) -> IntentResult:
         """Calls the configured LLM for intent classification.
 
-        The model may return malformed JSON (more likely with local models);
-        a parse failure degrades to intent=unknown, never an exception."""
+        The model may return malformed JSON; a parse failure degrades to
+        intent=unknown with safe defaults, never an exception."""
         from langchain_core.messages import HumanMessage, SystemMessage
 
         try:
@@ -197,14 +246,38 @@ Return ONLY valid JSON — no explanation, no markdown:
                 SystemMessage(content=self._SYSTEM_PROMPT),
                 HumanMessage(content=query),
             ])
-            data = json.loads(response.content.strip())
+            content = response.content
+            if isinstance(content, list):
+                content = "".join(
+                    block.get("text", "") for block in content if isinstance(block, dict)
+                )
+            # Strip markdown formatting if present
+            cleaned = content.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```[a-z]*\n?", "", cleaned)
+                cleaned = re.sub(r"\n?```$", "", cleaned).strip()
+
+            data = json.loads(cleaned)
+            raw_intent = str(data.get("intent", "unknown")).lower()
+            try:
+                intent_enum = Intent(raw_intent)
+            except ValueError:
+                intent_enum = Intent.UNKNOWN
+
+            candidate_tools = data.get("candidate_tools", [])
+            if not isinstance(candidate_tools, list):
+                candidate_tools = []
+
             return IntentResult(
-                intent=Intent(data.get("intent", "unknown")),
+                intent=intent_enum,
                 confidence=float(data.get("confidence", 0.5)),
-                reason=data.get("reason", "LLM classification"),
+                reason=data.get("reasoning") or data.get("reason", "LLM classification"),
+                reasoning=data.get("reasoning") or data.get("reason", "LLM classification"),
                 latency_ms=0.0,
                 used_llm=True,
                 matched_rule="LLM_CLASSIFIER",
+                requires_tool=bool(data.get("requires_tool", False)),
+                candidate_tools=[str(t) for t in candidate_tools],
             )
         except Exception as exc:
             logger.warning("intent_llm_classification_failed error=%s", exc)
@@ -212,9 +285,12 @@ Return ONLY valid JSON — no explanation, no markdown:
                 intent=Intent.UNKNOWN,
                 confidence=0.4,
                 reason="LLM returned unusable output",
+                reasoning="LLM returned unusable output",
                 latency_ms=0.0,
                 used_llm=True,
                 matched_rule="LLM_CLASSIFIER",
+                requires_tool=False,
+                candidate_tools=[],
             )
 
     # ── Public interface ─────────────────────────────────────────────────────
@@ -246,10 +322,12 @@ Return ONLY valid JSON — no explanation, no markdown:
         result.latency_ms = round((time.monotonic() - start) * 1000, 2)
 
         logger.info(
-            "stage=intent_classification intent=%s confidence=%.2f used_llm=%s latency_ms=%.1f",
+            "stage=intent_classification intent=%s confidence=%.2f used_llm=%s latency_ms=%.1f requires_tool=%s candidate_tools=%s",
             result.intent.value,
             result.confidence,
             result.used_llm,
             result.latency_ms,
+            result.requires_tool,
+            result.candidate_tools,
         )
         return result

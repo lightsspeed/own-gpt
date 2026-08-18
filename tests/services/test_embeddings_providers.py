@@ -9,9 +9,11 @@ import pytest
 
 from app.core.config import settings
 from app.services.embeddings import (
+    GeminiEmbeddingProvider,
     OpenAIEmbeddingProvider,
     OllamaEmbeddingProvider,
     build_embedding_provider,
+    build_kb_embeddings,
 )
 
 
@@ -86,11 +88,72 @@ class TestOllamaEmbeddingProvider:
         assert p.embed([]) == []
 
 
+@pytest.fixture
+def fake_gemini_client(monkeypatch):
+    import sys
+
+    calls = {"dim": 1536}
+
+    class FakeGoogleGenerativeAIEmbeddings:
+        def __init__(self, **kwargs):
+            calls["kwargs"] = kwargs
+
+        def embed_documents(self, texts):
+            return [[0.3] * calls["dim"] for _ in texts]
+
+        def embed_query(self, text):
+            return [0.3] * calls["dim"]
+
+    monkeypatch.setitem(sys.modules, "langchain_google_genai", type("M", (), {
+        "GoogleGenerativeAIEmbeddings": FakeGoogleGenerativeAIEmbeddings,
+    })())
+    return calls
+
+
+class TestGeminiEmbeddingProvider:
+    def test_gemini_provider_init(self, monkeypatch, fake_gemini_client):
+        _set(monkeypatch, GEMINI_API_KEY="test-gemini-key", MEMORY_EMBEDDING_MODEL="gemini-embedding-2", MEMORY_EMBEDDING_DIMENSION=1536)
+        p = GeminiEmbeddingProvider()
+        assert p.dimension == 1536
+        assert p.model_name == "models/gemini-embedding-2"
+        assert fake_gemini_client["kwargs"]["google_api_key"] == "test-gemini-key"
+
+    def test_gemini_missing_api_key_raises(self, monkeypatch):
+        _set(monkeypatch, GEMINI_API_KEY="", MEMORY_EMBEDDING_PROVIDER="gemini")
+        with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+            GeminiEmbeddingProvider()
+
+    def test_gemini_embed_documents_batch(self, monkeypatch, fake_gemini_client):
+        _set(monkeypatch, GEMINI_API_KEY="test-key", MEMORY_EMBEDDING_DIMENSION=1536)
+        p = GeminiEmbeddingProvider()
+        vecs = p.embed(["fact 1", "fact 2"])
+        assert len(vecs) == 2
+        assert len(vecs[0]) == 1536
+        assert len(vecs[1]) == 1536
+
+    def test_gemini_embed_query_single(self, monkeypatch, fake_gemini_client):
+        _set(monkeypatch, GEMINI_API_KEY="test-key", MEMORY_EMBEDDING_DIMENSION=1536)
+        p = GeminiEmbeddingProvider()
+        vec = p.embed_query("what is my favorite color?")
+        assert len(vec) == 1536
+
+    def test_gemini_dimension_1536(self, monkeypatch, fake_gemini_client):
+        _set(monkeypatch, GEMINI_API_KEY="test-key", MEMORY_EMBEDDING_DIMENSION=1536)
+        p = GeminiEmbeddingProvider()
+        assert p.dimension == 1536
+
+
 class TestProviderSelection:
     def test_openai_selected_by_default_contract(self, monkeypatch, fake_openai_client):
         _set(monkeypatch, MEMORY_EMBEDDING_PROVIDER="openai", MEMORY_EMBEDDING_DIMENSION=1536)
         p = build_embedding_provider()
         assert isinstance(p, OpenAIEmbeddingProvider)
+        assert p.dimension == 1536
+
+    def test_gemini_selected(self, monkeypatch, fake_gemini_client):
+        _set(monkeypatch, MEMORY_EMBEDDING_PROVIDER="gemini", GEMINI_API_KEY="test-key", MEMORY_EMBEDDING_DIMENSION=1536)
+        p = build_embedding_provider()
+        assert isinstance(p, GeminiEmbeddingProvider)
         assert p.dimension == 1536
 
     def test_openai_dimension_matches_vector_schema(self, monkeypatch, fake_openai_client):
@@ -117,10 +180,10 @@ class TestProviderSelection:
 
 
 class TestMemoryProviderUnchanged:
-    def test_default_memory_provider_not_ollama(self):
-        # The V2.1 memory configuration must NOT point at the 768-dim provider:
+    def test_default_memory_provider_valid(self):
+        # The V2.1 memory configuration must point at a 1536-dim provider:
         # the schema column is vector(1536) and dimension migration is out of scope.
-        assert settings.MEMORY_EMBEDDING_PROVIDER in ("openai", "none")
+        assert settings.MEMORY_EMBEDDING_PROVIDER in ("gemini", "openai", "none")
         assert settings.MEMORY_EMBEDDING_DIMENSION == 1536
 
     def test_ollama_provider_never_silently_used_for_memory(self, monkeypatch, fake_openai_client):
@@ -129,3 +192,31 @@ class TestMemoryProviderUnchanged:
         _set(monkeypatch, MEMORY_EMBEDDING_PROVIDER="openai", MEMORY_EMBEDDING_DIMENSION=1536)
         p = build_embedding_provider()
         assert isinstance(p, OpenAIEmbeddingProvider)
+
+
+class TestKBEmbeddingProvider:
+    def test_kb_ollama_selected_by_default(self, monkeypatch, fake_ollama_client):
+        _set(monkeypatch, KB_EMBEDDING_PROVIDER="ollama", KB_EMBEDDING_MODEL="nomic-embed-text")
+        embedder = build_kb_embeddings()
+        assert fake_ollama_client["kwargs"]["model"] == "nomic-embed-text"
+
+    def test_kb_openai_selected(self, monkeypatch, fake_openai_client):
+        _set(monkeypatch, KB_EMBEDDING_PROVIDER="openai", KB_EMBEDDING_MODEL="text-embedding-3-small", OPENAI_API_KEY="test-key")
+        embedder = build_kb_embeddings()
+        assert fake_openai_client["kwargs"]["model"] == "text-embedding-3-small"
+
+    def test_kb_openai_requires_api_key(self, monkeypatch, fake_openai_client):
+        _set(monkeypatch, KB_EMBEDDING_PROVIDER="openai", OPENAI_API_KEY="")
+        with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+            build_kb_embeddings()
+
+    def test_kb_none_returns_none(self, monkeypatch):
+        _set(monkeypatch, KB_EMBEDDING_PROVIDER="none")
+        assert build_kb_embeddings() is None
+
+    def test_kb_unsupported_provider_raises(self, monkeypatch):
+        _set(monkeypatch, KB_EMBEDDING_PROVIDER="invalid_provider")
+        with pytest.raises(ValueError, match="invalid_provider"):
+            build_kb_embeddings()
+
+

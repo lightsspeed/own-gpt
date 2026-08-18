@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 IMPL_MODULE = "app.agent.tool_impls"
 IMPL_FUNCS = {
     "search_knowledge_base": "search_knowledge_base_impl",
+    "web_search": "web_search_impl",
     "sm_integration": "sm_integration_impl",
     "remember_user_fact": "remember_user_fact_impl",
     "remember_session_fact": "remember_session_fact_impl",

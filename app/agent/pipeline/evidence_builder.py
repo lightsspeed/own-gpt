@@ -121,6 +121,31 @@ class EvidenceBuilder:
 
             src = getattr(chunk, "source", None) or getattr(chunk, "filename", None) or "unknown"
 
+            # Prefer the document-stored chunk_index over positional reranked_rank
+            doc_meta = chunk.document.metadata if hasattr(chunk, "document") else {}
+            meta_chunk_index = doc_meta.get("chunk_index")
+            if meta_chunk_index is not None:
+                try:
+                    meta_chunk_index = int(meta_chunk_index)
+                except (ValueError, TypeError):
+                    meta_chunk_index = None
+
+            # Page and section from chunk metadata (populated during ingestion for PDFs)
+            page = chunk.page if hasattr(chunk, "page") else doc_meta.get("page")
+            if page is not None:
+                try:
+                    page = int(page)
+                except (ValueError, TypeError):
+                    page = None
+
+            section = (
+                chunk.chapter
+                if hasattr(chunk, "chapter")
+                else doc_meta.get("chapter") or doc_meta.get("section")
+            )
+            if section is not None:
+                section = str(section)
+
             evidence_items.append(EvidenceItem(
                 id=doc_id,
                 title=src,
@@ -128,9 +153,13 @@ class EvidenceBuilder:
                 chunk=chunk.document.page_content[:300] if hasattr(chunk, "document") else "",
                 confidence_label=confidence_label,
                 retrieval_method=method,
-                chunk_index=rc.reranked_rank if hasattr(rc, "reranked_rank") else None,
+                chunk_index=meta_chunk_index if meta_chunk_index is not None else (
+                    rc.reranked_rank if hasattr(rc, "reranked_rank") else None
+                ),
                 total_chunks=total_cited,
                 document_id=src,
+                page=page,
+                section=section,
                 raw_score=chunk.score if hasattr(chunk, "score") else None,
                 reranker_score=getattr(rc, "reranker_score", None),
             ))

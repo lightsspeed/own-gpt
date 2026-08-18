@@ -2,6 +2,7 @@ from langchain_core.tools import tool
 from typing import Optional
 from app.agent.tool_impls import (
     search_knowledge_base_impl,
+    web_search_impl,
     sm_integration_impl,
     remember_user_fact_impl,
     remember_session_fact_impl,
@@ -16,6 +17,15 @@ def search_knowledge_base(query: str) -> str:
     Use this tool whenever the user asks about specific custom documents or internal knowledge.
     """
     return search_knowledge_base_impl(query)
+
+
+@tool
+def web_search(query: str) -> str:
+    """
+    Searches the live web via Tavily API for real-time external information, news, or public web docs.
+    Use this tool when the user asks about current events, external documentation, or topics not in internal knowledge.
+    """
+    return web_search_impl(query)
 
 
 @tool
@@ -56,5 +66,6 @@ def forget_user_fact(fact: str) -> str:
     return forget_user_fact_impl(fact)
 
 
-# All tools available to the agent (web search disabled)
-tools = [search_knowledge_base, sm_integration, remember_user_fact, remember_session_fact, forget_user_fact]
+# All tools available to the agent (including Tavily live web search)
+tools = [search_knowledge_base, web_search, sm_integration, remember_user_fact, remember_session_fact, forget_user_fact]
+

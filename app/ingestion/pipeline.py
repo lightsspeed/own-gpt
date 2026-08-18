@@ -233,7 +233,7 @@ class IngestionPipeline:
                 else:
                     raise
 
-    def _split_and_tag(self, docs: list, rel_path: str) -> list:
+    def _split_and_tag(self, docs: list, rel_path: str, project_id: Optional[str] = None, owner_id: Optional[str] = None) -> list:
         if self._splitter is None:
             self._splitter = _make_splitter(self._config)
         chunks = self._splitter.split_documents(docs)
@@ -243,6 +243,12 @@ class IngestionPipeline:
             chunk.metadata["file_type"] = Path(rel_path).suffix.lower()
             chunk.metadata["ingestion_path"] = rel_path
             chunk.metadata["collection_name"] = "own_gpt_docs"
+            pid = project_id or getattr(self._config, "project_id", None)
+            oid = owner_id or getattr(self._config, "owner_id", None)
+            if pid:
+                chunk.metadata["project_id"] = pid
+            if oid:
+                chunk.metadata["owner_id"] = oid
         return chunks
 
     def _store_with_retry(self, chunks: list) -> None:

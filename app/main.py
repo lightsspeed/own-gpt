@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.database import engine, sync_engine, Base
 from app.core.langsmith import setup_langsmith
 from app.core.logging_config import setup_logging
-from app.core.metrics import render_metrics
+from app.core.metrics import record_extraction_enabled, render_metrics
 from app.core.migrations import run_migrations
 from app.core.observability import RequestLoggingMiddleware
 from contextlib import asynccontextmanager
@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Structured JSON logging foundation (V2.2 P2.1) — before anything logs.
     setup_logging(settings.LOG_LEVEL)
+
+    # Extraction-enabled info gauge (P2.2) — set once so alerting can tell
+    # "disabled by config" from "silently not running".
+    record_extraction_enabled()
 
     # Setup - init LangSmith tracing
     setup_langsmith()

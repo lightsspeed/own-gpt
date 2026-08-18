@@ -89,7 +89,12 @@ class Retriever:
         self._k = k
 
     @traceable(name="retriever", metadata={"stage": 4})
-    def retrieve(self, query: str, filename: Optional[str] = None) -> tuple[List[RetrievedChunk], dict]:
+    def retrieve(
+        self,
+        query: str,
+        filename: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> tuple[List[RetrievedChunk], dict]:
         """
         Retrieve top-K chunks with similarity scores.
         Returns (chunks, timing_dict) — chunks sorted by score descending.
@@ -97,12 +102,23 @@ class Retriever:
         Args:
             query: Search query.
             filename: If set, restrict retrieval to chunks from this document.
+            project_id: If set, restrict retrieval to chunks from this project.
         """
         start = time.monotonic()
 
-        filter_ = None
+        filter_conditions = []
         if filename:
-            filter_ = {"$or": [{"filename": filename}, {"source": filename}]}
+            filter_conditions.append({"$or": [{"filename": filename}, {"source": filename}]})
+        if project_id:
+            filter_conditions.append({"project_id": project_id})
+
+        if len(filter_conditions) == 1:
+            filter_ = filter_conditions[0]
+        elif len(filter_conditions) > 1:
+            filter_ = {"$and": filter_conditions}
+        else:
+            filter_ = None
+
         raw_results = self._store.similarity_search_with_score(query, k=self._k, filter=filter_)
 
         chunks: List[RetrievedChunk] = []

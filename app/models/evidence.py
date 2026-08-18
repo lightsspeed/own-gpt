@@ -30,9 +30,11 @@ class EvidenceItem(BaseModel):
     chunk: Optional[str] = None
     confidence_label: ConfidenceLabel = ConfidenceLabel.medium
     retrieval_method: RetrievalMethod = RetrievalMethod.hybrid
-    chunk_index: Optional[int] = None
+    chunk_index: Optional[int] = None     # actual document chunk_index from metadata
     total_chunks: Optional[int] = None
-    document_id: Optional[str] = None
+    document_id: Optional[str] = None    # filename / stable document reference
+    page: Optional[int] = None           # PDF page number (1-based), when available
+    section: Optional[str] = None        # Chapter / heading when available
     metadata: dict[str, Any] = {}
 
     # Internal / developer-only fields (not serialized for public)

@@ -127,7 +127,12 @@ class HybridRetriever:
         self._rrf_k = rrf_k
         self._similarity_threshold = similarity_threshold
 
-    def retrieve(self, query: str, filename: Optional[str] = None) -> tuple[List[RetrievedChunk], dict]:
+    def retrieve(
+        self,
+        query: str,
+        filename: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> tuple[List[RetrievedChunk], dict]:
         """
         Hybrid retrieval: vector search + BM25 → RRF fusion.
         Returns (chunks, timing_dict) with per-stage latency breakdown.
@@ -135,22 +140,23 @@ class HybridRetriever:
         Args:
             query: Search query.
             filename: If set, vector search is restricted to this document.
+            project_id: If set, restrict retrieval to chunks from this project.
         """
         t_total = time.monotonic()
 
         # Stage 1: Vector search
         t_vs = time.monotonic()
-        vector_chunks, _ = self._vector.retrieve(query, filename=filename)
+        vector_chunks, _ = self._vector.retrieve(query, filename=filename, project_id=project_id)
         vector_ms = round((time.monotonic() - t_vs) * 1000, 2)
 
         logger.debug(
-            "hybrid_vector_complete query=%r retrieved=%d top_score=%.4f latency_ms=%.1f",
-            query[:60], len(vector_chunks), vector_chunks[0].score if vector_chunks else 0.0, vector_ms,
+            "hybrid_vector_complete query=%r retrieved=%d top_score=%.4f latency_ms=%.1f project_id=%s",
+            query[:60], len(vector_chunks), vector_chunks[0].score if vector_chunks else 0.0, vector_ms, project_id,
         )
 
         # Stage 2: BM25 search
         t_bm = time.monotonic()
-        bm25_results = self._bm25.search(query, k=self._top_k_bm25)
+        bm25_results = self._bm25.search(query, k=self._top_k_bm25, project_id=project_id)
         bm25_ms = round((time.monotonic() - t_bm) * 1000, 2)
 
         logger.debug(

@@ -19,9 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 def _default_model() -> str:
-    from app.core.config import settings
+    # Provider-resolved default (model_config.DEFAULT_MODEL), so recorded
+    # telemetry labels reflect the provider that actually runs.
+    from app.core.model_config import DEFAULT_MODEL
 
-    return settings.DEFAULT_MODEL
+    return DEFAULT_MODEL
 
 
 def build_learning_record(

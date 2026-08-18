@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   web:
     build: .
@@ -60,6 +58,11 @@ services:
 
   ollama:
     image: ollama/ollama:latest
+    environment:
+      # Slow CPU: give llama-server up to 30 minutes to load an 8B model,
+      # and keep the loaded model warm for interactive sessions.
+      - OLLAMA_LOAD_TIMEOUT=30m
+      - OLLAMA_KEEP_ALIVE=10m
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
@@ -71,6 +74,70 @@ services:
     # No host port published: only the OwnGPT containers reach it on the
     # compose network at http://ollama:11434. Host-based dev overrides
     # OLLAMA_BASE_URL in .env (http://localhost:11434).
+    restart: unless-stopped
+
+# ── V2.2 P2.2 observability (OPT-IN ONLY) ────────────────────────────────
+  # Start with:  docker compose --profile monitoring up
+  # A plain `docker compose up` never starts these two services.
+  # Both bind to the loopback interface ONLY (development convenience) and are
+  # reachable from the host at http://127.0.0.1:9090 (Prometheus) and
+  # http://127.0.0.1:3000 (Grafana). They are operational tooling: never expose
+  # them through a public route, and never let the application depend on them.
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "127.0.0.1:9090:9090"   # development-only loopback bind
+    volumes:
+      - ./ops/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.1.3
+    profiles: ["monitoring"]
+    # Credentials are NEVER hardcoded (P2.2 amendment): GRAFANA_ADMIN_USER and
+    # GRAFANA_ADMIN_PASSWORD must be supplied via .env or the environment. The
+    # guard below refuses to start with missing or weak values; a plain
+    # `docker compose up` is unaffected (empty-safe interpolation).
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$GRAFANA_ADMIN_USER" ] || [ -z "$$GRAFANA_ADMIN_PASSWORD" ]; then
+          echo "FATAL: GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD must be set (add them to .env or export them). The monitoring profile refuses to start Grafana with default credentials." >&2
+          exit 1
+        fi
+        for weak in admin password password123 grafana changeme secret; do
+          if [ "$$GRAFANA_ADMIN_PASSWORD" = "$$weak" ]; then
+            echo "FATAL: GRAFANA_ADMIN_PASSWORD must not be a weak default value." >&2
+            exit 1
+          fi
+        done
+        exec /run.sh
+    environment:
+      # The guard reads the RAW credential vars (then maps them onto Grafana's
+      # GF_SECURITY_* settings below); both must be present in the container
+      # environment at runtime, so pass them through empty-safe interpolation.
+      - GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER:-}
+      - GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    ports:
+      - "127.0.0.1:3000:3000"   # development-only loopback bind
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
     restart: unless-stopped
 
   frontend:
@@ -90,3 +157,6 @@ volumes:
   redis_data:
   ollama_data:
   flashrank_cache:
+  # V2.2 P2.2 monitoring profile
+  prometheus_data:
+  grafana_data:

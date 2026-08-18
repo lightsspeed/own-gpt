@@ -255,7 +255,7 @@ def create_memory(
     apply_domain_ttl: bool = True,
     metadata: Optional[dict] = None,
     now: Callable[[], datetime] = utc_now,
-    embed: Optional[Embed] = None,
+    embed: Optional[Embed] | object = _UNSET,
     extraction_run_id: Optional[str] = None,
 ) -> MemoryEntity:
     """Create a memory. Idempotent on identical (user, scope, statement);
@@ -350,8 +350,26 @@ def create_memory(
     db.add(entity)
     db.flush()
 
+    if embed is _UNSET:
+        try:
+            from app.services.embeddings import build_embedding_provider
+            provider_obj = build_embedding_provider()
+            if provider_obj is not None:
+                embed = provider_obj.embed
+            else:
+                embed = None
+        except Exception as exc:
+            logger.warning(
+                "memory_create_provider_init_failed provider=%s model=%s error_type=%s error=%s",
+                settings.MEMORY_EMBEDDING_PROVIDER,
+                settings.MEMORY_EMBEDDING_MODEL,
+                type(exc).__name__,
+                exc,
+            )
+            embed = None
+
     supersede_target: MemoryEntity | None = None
-    candidates = check_potential_conflicts(db, user_id, normalized, project_id=project_id, embed=embed)
+    candidates = check_potential_conflicts(db, user_id, normalized, project_id=project_id, embed=embed if callable(embed) else None)
     if candidates:
         first = candidates[0]
         if (
@@ -363,8 +381,27 @@ def create_memory(
             entity.status = STATUS_PENDING
             entity.conflicts_with_id = first.id
 
-    if embed is not None:
-        entity.embedding = embed([normalized])[0]
+    if callable(embed):
+        try:
+            vecs = embed([normalized])
+            if vecs and len(vecs[0]) == settings.MEMORY_EMBEDDING_DIMENSION:
+                entity.embedding = vecs[0]
+            else:
+                got_dim = len(vecs[0]) if vecs else 0
+                logger.warning(
+                    "memory_create_embedding_dim_mismatch expected=%d got=%d",
+                    settings.MEMORY_EMBEDDING_DIMENSION,
+                    got_dim,
+                )
+        except Exception as exc:
+            logger.warning(
+                "memory_create_embedding_failed statement=%r provider=%s model=%s error_type=%s error=%s",
+                normalized[:50],
+                settings.MEMORY_EMBEDDING_PROVIDER,
+                settings.MEMORY_EMBEDDING_MODEL,
+                type(exc).__name__,
+                exc,
+            )
 
     event_metadata = {"extraction_run_id": extraction_run_id} if extraction_run_id else None
 
@@ -480,7 +517,7 @@ def restore_memory(
     user_id: str,
     actor: str,
     note: str = "",
-    embed: Optional[Embed] = None,
+    embed: Optional[Embed] | object = _UNSET,
 ) -> MemoryEntity:
     """archived -> active (contract v0.2.1 §18). Operator-initiated only.
 
@@ -495,6 +532,17 @@ def restore_memory(
         raise ValueError("memory not found or not owned")
     if entity.status != STATUS_ARCHIVED:
         raise ValueError(f"invalid transition: {entity.status} -> active")
+
+    if embed is _UNSET:
+        try:
+            from app.services.embeddings import build_embedding_provider
+            provider_obj = build_embedding_provider()
+            if provider_obj is not None:
+                embed = provider_obj.embed
+            else:
+                embed = None
+        except Exception:
+            embed = None
 
     candidates = check_potential_conflicts(db, user_id, entity.statement,
                                            project_id=entity.project_id, embed=embed)
@@ -551,7 +599,7 @@ def check_potential_conflicts(
     statement: str,
     *,
     project_id: Optional[str] = None,
-    embed: Optional[Embed] = None,
+    embed: Optional[Embed] | object = _UNSET,
 ) -> list[MemoryEntity]:
     """ACTIVE memories in the same scope with cosine >= threshold.
 
@@ -561,7 +609,21 @@ def check_potential_conflicts(
     project, only user-wide memories are in scope.
     """
     normalized = _normalize(statement)
-    if not normalized or embed is None:
+    if not normalized:
+        return []
+
+    if embed is _UNSET:
+        try:
+            from app.services.embeddings import build_embedding_provider
+            provider_obj = build_embedding_provider()
+            if provider_obj is not None:
+                embed = provider_obj.embed
+            else:
+                embed = None
+        except Exception:
+            embed = None
+
+    if embed is None:
         return []
 
     q = select(MemoryEntity).where(
@@ -573,13 +635,31 @@ def check_potential_conflicts(
     else:
         q = q.where(or_(MemoryEntity.project_id == project_id, MemoryEntity.project_id.is_(None)))
 
-    query_vec = embed([normalized])[0]
+    try:
+        vecs = embed([normalized])
+        if not vecs:
+            return []
+        query_vec = vecs[0]
+    except Exception as exc:
+        logger.warning(
+            "check_potential_conflicts_embed_failed error_type=%s error=%s",
+            type(exc).__name__,
+            exc,
+        )
+        return []
     threshold = settings.MEMORY_CONFLICT_COSINE_THRESHOLD
     hits = []
     for entity in db.execute(q).scalars().all():
         if entity.embedding is None:
             continue
-        similarity = _cosine(list(query_vec), list(entity.embedding))
+        emb = entity.embedding
+        if isinstance(emb, str):
+            import json
+            try:
+                emb = json.loads(emb)
+            except Exception:
+                continue
+        similarity = _cosine(list(query_vec), list(emb))
         if similarity >= threshold:
             hits.append(entity)
     # Deterministic "first candidate" ordering.
@@ -616,14 +696,35 @@ def search_memories(
     min_score: float = 0.0,
     max_tokens: Optional[int] = None,
     now: Callable[[], datetime] = utc_now,
-    embed: Optional[Embed] = None,
+    embed: Optional[Embed] | object = _UNSET,
 ) -> list[MemoryHit]:
     """Deterministic ranked retrieval. With provider 'none' (embed=None)
     search degrades to no candidates. A provided project_id must be owned
     by the user (ProjectNotFoundError otherwise — same posture as create)."""
     if project_id is not None:
         resolve_owned_project(db, project_id, user_id)
-    if not query.strip() or embed is None:
+    if not query.strip():
+        return []
+
+    if embed is _UNSET:
+        try:
+            from app.services.embeddings import build_embedding_provider
+            provider_obj = build_embedding_provider()
+            if provider_obj is not None:
+                embed = provider_obj.embed
+            else:
+                embed = None
+        except Exception as exc:
+            logger.error(
+                "search_memories_provider_init_failed provider=%s model=%s error_type=%s error=%s",
+                settings.MEMORY_EMBEDDING_PROVIDER,
+                settings.MEMORY_EMBEDDING_MODEL,
+                type(exc).__name__,
+                exc,
+            )
+            return []
+
+    if embed is None:
         return []
 
     now_dt = now()
@@ -659,12 +760,24 @@ def search_memories(
                 .where(MemoryEntity.id.in_(missing))
             ).all()
         )
-        vectors = embed([r.statement for r in rows])
-        for row, vec in zip(rows, vectors):
-            db.execute(
-                update(MemoryEntity).where(MemoryEntity.id == row.id).values(embedding=vec)
+        try:
+            vectors = embed([r.statement for r in rows])
+            for row, vec in zip(rows, vectors):
+                db.execute(
+                    update(MemoryEntity).where(MemoryEntity.id == row.id).values(embedding=vec)
+                )
+            db.commit()
+        except Exception as exc:
+            logger.error(
+                "search_memories_backfill_failed provider=%s model=%s count=%d error_type=%s error=%s",
+                settings.MEMORY_EMBEDDING_PROVIDER,
+                settings.MEMORY_EMBEDDING_MODEL,
+                len(rows),
+                type(exc).__name__,
+                exc,
             )
-        db.commit()
+            db.rollback()
+            break
 
     cand_cap = max(50, k * 5)
     cols = (
@@ -675,7 +788,20 @@ def search_memories(
         MemoryEntity.created_at,
         MemoryEntity.last_accessed_at,
     )
-    query_vec = embed([query.strip()])[0]
+    try:
+        query_vecs = embed([query.strip()])
+        if not query_vecs:
+            return []
+        query_vec = query_vecs[0]
+    except Exception as exc:
+        logger.error(
+            "search_memories_query_embed_failed provider=%s model=%s error_type=%s error=%s",
+            settings.MEMORY_EMBEDDING_PROVIDER,
+            settings.MEMORY_EMBEDDING_MODEL,
+            type(exc).__name__,
+            exc,
+        )
+        return []
 
     if _dialect(db) == "postgresql":
         dist_col = MemoryEntity.embedding.cosine_distance(query_vec).label("distance")

@@ -43,13 +43,16 @@ class RouterResult:
 
 # ── Routing table ─────────────────────────────────────────────────────────────
 _ROUTING_TABLE: dict[Intent, tuple[RouteDecision, bool]] = {
-    Intent.KNOWLEDGE: (RouteDecision.RETRIEVAL,    False),
-    Intent.MEMORY:    (RouteDecision.MEMORY,        True),
-    Intent.GENERAL:   (RouteDecision.RETRIEVAL,    False),  # Rule-matched chitchat handled in route()
-    Intent.CODING:    (RouteDecision.RETRIEVAL,    False),  # KB-only: refuse if not in knowledge base
-    Intent.REASONING: (RouteDecision.RETRIEVAL,    False),  # KB-only: refuse if not in knowledge base
-    Intent.TOOL:      (RouteDecision.DIRECT_LLM,   True),
-    Intent.UNKNOWN:   (RouteDecision.RETRIEVAL,     False),  # Attempt retrieval for unknowns
+    Intent.KNOWLEDGE:    (RouteDecision.RETRIEVAL,    False),
+    Intent.DOCUMENT:     (RouteDecision.RETRIEVAL,    False),
+    Intent.MEMORY:       (RouteDecision.MEMORY,        True),
+    Intent.GENERAL:      (RouteDecision.RETRIEVAL,    False),  # Rule-matched chitchat handled in route()
+    Intent.WEB:          (RouteDecision.DIRECT_LLM,   True),   # Web search handled via tool gate / tavily
+    Intent.CODING:       (RouteDecision.RETRIEVAL,    False),  # KB-only policy when RAG enabled
+    Intent.REASONING:    (RouteDecision.RETRIEVAL,    False),  # KB-only policy when RAG enabled
+    Intent.MULTI_INTENT: (RouteDecision.RETRIEVAL,    False),  # Retrieval enabled for combined intents
+    Intent.TOOL:         (RouteDecision.DIRECT_LLM,   True),
+    Intent.UNKNOWN:      (RouteDecision.RETRIEVAL,     False),  # Attempt retrieval for unknowns
 }
 
 

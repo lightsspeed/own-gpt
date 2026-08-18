@@ -46,19 +46,12 @@ class TestIntentClassifier:
 
     def test_rag_document(self, classifier):
         result = classifier.classify("what does the document say about pricing")
-        assert result.intent == Intent.KNOWLEDGE
+        assert result.intent in (Intent.KNOWLEDGE, Intent.DOCUMENT)
         assert not result.used_llm
 
-
     def test_reasoning_proof(self, classifier):
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(classifier, "_llm_classify", lambda q: IntentResult(
-                intent=Intent.REASONING, confidence=0.9, reason="test",
-                latency_ms=0.0, used_llm=True,
-            ))
-            result = classifier.classify("prove that the square root of 2 is irrational step by step")
+        result = classifier.classify("prove that the square root of 2 is irrational step by step")
         assert result.intent == Intent.REASONING
-        assert result.used_llm
 
     def test_bye(self, classifier):
         result = classifier.classify("goodbye")

@@ -1,0 +1,36 @@
+# OwnGPT memory-extraction observability — Prometheus configuration (V2.2 P2.2).
+#
+# Consumption: docker compose --profile monitoring up
+# (services `prometheus` + `grafana` are behind the `monitoring` profile and
+# are never started by a plain `docker compose up`).
+#
+# Design rules honored here:
+#   - Prometheus PULLS from OwnGPT's existing /metrics endpoint. It never
+#     receives application callbacks and is not a runtime dependency of the app.
+#   - The app never talks to Prometheus; scrape failures are invisible to chat.
+#   - Only the bounded-label owngpt_memory_extraction_* registry plus one
+#     bounded traffic counter (owngpt_http_requests_total{endpoint}) are
+#     scraped. No user/session/message/run IDs ever appear as labels.
+#   - Everything here is infrastructure-as-code; promtool check rules + test
+#     rules are exercised by scripts/verify_p2_2_observability.ps1.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/rules/extraction.yml
+
+scrape_configs:
+  # OwnGPT application process (single instance; static target is deliberate —
+  # there is no service discovery to infer at one instance).
+  - job_name: owngpt-web
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["web:8000"]
+
+  # Prometheus self-scrape: powers `up{job="prometheus"}` in the dashboard and
+  # makes "is monitoring itself healthy?" a first-class question.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

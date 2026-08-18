@@ -112,7 +112,7 @@ class QueryRewriter:
                 rewritten=query,
                 expanded=[],
                 was_rewritten=False,
-                latency_ms=elapsed,
+                latency_ms=round((time.monotonic() - start) * 1000, 2),
             )
 
         logger.info(

@@ -93,14 +93,18 @@ async def upload_document(file: UploadFile = File(...)):
         existing = (
             await db.execute(select(IngestedFile).where(IngestedFile.filename == file.filename))
         ).scalar_one_or_none()
-        if existing is not None and existing.sha256 == sha256:
-            return UploadResponse(
-                filename=file.filename,
-                status="duplicate",
-                chunks=existing.chunks,
-                message=f"'{file.filename}' is already ingested ({existing.chunks} chunks).",
-                file_type=ext,
-            )
+        if existing is not None:
+            if existing.sha256 == sha256:
+                return UploadResponse(
+                    filename=file.filename,
+                    status="duplicate",
+                    chunks=existing.chunks,
+                    message=f"'{file.filename}' is already ingested ({existing.chunks} chunks).",
+                    file_type=ext,
+                )
+            else:
+                from app.ingestion.processor import purge_document_lifecycle
+                await purge_document_lifecycle(file.filename)
 
         job = IngestionJob(filename=file.filename, sha256=sha256, status="pending")
         db.add(job)
