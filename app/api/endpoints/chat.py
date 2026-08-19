@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.model_config import resolve_model, validate_temperature, ModelConfigError
 from app.api.deps import get_current_user, api_error
 from app.services import chat_persistence as store
+from app.services.memory import resolve_owned_project
 from app.agent.pipeline import RAGPipeline, PipelineContext, load_pipeline_config
 from app.agent.pipeline.evidence_builder import _parse_chunk_references
 from app.agent.pipeline.source_validator import SourceValidator
@@ -68,6 +69,7 @@ class ChatRequest(BaseModel):
     system_prompt: Optional[str] = None
     active_tools: Optional[dict[str, bool]] = None
     document: Optional[str] = None
+    project_id: Optional[str] = None
 
 
 class ResourceItem(BaseModel):
@@ -75,6 +77,11 @@ class ResourceItem(BaseModel):
     title: str
     url: Optional[str] = None
     snippet: Optional[str] = None
+    document_id: Optional[str] = None
+    chunk_index: Optional[int] = None
+    page: Optional[int] = None
+    section: Optional[str] = None
+    confidence_label: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -103,6 +110,7 @@ class SessionListItem(BaseModel):
     title: str
     is_pinned: bool = False
     selected_model: Optional[str] = None
+    project_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -165,6 +173,22 @@ def _extract_tool_names(messages_subset) -> List[str]:
     return tools_used
 
 
+def _agent_usage_metadata(messages) -> list:
+    """Collect usage_metadata dicts from this run's agent AIMessages.
+
+    The graph agent node returns the raw provider response (which carries
+    usage_metadata) directly into the message history. Only THIS run's
+    messages are scanned — never checkpoint history — so prior turns never
+    double-count cost. Missing/malformed usage degrades to no capture.
+    """
+    usage = []
+    for m in messages or []:
+        meta = getattr(m, "usage_metadata", None)
+        if isinstance(meta, dict) and meta:
+            usage.append(meta)
+    return usage
+
+
 async def _generate_session_title(message: str) -> str:
     try:
         from app.core.llm_provider import build_llm
@@ -183,8 +207,28 @@ async def _generate_session_title(message: str) -> str:
 
 
 def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] = None, document: Optional[str] = None, project_id: Optional[str] = None) -> PipelineContext:
-    """Run the pre-processing pipeline. Returns context with intent, route, context_text."""
-    return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode, filename=document, project_id=project_id)
+    """Run the pre-processing pipeline. Returns context with intent, route, context_text.
+
+    The single request_completed is deferred to the API layer AFTER the
+    LangGraph agent runs, so its LLM usage is included in the final cost.
+    """
+    return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode, filename=document, project_id=project_id, defer_request_completed=True)
+
+
+def _bind_created_conversation(db: Session, user: User, conv, project_id: Optional[str]) -> None:
+    """Bind a freshly created conversation to an owned project.
+
+    Only honored at creation: an existing conversation keeps its own scope
+    (the frontend uses a dedicated session per project, so this is purely a
+    creation-time binding; later rebinds go through PATCH /chat/sessions).
+    """
+    if not project_id:
+        return
+    try:
+        resolve_owned_project(db, project_id, user.id)
+    except ValueError:
+        raise api_error(404, "project_not_found", "Project not found")
+    store.update_conversation(db, conv, project_id=project_id)
 
 
 def _post_process(ctx: PipelineContext, response: str, new_messages: list, model: str = "", temperature: float = 0.0) -> str:
@@ -290,22 +334,22 @@ async def chat_endpoint(
                 raise api_error(404, "not_found", "Session not found")
             title = await _generate_session_title(request.message)
             conv = store.create_conversation(db, user, request.session_id, title=title, selected_model=model)
+            _bind_created_conversation(db, user, conv, request.project_id)
         else:
             if conv.selected_model != model:
                 store.update_conversation(db, conv, selected_model=model)
             store.touch_conversation(db, conv)
 
-        # Backfill legacy history from checkpoints (idempotent, count==0 only)
         _ensure_backfilled(db, conv, _checkpoint_messages(existing_state))
 
-        # Idempotency: identical request_id retry → reject before double work
+        # Idempotency: reject duplicate logical requests before any work
         if request.request_id and store.get_user_message_by_request_id(db, conv.id, request.request_id):
             raise api_error(409, "duplicate_request", "A message with this request_id already exists")
 
         # Persist the user message BEFORE graph execution
         user_msg = store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
 
-        # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
+        # Stage 1-7: Run pre-processing pipeline
         ctx = _run_pipeline(request.message, request.session_id, document=request.document, project_id=conv.project_id)
 
         # Check if we should short-circuit with clarification
@@ -319,6 +363,7 @@ async def chat_endpoint(
                 ctx.trace.total_latency_ms = 0.0
             if _pipeline_config.get("trace_enabled", True):
                 _pipeline.tracer.store(ctx.trace)
+            _pipeline.finalize_trace(ctx)
             store.persist_assistant_message(db, conv, response, model, status=store.MESSAGE_STATUS_COMPLETED)
             return ChatResponse(
                 session_id=request.session_id,
@@ -350,6 +395,11 @@ async def chat_endpoint(
         response = last_message.content
         if not isinstance(response, str):
             response = _flatten_content(response)
+
+        # V4.9: capture the agent LLM usage from this run's messages into the
+        # shared request TokenBudget (same accounting executor uses).
+        for meta in _agent_usage_metadata(new_messages):
+            _pipeline.record_agent_usage(ctx, meta, fallback_model=model)
 
         # Filter resources based on answer mode and evidence builder
         evidence_result = _pipeline._evidence_builder.build(
@@ -416,7 +466,11 @@ async def chat_endpoint(
             )
 
         # Persist the completed assistant message (exactly once, final content)
-        store.persist_assistant_message(db, conv, response, model, status=store.MESSAGE_STATUS_COMPLETED)
+        store.persist_assistant_message(db, conv, response, model, status=store.MESSAGE_STATUS_COMPLETED, resources=resources)
+
+        # Single complete request_completed AFTER the agent LLM ran (includes
+        # agent usage already recorded into the shared TokenBudget above).
+        _pipeline.finalize_trace(ctx)
 
         # Detached memory extraction — fire-and-forget, never on the request path
         from app.learning.extraction.extractor import schedule_extraction
@@ -458,6 +512,7 @@ async def list_sessions(
                     title=s.title,
                     is_pinned=s.is_pinned,
                     selected_model=s.selected_model,
+                    project_id=s.project_id,
                     created_at=s.created_at,
                     updated_at=s.updated_at,
                 ) for s in sessions
@@ -565,6 +620,7 @@ async def update_session(
             title=conv.title,
             is_pinned=conv.is_pinned,
             selected_model=conv.selected_model,
+            project_id=conv.project_id,
             created_at=conv.created_at,
             updated_at=conv.updated_at,
         )
@@ -684,6 +740,7 @@ async def chat_stream_endpoint(
                 raise api_error(404, "not_found", "Session not found")
             title = await _generate_session_title(request.message)
             conv = store.create_conversation(db, user, request.session_id, title=title, selected_model=model)
+            _bind_created_conversation(db, user, conv, request.project_id)
         else:
             if conv.selected_model != model:
                 store.update_conversation(db, conv, selected_model=model)
@@ -727,6 +784,7 @@ async def chat_stream_endpoint(
             if _pipeline_config.get("trace_enabled", True):
                 _pipeline.tracer.store(ctx.trace)
             store.persist_assistant_message(db, conv, msg, model, status=store.MESSAGE_STATUS_COMPLETED)
+            _pipeline.finalize_trace(ctx)
 
             async def clarify_generator():
                 yield f"data: {json.dumps({'type': 'content', 'content': msg})}\n\n"
@@ -775,13 +833,15 @@ async def chat_stream_endpoint(
             accumulated: list[str] = []
             persisted = False
 
-            def persist_assistant(content: str, status: str, error: str | None = None) -> None:
+            def persist_assistant(content: str, status: str, error: str | None = None, resources: list | None = None) -> None:
                 nonlocal persisted
                 if persisted:
                     return
                 try:
                     with request_session_factory() as sdb:
-                        store.persist_assistant_message(sdb, conv, content, model, status=status, error=error)
+                        store.persist_assistant_message(
+                            sdb, conv, content, model, status=status, error=error, resources=resources
+                        )
                     persisted = True
                 except Exception as exc:
                     logger.error("assistant_persist_failed conversation=%s error=%s", conv.id, exc)
@@ -802,7 +862,7 @@ async def chat_stream_endpoint(
                             loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": chunk}))
                     elif stream_mode == "updates":
                         for node_name, node_output in stream_event.items():
-                            if node_name == "tools" and isinstance(node_output, dict):
+                            if node_name == "action" and isinstance(node_output, dict):
                                 for m in node_output.get("messages", []):
                                     if hasattr(m, "name") and m.name:
                                         loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "tool_end", "tool": m.name}))
@@ -812,6 +872,10 @@ async def chat_stream_endpoint(
                                         for tc in m.tool_calls:
                                             tname = tc.get("name") or tc.get("function", {}).get("name", "tool")
                                             loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "tool_start", "tool": tname}))
+                                    # V4.9: agent LLM usage → shared request budget
+                                    meta = getattr(m, "usage_metadata", None)
+                                    if isinstance(meta, dict) and meta:
+                                        _pipeline.record_agent_usage(ctx, meta, fallback_model=model)
 
                 # Streaming completed — post-processing + persistence
                 final_state = graph.get_state(config)
@@ -917,7 +981,7 @@ async def chat_stream_endpoint(
 
                     # Persist the completed assistant message exactly once
                     if response_text:
-                        persist_assistant(response_text, store.MESSAGE_STATUS_COMPLETED)
+                        persist_assistant(response_text, store.MESSAGE_STATUS_COMPLETED, resources=enriched_resources)
                         # Detached memory extraction — after the stream is done,
                         # own thread, never on the stream path.
                         from app.learning.extraction.extractor import schedule_extraction
@@ -943,6 +1007,10 @@ async def chat_stream_endpoint(
                             claim_data=claim_data,
                             record_id=record_id,
                         )
+
+                    # Single complete request_completed AFTER the agent LLM ran
+                    # (agent usage recorded into the shared budget above).
+                    _pipeline.finalize_trace(ctx)
 
                     # Emit trace metadata as final SSE event before [DONE]
                     if ctx.trace:
@@ -973,6 +1041,9 @@ async def chat_stream_endpoint(
                         loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "trace", "trace": trace_dict}))
             except Exception as thread_err:
                 logger.error(f"Stream thread error: {thread_err}", exc_info=True)
+                # Close the trace with a failed status unless the success path
+                # already finalized it (finalize_trace is idempotent).
+                _pipeline.finalize_trace(ctx, status="failed")
                 raw_text = str(thread_err)
                 # Friendly message for image-incompatible models
                 if "does not support image" in raw_text.lower() or "cannot read" in raw_text.lower():
@@ -1074,6 +1145,7 @@ async def chat_evaluate_endpoint(
                 ctx.trace.total_latency_ms = 0.0
             if _pipeline_config.get("trace_enabled", True):
                 _pipeline.tracer.store(ctx.trace)
+            _pipeline.finalize_trace(ctx)
             result = build_evaluation_result(ctx, answer=msg)
             return result.to_dict()
 
@@ -1099,6 +1171,10 @@ async def chat_evaluate_endpoint(
         last_message = final_state["messages"][-1]
         response = last_message.content
 
+        # V4.9: capture the agent LLM usage into the shared request TokenBudget.
+        for meta in _agent_usage_metadata(new_messages):
+            _pipeline.record_agent_usage(ctx, meta, fallback_model=initial_state["model"])
+
         # Stages 8-9: Validate + trace
         # Populate tool/token info
         ctx.trace.memory_used = True
@@ -1106,6 +1182,9 @@ async def chat_evaluate_endpoint(
         ctx.trace.prompt_tokens = _count_tokens(ctx.question)
         ctx.trace.completion_tokens = _count_tokens(response)
         _pipeline.validate_response(question=ctx.question, response=response, ctx=ctx)
+
+        # Single complete request_completed AFTER the agent LLM ran.
+        _pipeline.finalize_trace(ctx)
 
         # Build structured result
         result = build_evaluation_result(ctx, answer=response)

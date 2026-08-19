@@ -441,6 +441,37 @@ register(Capability(
     artifacts=("ReliabilityGuard", "TimeoutPolicy", "IdempotencyLedger"),
 ))
 
+register(Capability(
+    id="agent_api_contract", name="Stable Agent API Contract (V4.12)",
+    description="Pure DTO layer (AgentRequest/AgentResponse/AgentError/StreamEvent/ExecutionSummary/ModelUsageSummary) with one deterministic status mapping (completed/partial/failed/blocked/cancelled/timed_out), enumerated SSE payload projection, stable error mapping that never leaks internal text, and backwards-compatible legacy chat keys; the production chat API keeps its stable SSE vocabulary unchanged",
+    owner="agent.contract", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_tracing", "token_governance", "production_reliability"),
+    artifacts=("AgentRequest", "AgentResponse", "AgentError", "StreamEvent",
+               "ExecutionSummary", "ModelUsageSummary"),
+    api_prefix="/api/v1/chat",
+))
+
+register(Capability(
+    id="agent_execution_metrics", name="Agent Execution Metrics (Phase 3.2)",
+    description="Bounded-label Prometheus families (owngpt_agent_*) recorded at the two authoritative boundaries: request status/duration/tokens/cost at the single finalization boundary (finalize_trace — same status and same TokenBudget totals as the request_completed trace event) and tool calls/duration/failures/blocks at the single guarded tool gate; failures and block reasons are finite taxonomies, model/tool collapse to allowlists plus 'other', and Prometheus/Grafana consume the same registry the /metrics endpoint already serves",
+    owner="core.metrics", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_api_contract", "agent_tracing", "token_governance",
+                  "production_reliability"),
+    artifacts=(
+        "owngpt_agent_requests_total",
+        "owngpt_agent_request_tokens_total",
+        "owngpt_agent_request_cost_usd_total",
+        "owngpt_agent_request_duration_seconds",
+        "owngpt_agent_tool_calls_total",
+        "owngpt_agent_tool_duration_seconds",
+        "owngpt_agent_tool_failures_total",
+        "owngpt_agent_tool_blocked_total",
+    ),
+    api_prefix="/metrics",
+))
+
 # Automation
 register(Capability(
     id="continuous_evaluation", name="Continuous Evaluation",

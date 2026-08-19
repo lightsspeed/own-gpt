@@ -40,7 +40,9 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from app.core.langsmith import traceable
-from .trace import AgentTrace, record_trace
+from app.core import metrics as core_metrics
+from app.agent.contract import map_status
+from .trace import AgentTrace, LoggingTraceObserver, record_trace
 from .confidence import ConfidenceEvaluator, ConfidenceResult
 from .intent import Intent, IntentClassifier, IntentResult
 from .planner import Planner, AnswerMode, Plan, PlanStep
@@ -326,6 +328,7 @@ class RAGPipeline:
         filename: Optional[str] = None,
         project_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        defer_request_completed: bool = False,
     ) -> PipelineContext:
         """
         Run the full pre-processing pipeline (Stages 1–7).
@@ -338,6 +341,11 @@ class RAGPipeline:
             filename: If set, restrict retrieval to chunks from this document.
             project_id: If set, restrict retrieval to chunks from this project.
             user_id: If set, user context identifier.
+            defer_request_completed: When True, skip emitting/publishing the
+                final request_completed event here. The caller (API layer)
+                records post-pipeline LLM usage on ctx.token_budget and calls
+                finalize_trace() after the LangGraph agent finishes, so the
+                single completion event carries the COMPLETE request cost.
         """
         ctx = PipelineContext(
             question=question,
@@ -585,12 +593,28 @@ class RAGPipeline:
         # On validation failure the final answer becomes a safe clarification.
         # Never retries, never re-plans, never exposes internal errors.
         if ctx.synthesis is not None:
+            validation_start = time.monotonic()
             ctx.validation = self._answer_validator.validate(
                 question=question,
                 answer=ctx.synthesis.answer,
                 context=ctx.context,
                 execution=ctx.execution,
             )
+            if ctx.validation is not None:
+                # validation_completed is emitted HERE on the pipeline
+                # context: the validator itself receives ctx.context (the
+                # retrieved-content boundary), which carries no agent_trace,
+                # so its own record_trace calls resolve to a no-op. This
+                # keeps the event on the request trace.
+                record_trace(
+                    ctx, "validation", "validation_completed",
+                    status="valid" if ctx.validation.valid else "invalid",
+                    duration_ms=round((time.monotonic() - validation_start) * 1000, 2),
+                    metadata={
+                        "grounded": bool(getattr(ctx.validation, "grounded", False)),
+                        "issues": len(getattr(ctx.validation, "issues", []) or []),
+                    },
+                )
             if ctx.validation is not None and not ctx.validation.valid:
                 logger.info(
                     "validation_rejected session_id=%s intent=%s issues=%s",
@@ -814,25 +838,127 @@ class RAGPipeline:
             ctx.confidence_decision,
         )
 
-        # ── V4.8: Close the execution trace (passive) ────────────────────────
+        # ── V4.8: Close the execution trace ─────────────────────────────────
         # V4.9: request-level cost totals attach to the SAME correlation IDs
         # (no new tracking mechanism).
-        exec_status = getattr(ctx.execution, "status", "completed") or "completed"
-        if ctx.validation is not None and not ctx.validation.valid:
-            exec_status = "failed"
-        budget_meta: dict = {}
-        if ctx.token_budget is not None:
-            budget_meta = {
-                "estimated_cost_usd": round(ctx.token_budget.total_cost_usd(), 6),
-                "models": ",".join(ctx.token_budget.models_used()) or "none",
-            }
-        record_trace(
-            ctx, "execution", "request_completed",
-            status=exec_status,
-            duration_ms=round((time.monotonic() - ctx._start_time) * 1000, 2),
-            metadata=budget_meta or None,
-        )
+        # When the API layer defers this call, the final request_completed is
+        # emitted by finalize_trace() AFTER the LangGraph agent runs, so the
+        # single completion event reflects the complete request cost.
+        if not defer_request_completed:
+            self.finalize_trace(ctx)
         return ctx
+
+    # ── Post-pipeline Agent LLM cost capture + trace finalization ─────────
+    # The production LangGraph agent (graph.py call_model) runs AFTER
+    # process() returns, so its LLM usage is invisible at pipeline end. The
+    # API layer feeds the agent usage back HERE, then closes the trace here
+    # too — keeping one single, complete request_completed event per request.
+
+    def record_agent_usage(
+        self,
+        ctx: PipelineContext,
+        usage_metadata: Optional[dict] = None,
+        *,
+        fallback_model: str = "",
+    ) -> None:
+        """Record the LangGraph agent LLM call into the request TokenBudget.
+
+        Reuses the existing V4.9 accounting (same TokenBudget instance the
+        executor/synthesizer/validator already share). Pure accounting:
+        missing, malformed, or non-dict usage is a no-op — it can never
+        fail the answer or change the response.
+        """
+        try:
+            budget = getattr(ctx, "token_budget", None)
+            if budget is None or not isinstance(usage_metadata, dict):
+                return
+            t_in = (
+                usage_metadata.get("input_tokens")
+                or usage_metadata.get("prompt_tokens")
+                or 0
+            )
+            t_out = (
+                usage_metadata.get("completion_tokens")
+                or usage_metadata.get("output_tokens")
+                or 0
+            )
+            model = usage_metadata.get("model") or fallback_model or ""
+            budget.record(model, int(t_in), int(t_out))
+        except Exception as exc:
+            logger.warning("agent_usage_record_failed error=%s", exc)
+
+    def finalize_trace(
+        self,
+        ctx: PipelineContext,
+        status: Optional[str] = None,
+    ) -> None:
+        """Emit request_completed with the FULL request cost, then publish.
+
+        Idempotent: a completed trace is never completed twice (the API
+        layer may finalize once and a later error path may retry with an
+        explicit status). Status derivation mirrors process(); the optional
+        override exists for failed/partial flows. Never raises.
+
+        The SAME finalization facts feed the trace event and the agent
+        request metrics (Phase 3.2): one status (contract map_status plus
+        the validation-failure downgrade) and one TokenBudget total — the
+        metrics can never disagree with the trace they accompany.
+        """
+        try:
+            tr = getattr(ctx, "agent_trace", None)
+            if tr is None:
+                return
+            if any(e.event == "request_completed" for e in tr.events()):
+                logger.debug("trace_already_completed request_id=%s", tr.request_id)
+                return
+            exec_status = status or map_status(ctx)
+            if ctx.validation is not None and not ctx.validation.valid:
+                exec_status = "failed"
+            budget_meta: dict = {}
+            if ctx.token_budget is not None:
+                budget_meta = {
+                    "estimated_cost_usd": round(ctx.token_budget.total_cost_usd(), 6),
+                    "models": ",".join(ctx.token_budget.models_used()) or "none",
+                }
+            duration_ms = round((time.monotonic() - ctx._start_time) * 1000, 2)
+            record_trace(
+                ctx, "execution", "request_completed",
+                status=exec_status,
+                duration_ms=duration_ms,
+                metadata=budget_meta or None,
+            )
+            # ── Agent request metrics (Phase 3.2) ──────────────────────────
+            # Recorded ONLY here, from the same status and the same shared
+            # TokenBudget that produced the trace event above — a single
+            # accounting path for trace, contract, and Prometheus.
+            core_metrics.safe_agent_count("requests_total", status=exec_status)
+            core_metrics.safe_agent_observe(
+                "request_duration_seconds", duration_ms / 1000.0
+            )
+            try:
+                usage = (
+                    ctx.token_budget.usage_by_model()
+                    if ctx.token_budget is not None
+                    else None
+                )
+                for model, v in sorted((usage or {}).items()):
+                    tokens = int(v.get("input_tokens", 0) or 0) + int(
+                        v.get("output_tokens", 0) or 0
+                    )
+                    cost = float(v.get("cost_usd", 0.0) or 0.0)
+                    if tokens:
+                        core_metrics.safe_agent_count(
+                            "request_tokens_total", amount=tokens, model=model
+                        )
+                    if cost:
+                        core_metrics.safe_agent_count(
+                            "request_cost_usd_total", amount=cost, model=model
+                        )
+            except Exception as exc:
+                logger.warning("agent_request_metrics_failed error=%s", exc)
+            tr.publish(LoggingTraceObserver())
+        except Exception as exc:
+            logger.warning("trace_finalize_failed error=%s", exc)
 
     # ── Post-processing: Validation + Grounding + Tracing ──────────────────
 

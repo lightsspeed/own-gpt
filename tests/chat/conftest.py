@@ -101,6 +101,13 @@ class FakeGraph:
         self.partial_chunks: list[str] = []
         self.last_invoke_state: dict | None = None
         self.last_config: dict | None = None
+        # Tool-call round trip: the agent proposes tool calls, the action
+        # node returns ToolMessages (with .name) — mirrors the real graph.
+        self.agent_tool_calls: list[dict] = []
+        self.action_tool_messages: list = []
+        # Opt-in usage_metadata attached to the agent update AIMessage
+        # (mirrors the real graph node returning the raw provider response).
+        self.agent_usage_metadata: dict | None = None
 
     def get_state(self, config: dict):
         return FakeState({"messages": list(self.messages)})
@@ -121,7 +128,14 @@ class FakeGraph:
         if self.stream_error is not None:
             raise self.stream_error
         self.messages.append(AIMessage(content="".join(self.partial_chunks)))
-        yield "updates", {"agent": {"messages": [AIMessage(content="")]}}
+        agent_update = AIMessage(content="")
+        if self.agent_usage_metadata is not None:
+            agent_update.usage_metadata = dict(self.agent_usage_metadata)
+        yield "updates", {"agent": {"messages": [agent_update]}}
+        if self.agent_tool_calls:
+            yield "updates", {"agent": {"messages": [AIMessage(content="", tool_calls=self.agent_tool_calls)]}}
+        if self.action_tool_messages:
+            yield "updates", {"action": {"messages": self.action_tool_messages}}
 
 
 class FakeEvidenceResult:
@@ -182,6 +196,12 @@ class FakePipeline:
             "validations": [], "all_supported": True,
             "unsupported_count": 0, "total_count": 0,
         })()
+
+    def record_agent_usage(self, ctx, usage_metadata=None, *, fallback_model=""):
+        return None
+
+    def finalize_trace(self, ctx, status=None):
+        return None
 
 
 @dataclass

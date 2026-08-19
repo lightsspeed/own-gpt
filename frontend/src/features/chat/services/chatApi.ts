@@ -2,6 +2,57 @@ import type { ChatSession, MessageData, ContextItem } from '../types';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
+export interface ChatRequestBodyParams {
+  sessionId: string;
+  message: string;
+  model?: string;
+  temperature?: number;
+  systemPrompt: string;
+  activeTools?: Record<string, string>;
+  context?: ContextItem[];
+  document?: string;
+  projectId?: string | null;
+  signal?: AbortSignal;
+}
+
+export function buildChatRequestBody(p: ChatRequestBodyParams): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    session_id: p.sessionId,
+    message: p.message,
+  };
+  if (p.model) body.model = p.model;
+  if (p.temperature != null) body.temperature = p.temperature;
+  if (p.systemPrompt) body.system_prompt = p.systemPrompt;
+  if (p.activeTools) {
+    body.active_tools = {
+      web: p.activeTools.web_search === 'auto' || p.activeTools.web_search === 'manual',
+      kb: p.activeTools.knowledge_base === 'auto' || p.activeTools.knowledge_base === 'manual',
+    };
+  }
+  if (p.context && p.context.length > 0) {
+    body.context = p.context.map(c => ({ category: c.category, label: c.label, value: c.value }));
+  }
+  if (p.document) body.document = p.document;
+  if (p.projectId) body.project_id = p.projectId;
+  return body;
+}
+
+export async function responseError(res: Response): Promise<Error> {
+  let message = 'Server error';
+  try {
+    const data = await res.json();
+    const err = data?.error;
+    if (err?.message) {
+      message = typeof err.message === 'string' ? err.message : 'Server error';
+    } else if (typeof data?.detail === 'string') {
+      message = data.detail;
+    }
+  } catch {
+    /* non-JSON error body — keep fallback */
+  }
+  return new Error(message);
+}
+
 export const api = {
   baseUrl: API_BASE,
 
@@ -10,7 +61,16 @@ export const api = {
       const res = await fetch(`${API_BASE}/chat/sessions`);
       if (res.ok) {
         const data = await res.json();
-        return data.sessions || [];
+        return (data.sessions || []).map((s: any) => ({
+          id: s.id,
+          title: s.title,
+          is_pinned: s.is_pinned,
+          project_id: s.project_id ?? null,
+          created_at: s.created_at,
+          updated_at: s.updated_at,
+          message_count: s.message_count,
+          last_answer_mode: s.last_answer_mode,
+        }));
       }
     } catch { /* ignore */ }
     return [];
@@ -34,6 +94,7 @@ export const api = {
             id: `history-${i}`,
             role: m.role as 'user' | 'assistant',
             content: m.content,
+            status: m.status,
             timestamp: new Date(),
             resources: m.resources,
           }));
@@ -53,8 +114,10 @@ export const api = {
     activeTools?: Record<string, string>;
     context?: ContextItem[];
     document?: string;
+    projectId?: string | null;
+    signal?: AbortSignal;
   }): Promise<Response> {
-    const { sessionId, message, model, temperature, systemPrompt, uploadedFiles, activeTools, context, document } = params;
+    const { sessionId, message, model, temperature, systemPrompt, uploadedFiles, activeTools, context, document, projectId, signal } = params;
     let prompt = systemPrompt || '';
 
     const toolInstructions: string[] = [];
@@ -82,19 +145,23 @@ export const api = {
     return fetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
+      body: JSON.stringify(buildChatRequestBody({
+        sessionId,
         message,
         model,
         temperature,
-        system_prompt: prompt,
-        active_tools: activeTools ? {
-          web: activeTools.web_search === 'auto' || activeTools.web_search === 'manual',
-          kb: activeTools.knowledge_base === 'auto' || activeTools.knowledge_base === 'manual',
-        } : undefined,
-        context: context?.map(c => ({ category: c.category, label: c.label, value: c.value })),
+        systemPrompt: prompt,
+        activeTools,
+        context,
         document,
-      }),
+        projectId,
+      })),
+      signal,
+    }).then(async res => {
+      if (!res.ok) {
+        throw await responseError(res);
+      }
+      return res;
     });
   },
 

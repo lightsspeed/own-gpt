@@ -5,6 +5,16 @@ import { OwnGPTPage } from './OwnGPTPage'
 import { SearchPalette } from './SearchPalette'
 import { PerformanceMetrics } from './PerformanceMetrics'
 import { SettingsPanel } from './SettingsPanel'
+import { ProjectSelector } from '@/features/projects/ProjectSelector'
+import {
+  ensureProjectSession,
+  persistActiveProject,
+  projectSessionKey,
+  readActiveProject,
+  removeSessionFromRegistry,
+  type SessionRegistry,
+} from '@/features/projects/projectSession'
+import { projectsApi, type Project } from '@/features/projects/services/projectsApi'
 import { Menu, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/features/chat/services/chatApi'
@@ -20,6 +30,12 @@ export function OwnGPTContainer() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
 
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(true)
+  const [projectsError, setProjectsError] = useState<string | null>(null)
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => readActiveProject())
+  const [sessionByProject, setSessionByProject] = useState<SessionRegistry>({})
+
   const refresh = useCallback(async () => {
     const list = await api.fetchSessions()
     setSessions(list)
@@ -31,21 +47,53 @@ export function OwnGPTContainer() {
 
   useEffect(() => { refresh() }, [refresh])
 
+  const loadProjects = useCallback(async () => {
+    setProjectsLoading(true)
+    setProjectsError(null)
+    try {
+      setProjects(await projectsApi.list())
+    } catch (e: any) {
+      setProjectsError(e?.message || 'Failed to load projects')
+    } finally {
+      setProjectsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void loadProjects() }, [loadProjects])
+
+  const handleSelectProject = useCallback((projectId: string | null) => {
+    setActiveProjectId(projectId)
+    persistActiveProject(projectId)
+    const { registry, sessionId } = ensureProjectSession(sessionByProject, projectId, () => crypto.randomUUID())
+    setSessionByProject(registry)
+    setActiveId(sessionId)
+  }, [sessionByProject])
+
+  const handleCreateProject = useCallback(async (name: string) => {
+    const project = await projectsApi.create(name)
+    setProjects(prev => [...prev, project])
+    return project
+  }, [])
+
   const handleNewChat = useCallback(() => {
     const id = crypto.randomUUID()
+    const key = projectSessionKey(activeProjectId)
+    setSessionByProject(prev => ({ ...prev, [key]: id }))
     setSessions(prev => [{
       id,
       title: 'New Chat',
       is_pinned: false,
+      project_id: activeProjectId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, ...prev])
     setActiveId(id)
-  }, [])
+  }, [activeProjectId])
 
   const handleDelete = useCallback(async (id: string) => {
     await api.deleteSession(id)
     setSessions(prev => prev.filter(s => s.id !== id))
+    setSessionByProject(prev => removeSessionFromRegistry(prev, id))
     if (activeId === id) {
       const remaining = sessions.filter(s => s.id !== id)
       setActiveId(remaining.length > 0 ? remaining[0].id : null)
@@ -105,6 +153,17 @@ export function OwnGPTContainer() {
         onToggleSidebar={() => setSidebarOpen(false)}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenKnowledgeBase={() => navigate('/learn')}
+        projectSelector={
+          <ProjectSelector
+            projects={projects}
+            selectedProjectId={activeProjectId}
+            loading={projectsLoading}
+            error={projectsError}
+            onSelect={handleSelectProject}
+            onCreate={handleCreateProject}
+            onRetry={loadProjects}
+          />
+        }
       />
 
       {!sidebarOpen && (
@@ -122,7 +181,11 @@ export function OwnGPTContainer() {
       )}>
         <div className="flex-1 min-h-0">
           {activeId ? (
-            <OwnGPTPage key={activeId} sessionId={activeId} />
+            <OwnGPTPage
+              key={activeId}
+              sessionId={activeId}
+              projectId={sessions.find(s => s.id === activeId)?.project_id ?? activeProjectId}
+            />
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center space-y-4">

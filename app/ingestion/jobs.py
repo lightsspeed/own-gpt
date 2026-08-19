@@ -36,7 +36,7 @@ async def process_ingestion_job(ctx, job_id: str) -> dict:
         await delete_chunks(job.filename)
 
     try:
-        result = await process_file(job.filename)
+        result = await process_file(job.filename, project_id=job.project_id or None)
     except Exception as exc:
         logger.exception("ingestion_job_failed job_id=%s filename=%s", job_id, job.filename)
         async with AsyncSessionLocal() as db:

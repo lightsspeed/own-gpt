@@ -163,6 +163,15 @@ _MIGRATIONS: list[tuple[str, list[str]]] = [
             "CREATE INDEX IF NOT EXISTS ix_chat_sessions_project_id ON chat_sessions (project_id)",
         ],
     ),
+    # m006 — ingestion jobs carry the project that owns the upload so the
+    # worker can tag chunk metadata with project_id (retrieval isolation).
+    (
+        "m006_ingestion_job_project",
+        [
+            "ALTER TABLE ingestion_jobs ADD COLUMN IF NOT EXISTS project_id VARCHAR REFERENCES projects(id) ON DELETE SET NULL",
+            "CREATE INDEX IF NOT EXISTS ix_ingestion_jobs_project_id ON ingestion_jobs (project_id)",
+        ],
+    ),
 ]
 
 

@@ -2,12 +2,12 @@ import React from 'react'
 import { cn } from '@/lib/utils'
 
 const TOOL_MAP: Record<string, { icon: string; label: string; color: string }> = {
+  search_knowledge_base: { icon: '📚', label: 'Knowledge Base', color: 'text-blue-400' },
   web_search: { icon: '🌐', label: 'Web Search', color: 'text-sky-400' },
-  knowledge_base: { icon: '📚', label: 'Knowledge Base', color: 'text-blue-400' },
-  calculator: { icon: '🧮', label: 'Calculator', color: 'text-emerald-400' },
-  code_interpreter: { icon: '💻', label: 'Code Interpreter', color: 'text-purple-400' },
-  image_analysis: { icon: '📷', label: 'Image Analysis', color: 'text-amber-400' },
-  memory: { icon: '🧠', label: 'Memory', color: 'text-rose-400' },
+  sm_integration: { icon: '📣', label: 'Social Media', color: 'text-emerald-400' },
+  remember_user_fact: { icon: '🧠', label: 'Remember (User)', color: 'text-rose-400' },
+  remember_session_fact: { icon: '💬', label: 'Remember (Session)', color: 'text-rose-400' },
+  forget_user_fact: { icon: '🧹', label: 'Forget Fact', color: 'text-rose-400' },
 }
 
 interface ToolChipsProps {

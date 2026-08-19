@@ -6,14 +6,18 @@ import os
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.api.deps import api_error, get_current_user
 from app.core.config import settings
-from app.core.database import AsyncSessionLocal, get_db
+from app.core.database import AsyncSessionLocal, get_db, get_sync_db
 from app.ingestion.processor import MAX_FILE_BYTES, SUPPORTED_TYPES, UPLOAD_DIR
 from app.models.ingestion import IngestedFile, IngestionJob
+from app.models.user import User
+from app.services.memory import resolve_owned_project
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -68,8 +72,24 @@ async def _enqueue(job: IngestionJob) -> None:
         await pool.aclose()
 
 
+def _require_owned_project(db: Session, project_id: Optional[str], user: User) -> None:
+    """Verify the project exists and belongs to the requesting user (404 otherwise)."""
+    if not project_id:
+        return
+    try:
+        resolve_owned_project(db, project_id, user.id)
+    except ValueError:
+        raise api_error(404, "project_not_found", "Project not found")
+
+
 @router.post("/documents/upload", response_model=UploadResponse)
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(
+    file: UploadFile = File(...),
+    project_id: Optional[str] = Form(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
+    _require_owned_project(db, project_id, user)
     ext = os.path.splitext(file.filename)[-1].lower()
     if ext not in SUPPORTED_TYPES:
         raise HTTPException(
@@ -106,7 +126,7 @@ async def upload_document(file: UploadFile = File(...)):
                 from app.ingestion.processor import purge_document_lifecycle
                 await purge_document_lifecycle(file.filename)
 
-        job = IngestionJob(filename=file.filename, sha256=sha256, status="pending")
+        job = IngestionJob(filename=file.filename, sha256=sha256, status="pending", project_id=project_id)
         db.add(job)
         await db.commit()
         await db.refresh(job)
@@ -123,12 +143,18 @@ async def upload_document(file: UploadFile = File(...)):
 
 
 @router.post("/documents/upload/batch", response_model=list[UploadResponse])
-async def upload_documents(files: list[UploadFile] = File(...)):
+async def upload_documents(
+    files: list[UploadFile] = File(...),
+    project_id: Optional[str] = Form(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
+    _require_owned_project(db, project_id, user)
     results = []
     for f in files:
         filename = f.filename or "unknown"
         try:
-            results.append(await upload_document(f))
+            results.append(await upload_document(f, project_id=project_id, user=user, db=db))
         except HTTPException as exc:
             results.append(UploadResponse(
                 filename=filename,

@@ -10,6 +10,7 @@ export interface UseChatOptions {
   systemPrompt?: string;
   uploadedFiles?: UploadedFile[];
   document?: string;
+  projectId?: string | null;
 }
 
 export interface UseChatReturn {
@@ -43,7 +44,11 @@ const INITIAL_STAGES: PipelineStage[] = [
   { id: 'generating', label: 'Generating',  status: 'waiting' },
 ];
 
-function stageAfter(id: string): number {
+export function appendUniqueTool(tools: string[], name: string): string[] {
+  return tools.includes(name) ? tools : [...tools, name]
+}
+
+export function stageAfter(id: string): number {
   const order = ['thinking', 'routing', 'retrieving', 'reranking', 'generating'];
   return order.indexOf(id) + 1;
 }
@@ -69,7 +74,7 @@ function completeAll(stages: PipelineStage[], now: number = Date.now()): Pipelin
 }
 
 export function useChat(options: UseChatOptions): UseChatReturn {
-  const { sessionId, model, temperature, systemPrompt, uploadedFiles, document } = options;
+  const { sessionId, model, temperature, systemPrompt, uploadedFiles, document, projectId } = options;
 
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [input, setInput] = useState('');
@@ -191,6 +196,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         context: ctx,
         activeTools: enabledTools,
         document,
+        projectId,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -248,7 +255,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
               });
             }
           } else if (payload.type === 'tool_start') {
-            if (payload.tool === 'search_knowledge_base' || payload.tool === 'search_web') {
+            if (payload.tool === 'search_knowledge_base' || payload.tool === 'web_search') {
               setPipelineStages(prev => advanceTo(prev, 'retrieving'));
             }
             setMessages(prev => {
@@ -266,12 +273,18 @@ export function useChat(options: UseChatOptions): UseChatReturn {
               return prev;
             });
           } else if (payload.type === 'tool_end') {
-            if (payload.tool === 'search_knowledge_base' || payload.tool === 'search_web') {
+            if (payload.tool === 'search_knowledge_base' || payload.tool === 'web_search') {
               setPipelineStages(prev => advanceTo(prev, 'reranking'));
             }
             setMessages(prev => prev.map(m => {
               if (m.role === 'tool_event' && m.tool?.name === payload.tool && m.tool?.status === 'calling') {
                 return { ...m, tool: { ...m.tool, status: 'done' } };
+              }
+              return m;
+            }));
+            setMessages(prev => prev.map(m => {
+              if (m.id === assistantMessageId) {
+                return { ...m, usedTools: appendUniqueTool(m.usedTools || [], payload.tool) };
               }
               return m;
             }));
@@ -342,7 +355,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       setStreamingId(null);
       abortRef.current = null;
     }
-  }, [input, isLoading, sessionId, model, temperature, systemPrompt, uploadedFiles, document]);
+  }, [input, isLoading, sessionId, model, temperature, systemPrompt, uploadedFiles, document, projectId]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

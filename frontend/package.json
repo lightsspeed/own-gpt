@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint && node scripts/check-design-tokens.mjs",
+    "test": "vitest run",
     "lint:tokens": "node scripts/check-design-tokens.mjs",
     "preview": "vite preview"
   },
@@ -54,6 +55,7 @@
     "tailwindcss": "^3.4.19",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^4.1.11"
   }
 }

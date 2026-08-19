@@ -78,6 +78,64 @@ STATUSES: frozenset[str] = frozenset({"pending", "active"})
 # "extraction silently not running" — never an ID, always bounded.
 ENABLE_STATES: frozenset[str] = frozenset({"1", "0"})
 
+# -- Agent (V4.12 / Phase 3.2) label sets --------------------------------------
+# ONE authoritative status vocabulary: the V4.12 API contract statuses. The
+# SAME value is recorded on the request_completed trace event and the request
+# metrics counter at the single finalization boundary (finalize_trace) — the
+# trace and Prometheus can never disagree.
+AGENT_STATUSES: frozenset[str] = frozenset(
+    {"completed", "partial", "failed", "blocked", "cancelled", "timed_out"}
+)
+
+# Tool call outcomes as recorded at the shared guarded tool boundary
+# (app/agent/tool_gate.py). "blocked" = guardrail denial (never executed);
+# "pending" approval-required calls are NOT counted until they terminate
+# (each logical call is counted exactly once, with its real outcome).
+TOOL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "blocked"})
+
+# Bounded tool-failure taxonomy — raw exception text NEVER becomes a label.
+TOOL_ERROR_CODES: frozenset[str] = frozenset(
+    {
+        "execution_failed",    # in-process run raised (read-only/memory tools)
+        "sandbox_failed",      # sandboxed run failed (post-approval)
+        "sandbox_timed_out",   # sandboxed run exceeded its deadline
+        "unregistered_impl",   # no implementation registered for the tool
+        "unknown",
+    }
+)
+
+# Bounded tool-block taxonomy (guardrail-denied calls). Each code maps to a
+# deterministic guardrail reason family; never the raw reason string (which
+# can embed user-shaped values, e.g. an offending target).
+TOOL_BLOCK_REASONS: frozenset[str] = frozenset(
+    {
+        "unregistered_tool",
+        "deny_listed",
+        "fact_too_long",
+        "empty_fact",
+        "secret_content",
+        "session_too_long",
+        "invalid_target",
+        "invalid_action",
+        "approval_required",
+        "unknown",
+    }
+)
+
+# Tool-name allowlist mirrors IMPL_FUNCS in app/agent/tool_gate.py. Kept
+# static here so the registry stays import-coupled to nothing; unknown tool
+# names collapse to the single catch-all "other".
+AGENT_TOOLS: frozenset[str] = frozenset(
+    {
+        "search_knowledge_base",
+        "web_search",
+        "sm_integration",
+        "remember_user_fact",
+        "remember_session_fact",
+        "forget_user_fact",
+    }
+)
+
 _LABEL_SETS: dict[str, frozenset[str]] = {
     "reason": REASONS,
     "gate": GATES,
@@ -88,7 +146,14 @@ _LABEL_SETS: dict[str, frozenset[str]] = {
     "enabled": ENABLE_STATES,
 }
 
+_AGENT_LABEL_SETS: dict[str, frozenset[str]] = {
+    "status": AGENT_STATUSES,
+    "error_code": TOOL_ERROR_CODES,
+    "reason": TOOL_BLOCK_REASONS,
+}
+
 _OTHER_MODEL = "other"
+_OTHER_TOOL = "other"
 
 # Durations: queue wait + LLM + persistence for one extraction attempt.
 _DURATION_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0)
@@ -117,6 +182,13 @@ def bounded_provider(provider: str) -> str:
     if provider in PROVIDERS:
         return provider
     return "unknown"
+
+
+def bounded_tool(tool: str) -> str:
+    """Map a tool name to the bounded label set (allowlist + "other")."""
+    if tool in AGENT_TOOLS:
+        return tool
+    return _OTHER_TOOL
 
 
 class ExtractionMetrics:
@@ -318,8 +390,129 @@ class ExtractionMetrics:
         return self._registry
 
 
-# Process-wide singleton (tests build fresh ExtractionMetrics instances).
+class AgentMetrics:
+    """Agent request + tool metrics over one CollectorRegistry (Phase 3.2).
+
+    Metric names (full): owngpt_agent_<name>. Same cardinality policy as the
+    extraction registry: finite enums only, `model`/`tool` bounded by
+    allowlist plus one "other" catch-all. Recorded at the TWO authoritative
+    agent boundaries:
+
+      - requests      → finalize_trace() (the single finalization boundary:
+                        same status as the request_completed trace event, same
+                        TokenBudget totals that feed the API contract)
+      - tools         → request_tool_execution / execute_approved (the shared
+                        guarded tool gate every tool call passes through)
+    """
+
+    def __init__(self, registry: CollectorRegistry) -> None:
+        self._registry = registry
+        kwargs = {"namespace": "owngpt", "subsystem": "agent", "registry": registry}
+        counter = partial(Counter, **kwargs)
+        histogram = partial(Histogram, **kwargs)
+
+        # Requests (recorded once per finalized request)
+        self.requests_total = counter(
+            "requests_total", "Agent requests finalized, by API status", ["status"]
+        )
+        self.request_tokens_total = counter(
+            "request_tokens_total", "Agent request tokens consumed, per model", ["model"]
+        )
+        self.request_cost_usd_total = counter(
+            "request_cost_usd_total",
+            "Agent request estimated cost USD (governance estimate, never billing)",
+            ["model"],
+        )
+        self.request_duration_seconds = histogram(
+            "request_duration_seconds", "Agent request duration (request start -> finalize)",
+            buckets=_DURATION_BUCKETS,
+        )
+
+        # Tools (recorded at the guarded gate, one record per logical call)
+        self.tool_calls_total = counter(
+            "tool_calls_total", "Guarded tool calls, by tool and terminal outcome",
+            ["tool", "status"],
+        )
+        self.tool_duration_seconds = histogram(
+            "tool_duration_seconds", "Tool execution duration", ["tool"],
+            buckets=_DURATION_BUCKETS,
+        )
+        self.tool_failures_total = counter(
+            "tool_failures_total", "Tool executions that failed, by bounded error code",
+            ["tool", "error_code"],
+        )
+        self.tool_blocked_total = counter(
+            "tool_blocked_total", "Tool calls blocked before execution, by bounded reason",
+            ["tool", "reason"],
+        )
+
+        self._counters = {
+            "requests_total": self.requests_total,
+            "request_tokens_total": self.request_tokens_total,
+            "request_cost_usd_total": self.request_cost_usd_total,
+            "tool_calls_total": self.tool_calls_total,
+            "tool_failures_total": self.tool_failures_total,
+            "tool_blocked_total": self.tool_blocked_total,
+        }
+        self._histograms = {
+            "request_duration_seconds": self.request_duration_seconds,
+            "tool_duration_seconds": self.tool_duration_seconds,
+        }
+        self._gauges: dict[str, Any] = {}
+
+    # -- strict validation (tests + pre-flight) -------------------------------
+
+    def validate(self, label: str, value: str) -> str:
+        """Raise ValueError when a label value is not in its finite set.
+
+        `model` and `tool` are the exception by design: allowlist plus a
+        single catch-all "other" (never raises). Every other label is strict.
+        """
+        if label == "model":
+            return bounded_model(value)
+        if label == "tool":
+            return bounded_tool(value)
+        allowed = _AGENT_LABEL_SETS.get(label)
+        if allowed is None:
+            raise ValueError(f"unknown label {label!r}")
+        if value not in allowed:
+            raise ValueError(f"unbounded {label} label value {value!r} (allowed: {sorted(allowed)})")
+        return value
+
+    def _validate_labels(self, labels: dict[str, str]) -> dict[str, str]:
+        metric_labels: dict[str, str] = {}
+        for name, value in labels.items():
+            metric_labels[name] = self.validate(name, value)
+        return metric_labels
+
+    def _labeled(self, metric, labels: dict[str, str]):
+        if not labels:
+            return metric
+        return metric.labels(**labels)
+
+    def count(self, name: str, amount: int = 1, **labels: str) -> None:
+        try:
+            metric = self._counters[name]
+            self._labeled(metric, self._validate_labels(labels)).inc(amount)
+        except Exception as exc:  # pragma: no cover - fail-open contract
+            logger.warning("metrics_count_failed name=%s error=%s", name, exc)
+
+    def observe(self, name: str, value: float, **labels: str) -> None:
+        try:
+            metric = self._histograms[name]
+            self._labeled(metric, self._validate_labels(labels)).observe(value)
+        except Exception as exc:  # pragma: no cover - fail-open contract
+            logger.warning("metrics_observe_failed name=%s error=%s", name, exc)
+
+    @property
+    def registry(self) -> CollectorRegistry:
+        return self._registry
+
+
+# Process-wide singletons (tests build fresh ExtractionMetrics/AgentMetrics
+# instances and monkeypatch these attributes).
 metrics = ExtractionMetrics(CollectorRegistry())
+agent_metrics = AgentMetrics(CollectorRegistry())
 
 # -- API-level registry (request middleware) ----------------------------------
 # One bounded traffic counter, separate from the extraction namespace. Its only
@@ -358,22 +551,21 @@ def record_extraction_enabled() -> None:
     safe_set("extraction_info", 1.0, enabled="1" if settings.MEMORY_V2_GRAPH else "0")
 
 
-def registered_metric_names() -> set[str]:
-    """All metric names this process can emit (used by config-as-code tests).
+def _registered_names(registry_obj) -> set[str]:
+    """Metric names emitted by one *_Metrics registry object.
 
-    Derived from the registry objects themselves so a renamed metric cannot
-    silently desync the dashboards/rules validation. Exposed names follow the
-    prometheus_client convention: counters are suffixed `_total`, histograms
-    emit `_bucket/_sum/_count`, gauges emit the bare name.
+    Follows the prometheus_client convention: counters are suffixed `_total`,
+    histograms emit `_bucket/_sum/_count`, gauges emit the bare name.
     """
     names: set[str] = set()
-    histogram_metrics = set(metrics._histograms.values())
-    gauge_metrics = set(metrics._gauges.values())
-    for metric in (
-        list(metrics._counters.values())
-        + list(metrics._histograms.values())
-        + list(metrics._gauges.values())
-    ):
+    histogram_metrics = set(registry_obj._histograms.values())
+    gauge_metrics = set(registry_obj._gauges.values())
+    all_metrics = (
+        list(registry_obj._counters.values())
+        + list(registry_obj._histograms.values())
+        + list(registry_obj._gauges.values())
+    )
+    for metric in all_metrics:
         base = metric._name  # prometheus name without the _total counter suffix
         if metric in histogram_metrics:
             for suffix in ("_bucket", "_sum", "_count"):
@@ -382,8 +574,20 @@ def registered_metric_names() -> set[str]:
             names.add(base)
         else:
             names.add(f"{base}_total")
-    names.add("owngpt_http_requests_total")
     return names
+
+
+def registered_metric_names() -> set[str]:
+    """All metric names this process can emit (used by config-as-code tests).
+
+    Derived from the registry objects themselves so a renamed metric cannot
+    silently desync the dashboards/rules validation.
+    """
+    return (
+        _registered_names(metrics)
+        | _registered_names(agent_metrics)
+        | {"owngpt_http_requests_total"}
+    )
 
 
 def safe_count(name: str, amount: int = 1, **labels: str) -> None:
@@ -398,6 +602,25 @@ def safe_count(name: str, amount: int = 1, **labels: str) -> None:
 def safe_observe(name: str, value: float, **labels: str) -> None:
     try:
         metrics.observe(name, value, **labels)
+    except Exception as exc:  # pragma: no cover - fail-open contract
+        logger.warning("metrics_observe_failed name=%s error=%s", name, exc)
+
+
+def safe_agent_count(name: str, amount: int = 1, **labels: str) -> None:
+    """Fail-open count against the agent registry singleton.
+
+    Same fail-open contract as safe_count: observability can never break the
+    agent, the chat API, or the tool gate.
+    """
+    try:
+        agent_metrics.count(name, amount, **labels)
+    except Exception as exc:  # pragma: no cover - fail-open contract
+        logger.warning("metrics_count_failed name=%s error=%s", name, exc)
+
+
+def safe_agent_observe(name: str, value: float, **labels: str) -> None:
+    try:
+        agent_metrics.observe(name, value, **labels)
     except Exception as exc:  # pragma: no cover - fail-open contract
         logger.warning("metrics_observe_failed name=%s error=%s", name, exc)
 
@@ -424,11 +647,14 @@ def safe_gauge_dec(name: str, amount: float = 1.0, **labels: str) -> None:
 
 
 def render_metrics() -> bytes:
-    """Serialize both registries for the /metrics endpoint (extraction + API)."""
+    """Serialize the registries for the /metrics endpoint (extraction + agent + API)."""
     try:
-        extraction_body = generate_latest(metrics.registry)
-        api_body = generate_latest(API_REGISTRY)
-        return b"".join([extraction_body, api_body])
+        parts = [
+            generate_latest(metrics.registry),
+            generate_latest(agent_metrics.registry),
+            generate_latest(API_REGISTRY),
+        ]
+        return b"".join(parts)
     except Exception as exc:  # pragma: no cover - fail-open contract
         logger.warning("metrics_render_failed error=%s", exc)
         return b""

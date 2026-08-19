@@ -15,6 +15,7 @@ interface MessageBubbleProps {
   role: 'user' | 'assistant' | 'system'
   content: string
   isStreaming?: boolean
+  status?: string
   resources?: ResourceItem[]
   recordId?: string
   sessionId?: string
@@ -22,10 +23,10 @@ interface MessageBubbleProps {
   onShowSources?: (sources: ResourceItem[]) => void
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, resources, recordId, sessionId, onEdit, onShowSources }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ role, content, isStreaming, status, resources, recordId, sessionId, onEdit, onShowSources }: MessageBubbleProps) {
   const isUser = role === 'user'
   const [showActions, setShowActions] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (isUser) {
@@ -54,6 +55,9 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
     <div className={cn('flex flex-col group', isUser ? 'items-end' : 'items-start')}>
 
       {/* Message content */}
+      {role === 'assistant' && status === 'failed' && !isStreaming && (
+        <span className="text-caption text-danger/80 mb-1">Generation failed</span>
+      )}
       <div
         className={cn(
           'px-4 py-2.5 max-w-[85%] text-body text-foreground',
@@ -107,6 +111,14 @@ function UserActions({ content, onEdit }: { content: string; onEdit?: (content: 
   )
 }
 
+interface AssistantActionsProps {
+  content: string
+  resources?: ResourceItem[]
+  recordId?: string
+  sessionId?: string
+  onShowSources?: (sources: ResourceItem[]) => void
+}
+
 function AssistantActions({ content, resources, recordId, sessionId, onShowSources }: AssistantActionsProps) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
@@ -122,7 +134,7 @@ function AssistantActions({ content, resources, recordId, sessionId, onShowSourc
     if (!recordId) return
     const next = feedback === thumb ? null : thumb
     setFeedback(next)
-    api.sendThumb(recordId, next || 'none')
+    if (next) api.sendThumb(recordId, next)
   }
 
   const hasResources = resources && resources.length > 0

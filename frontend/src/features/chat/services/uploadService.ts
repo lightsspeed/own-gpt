@@ -1,61 +1,79 @@
-import type { AttachmentFile } from '../types';
-
 const API_BASE = 'http://localhost:8000/api/v1';
 
+const JOB_POLL_INTERVAL_MS = 1500;
+const JOB_POLL_MAX_ATTEMPTS = 160;
+
+interface UploadResponse {
+  filename: string;
+  status: string;
+  chunks: number;
+  job_id?: string;
+  message?: string;
+  file_type?: string;
+}
+
+async function waitForIngestion(jobId: string, onProgress?: (progress: number) => void): Promise<UploadResponse> {
+  let attempts = 0;
+  for (;;) {
+    const res = await fetch(`${API_BASE}/ingestion/jobs/${jobId}`);
+    if (!res.ok) throw new Error(`Ingestion check failed (HTTP ${res.status})`);
+    const job = await res.json();
+    if (job.status === 'failed') throw new Error(job.error || 'Document ingestion failed');
+    if (job.status === 'completed' || job.status === 'duplicate') return job;
+    onProgress?.(99);
+    if (++attempts >= JOB_POLL_MAX_ATTEMPTS) throw new Error('Document ingestion timed out');
+    await new Promise(r => setTimeout(r, JOB_POLL_INTERVAL_MS));
+  }
+}
+
 export const uploadService = {
-  async uploadFile(file: File, onProgress?: (progress: number) => void): Promise<{ url: string; name: string; size: number; type: string }> {
+  async uploadFile(
+    file: File,
+    onProgress?: (progress: number) => void,
+    projectId?: string | null,
+  ): Promise<{ url: string; name: string; size: number; type: string }> {
     const formData = new FormData();
     formData.append('file', file);
+    if (projectId) formData.append('project_id', projectId);
 
-    try {
-      const xhr = new XMLHttpRequest();
-      const promise = new Promise<{ url: string; name: string; size: number; type: string }>((resolve, reject) => {
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable && onProgress) {
-            onProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        });
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const data = JSON.parse(xhr.responseText);
-              resolve({ url: data.url || data.filename || '', name: file.name, size: file.size, type: file.type });
-            } catch {
-              resolve({ url: '', name: file.name, size: file.size, type: file.type });
-            }
-          } else {
-            reject(new Error(`Upload failed: ${xhr.status}`));
-          }
-        });
-        xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
-        xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+    const xhr = new XMLHttpRequest();
+    const uploaded = await new Promise<UploadResponse>((resolve, reject) => {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.min(Math.round((e.loaded / e.total) * 95), 95));
+        }
       });
-
-      xhr.open('POST', `${API_BASE}/chat/upload`);
+      xhr.addEventListener('load', () => {
+        let data: UploadResponse;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch {
+          reject(new Error('Invalid upload response'));
+          return;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+        } else {
+          const msg = typeof data.message === 'string' ? data.message : (data as any).detail
+          reject(new Error(typeof msg === 'string' ? msg : `Upload failed: ${xhr.status}`));
+        }
+      });
+      xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+      xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+      xhr.open('POST', `${API_BASE}/documents/upload`);
       xhr.send(formData);
+    });
 
-      return await promise;
-    } catch {
-      // Fallback: simulate upload for demo
-      return new Promise(resolve => {
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += Math.random() * 30;
-          if (progress >= 100) {
-            progress = 100;
-            clearInterval(interval);
-            onProgress?.(100);
-            resolve({ url: '', name: file.name, size: file.size, type: file.type });
-          } else {
-            onProgress?.(Math.round(progress));
-          }
-        }, 200);
-      });
+    if (uploaded.status !== 'duplicate') {
+      if (!uploaded.job_id) throw new Error('Upload did not return an ingestion job id');
+      await waitForIngestion(uploaded.job_id, onProgress);
     }
+    onProgress?.(100);
+    return { url: '', name: file.name, size: file.size, type: file.type };
   },
 
   canPreview(type: string): boolean {
-    return type.startsWith('image/') || type === 'application/pdf' || type.startsWith('text/');
+    return type === 'application/pdf' || type.startsWith('text/');
   },
 
   readAsDataURL(file: File): Promise<string> {
@@ -73,6 +91,6 @@ export const uploadService = {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   },
 
-  ALLOWED_TYPES: ['.pdf', '.txt', '.md', '.csv', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.py', '.js', '.ts', '.tsx', '.jsx', '.yaml', '.yml', '.toml', '.env', '.log'],
+  ALLOWED_TYPES: ['.pdf', '.txt', '.md'],
   MAX_SIZE: 10 * 1024 * 1024, // 10 MB
 };

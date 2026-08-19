@@ -312,6 +312,123 @@ class TestObservabilityAdapter:
         tr.publish(BrokenObserver())  # must not raise
 
 
+class TestSinkPublication:
+    """The completed AgentTrace must reach a real sink, not just memory.
+
+    AgentTrace events exist only in memory until an observer consumes the
+    trace; RAGPipeline.process() publishes via LoggingTraceObserver so the
+    existing logger becomes the runtime sink."""
+    def _build_stubbed_pipeline(self):
+        from unittest import mock
+        from app.agent.pipeline.pipeline import RAGPipeline
+        from app.agent.pipeline.loop import LoopResult
+        from app.agent.pipeline.executor import ExecutionResult
+        from app.agent.pipeline.synthesizer import SynthesisResult
+        from app.agent.pipeline.validator import ValidationResult
+        from app.agent.pipeline.planner import Plan, Planner
+
+        class EmptyStore:
+            def similarity_search_with_score(self, *a, **k):
+                return []
+
+        plan = Plan(goal="ok", steps=[], requires_tools=False)
+
+        class StubPlanner(Planner):
+            def create_plan(self, question, intent, route):
+                return plan
+
+        class NoOpSelector:
+            def select(self, *a, **k):
+                return []
+
+        class StubLoop:
+            def run(self, *a, **k):
+                return LoopResult(
+                    completed=True, iterations=0,
+                    stopped_reason="stub",
+                    execution=ExecutionResult(
+                        status="completed", step_results=[], outputs={},
+                        final_output=None,
+                    ),
+                )
+
+        class StubSynthesizer:
+            def synthesize(self, question, plan, execution, context=None):
+                record_trace(context, "synthesis", "synthesis_completed",
+                             status="completed")
+                return SynthesisResult(answer="ok", success=True)
+
+        class StubValidator:
+            def validate(self, question, answer, context=None, execution=None):
+                record_trace(context, "validation", "validation_completed",
+                             status="valid")
+                return ValidationResult(
+                    valid=True, grounded=True, confidence=1.0, issues=[],
+                )
+
+        pl = RAGPipeline(
+            vector_store=EmptyStore(),
+            redis_url=None,
+            config={
+                "intent_enabled": False,
+                "rewrite_enabled": False,
+                "learning_enabled": False,
+                "trace_enabled": False,
+                "answer_validation_use_llm": False,
+            },
+        )
+        pl._planner = StubPlanner()
+        pl._selector = NoOpSelector()
+        pl._tool_selector = NoOpSelector()
+        pl._execution_loop = StubLoop()
+        pl._synthesizer = StubSynthesizer()
+        pl._answer_validator = StubValidator()
+        return pl
+
+    def test_process_publishes_complete_trace_to_logging_sink(self, caplog):
+        pl = self._build_stubbed_pipeline()
+        with caplog.at_level(logging.INFO, logger="app.agent.pipeline.trace"):
+            ctx = pl.process(
+                question="hello", session_id="sess-x", project_id="proj-x",
+            )
+
+        lines = [
+            r.getMessage()
+            for r in caplog.records
+            if r.getMessage().startswith("agent_trace")
+        ]
+        assert lines, "AgentTrace was never published to the logging sink"
+        assert lines[0].startswith(
+            "agent_trace request_id="
+        ) and "event=request_started" in lines[0]
+        assert "event=request_completed" in lines[-1]
+
+        # Full correlation propagation on the published lines
+        for needle in ("request_id=", "execution_id=", "session_id=sess-x",
+                       "project_id=proj-x"):
+            assert needle in lines[-1], f"{needle} missing from published trace"
+            assert needle in lines[0], f"{needle} missing from published trace"
+
+        # The trace closes only after the final lifecycle event
+        assert "estimated_cost_usd" in lines[-1]
+
+    def test_publish_at_process_end_counts_all_lifecycle_events(self, caplog):
+        pl = self._build_stubbed_pipeline()
+        with caplog.at_level(logging.INFO, logger="app.agent.pipeline.trace"):
+            pl.process(question="q", session_id="s1", project_id="p1")
+        lines = [
+            r.getMessage()
+            for r in caplog.records
+            if r.getMessage().startswith("agent_trace")
+        ]
+        events = [l.split("event=")[1].split(" ")[0] for l in lines]
+        assert events[0] == "request_started"
+        assert events[-1] == "request_completed"
+        assert {"intent_classified", "route_selected", "plan_created",
+                "capability_selected", "tool_selected",
+                "synthesis_completed", "validation_completed"} <= set(events)
+
+
 class TestPassivity:
     def test_record_trace_helper_never_raises(self):
         class BadCtx:

@@ -20,8 +20,9 @@ interface ConversationSidebarProps {
   onTogglePin?: (id: string) => void
   sidebarOpen: boolean
   onToggleSidebar: () => void
-  onOpenSettings: () => void
+  onOpenSettings?: () => void
   onOpenKnowledgeBase?: () => void
+  projectSelector?: React.ReactNode
 }
 
 function dateGroup(dateStr?: string): string {
@@ -54,6 +55,7 @@ export function ConversationSidebar({
   onToggleSidebar,
   onOpenSettings,
   onOpenKnowledgeBase,
+  projectSelector,
 }: ConversationSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -134,6 +136,11 @@ export function ConversationSidebar({
           <Plus size={18} />
           <span>New Chat</span>
         </button>
+      </div>
+
+      {/* Project selector */}
+      <div className="px-4 mb-3 shrink-0">
+        {projectSelector}
       </div>
 
       {/* Search */}

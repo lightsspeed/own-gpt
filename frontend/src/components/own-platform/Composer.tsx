@@ -38,6 +38,7 @@ interface ComposerProps {
   onToolModeChange?: (name: string, mode: ToolMode) => void
   contextItems?: ContextItem[]
   onContextRemove?: (id: string) => void
+  projectId?: string | null
 }
 
 export function Composer({
@@ -53,6 +54,7 @@ export function Composer({
   onToolModeChange,
   contextItems,
   onContextRemove,
+  projectId,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -201,14 +203,14 @@ export function Composer({
       newFiles.push({ id, name: f.name, size: f.size, type: f.type || 'application/octet-stream', status: 'uploading', progress: 0, preview })
       uploadService.uploadFile(f, (p) => {
         setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, progress: p } : pf))
-      }).then(result => {
+      }, projectId).then(result => {
         setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, status: 'uploaded', url: result.url, progress: 100 } : pf))
       }).catch(err => {
         setFiles(prev => prev.map(pf => pf.id === id ? { ...pf, status: 'error', error: err.message } : pf))
       })
     }
     setFiles(prev => [...prev, ...newFiles])
-  }, [])
+  }, [projectId])
 
   useEffect(() => {
     const el = containerRef.current

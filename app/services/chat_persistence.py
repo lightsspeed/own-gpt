@@ -200,12 +200,15 @@ def persist_assistant_message(
     model: str | None,
     status: str = MESSAGE_STATUS_COMPLETED,
     error: str | None = None,
+    resources: list | None = None,
 ) -> ChatMessage:
     """Persist the final assistant message after generation completes/fails.
 
     Never called per token — streaming accumulates server-side and this is
-    invoked exactly once per generation.
+    invoked exactly once per generation. `resources` (citation items) are
+    stored in additional_kwargs so history reloads keep their sources.
     """
+    kwargs = {"resources": resources} if resources else None
     msg = ChatMessage(
         session_id=conversation.id,
         role="assistant",
@@ -213,6 +216,7 @@ def persist_assistant_message(
         model=model,
         status=status,
         error=error,
+        additional_kwargs=kwargs,
         sequence=_next_sequence(db, conversation.id),
     )
     db.add(msg)

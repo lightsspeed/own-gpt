@@ -122,7 +122,11 @@ def action_node(state: AgentState) -> dict:
                 f"(request {execution.id}). It has NOT been executed. "
                 f"Tell the user a human operator must approve it in the operations workspace."
             )
-        new_tool_messages.append(ToolMessage(content=content, tool_call_id=tool_call.get("id", "")))
+        new_tool_messages.append(ToolMessage(
+            content=content,
+            tool_call_id=tool_call.get("id", ""),
+            name=tool_name,
+        ))
 
     return {"messages": new_tool_messages}
 

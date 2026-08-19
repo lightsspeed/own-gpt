@@ -16,9 +16,10 @@ import type { NavigatorAnchor } from './ConversationNavigator'
 
 interface OwnGPTPageProps {
   sessionId: string
+  projectId?: string | null
 }
 
-export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
+export function OwnGPTPage({ sessionId, projectId }: OwnGPTPageProps) {
   const navigate = useNavigate()
   const [contextPanelOpen, setContextPanelOpen] = useState(false)
   const [sourcesData, setSourcesData] = useState<ResourceItem[]>([])
@@ -43,16 +44,20 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
     setToolMode,
   } = useChat({
     sessionId,
+    projectId,
     model: import.meta.env.VITE_DEFAULT_MODEL || '',
     temperature: 0.7,
     systemPrompt: `You are a helpful AI engineering assistant on the Own Platform. Today's date is ${new Date().toISOString().split('T')[0]}.`,
   })
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  const visibleMessages = useMemo(() => messages.filter(m => m.role !== 'tool_event'), [messages])
+  const visibleMessages = useMemo(
+    () => messages.filter((m): m is MessageData & { role: 'user' | 'assistant' } => m.role !== 'tool_event'),
+    [messages],
+  )
   const hasMessages = visibleMessages.length > 0
   const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null)
-  const highlightTimer = useRef<ReturnType<typeof setTimeout>>()
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const lastUserMsg = useMemo(() => messages.filter(m => m.role === 'user').pop(), [messages])
 
@@ -255,6 +260,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
                         role={msg.role}
                         content={msg.content}
                         isStreaming={isStreamingMsg}
+                        status={msg.status}
                         resources={msg.resources}
                         recordId={msg.recordId}
                         sessionId={sessionId}
@@ -321,7 +327,7 @@ export function OwnGPTPage({ sessionId }: OwnGPTPageProps) {
       <div className="pb-4">
         <div className="max-w-[920px] mx-auto relative">
           <ScrollToBottom show={showScrollBtn} onClick={scrollToBottom} newMessages={newMsgCount || undefined} isLoading={isLoading} />
-          <Composer input={input} setInput={setInput} onSend={send} onStop={stop} isLoading={isLoading} tools={tools} onToggleTool={toggleTool} onToolModeChange={setToolMode} contextItems={context.items} onContextRemove={removeContextItem} />
+          <Composer input={input} setInput={setInput} onSend={send} onStop={stop} isLoading={isLoading} tools={tools} onToggleTool={toggleTool} onToolModeChange={setToolMode} contextItems={context.items} onContextRemove={removeContextItem} projectId={projectId} />
         </div>
       </div>
 

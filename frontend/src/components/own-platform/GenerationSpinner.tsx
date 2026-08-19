@@ -9,7 +9,7 @@ interface GenerationSpinnerProps {
 const STAGE_LABELS: Record<string, string> = {
   thinking: 'Analyzing your request...',
   routing: 'Routing to best model...',
-  retrieving: 'Searching knowledge base...',
+  retrieving: 'Searching sources...',
   reranking: 'Ranking results...',
   generating: 'Generating response...',
 }
