@@ -185,6 +185,7 @@ export function OwnGPTContainer() {
               key={activeId}
               sessionId={activeId}
               projectId={sessions.find(s => s.id === activeId)?.project_id ?? activeProjectId}
+              title={sessions.find(s => s.id === activeId)?.title}
             />
           ) : (
             <div className="h-full flex items-center justify-center">

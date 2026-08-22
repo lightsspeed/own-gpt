@@ -1039,7 +1039,9 @@ class RAGPipeline:
     def _build_context(self, ctx: PipelineContext) -> str:
         """
         Format reranked chunks into a context string for the LLM system prompt.
-        Presents clean document source headings without raw internal chunk labels.
+        Each chunk is labeled with its zero-based ranked index as [Chunk N] so
+        the model can cite it inline; EvidenceBuilder resolves [Chunk N] against
+        the exact same ordered list (ctx.ranked_chunks).
         """
         if not ctx.ranked_chunks:
             return ""
@@ -1048,7 +1050,7 @@ class RAGPipeline:
         for i, rc in enumerate(ctx.ranked_chunks):
             src = getattr(rc.chunk, "source", None) or "document"
             parts.append(
-                f"--- Document Source ({src}) ---\n"
+                f"--- [Chunk {i}] Document Source ({src}) ---\n"
                 f"{rc.chunk.document.page_content}"
             )
         return "\n\n---\n\n".join(parts)

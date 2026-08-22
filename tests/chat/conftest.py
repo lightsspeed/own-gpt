@@ -32,6 +32,21 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base
 from app.models.user import User
 
+
+def _join_chunks(chunks):
+    """Join provider stream chunks (str or list-of-block dicts) faithfully."""
+    parts = []
+    for chunk in chunks:
+        if isinstance(chunk, str):
+            parts.append(chunk)
+        elif isinstance(chunk, list):
+            parts.append("".join(
+                b.get("text", "") if isinstance(b, dict) else str(b) for b in chunk
+            ))
+        else:
+            parts.append(str(chunk))
+    return "".join(parts)
+
 # Register every table (chat_sessions.project_id FK resolves lazily to the
 # projects table — all model modules must be imported before create_all).
 from app.models import chat as _chat_model  # noqa: F401
@@ -127,7 +142,7 @@ class FakeGraph:
             yield "messages", (AIMessageChunk(content=chunk), None)
         if self.stream_error is not None:
             raise self.stream_error
-        self.messages.append(AIMessage(content="".join(self.partial_chunks)))
+        self.messages.append(AIMessage(content=_join_chunks(self.partial_chunks)))
         agent_update = AIMessage(content="")
         if self.agent_usage_metadata is not None:
             agent_update.usage_metadata = dict(self.agent_usage_metadata)
@@ -247,6 +262,7 @@ def _install_fakes() -> None:
     _fake("app.agent.pipeline.pipeline", RAGPipeline=FakePipeline, PipelineContext=FakePipelineContext, load_pipeline_config=lambda: {})
     _fake("app.agent.pipeline.evidence_builder",
           _parse_chunk_references=lambda text: [],
+          parse_web_results=lambda text: [],
           EvidenceBuilder=FakeEvidenceBuilder,
           EvidenceBuilderResult=FakeEvidenceResult)
     _fake("app.agent.pipeline.source_validator",

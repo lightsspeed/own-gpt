@@ -11,18 +11,23 @@ import { ArtifactCard } from './ArtifactCard'
 import { ToolChips } from './ToolChips'
 import { ScrollToBottom } from './ScrollToBottom'
 import { ConversationOutline } from './ConversationNavigator'
+import { PrintConversation } from './PrintConversation'
+import { ConversationExportButton } from './ConversationExportButton'
+import { selectExportMessages } from '@/features/chat/services/conversationExport'
 import type { ResourceItem, MessageData } from '@/features/chat/types'
 import type { NavigatorAnchor } from './ConversationNavigator'
 
 interface OwnGPTPageProps {
   sessionId: string
   projectId?: string | null
+  title?: string
 }
 
-export function OwnGPTPage({ sessionId, projectId }: OwnGPTPageProps) {
+export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation' }: OwnGPTPageProps) {
   const navigate = useNavigate()
   const [contextPanelOpen, setContextPanelOpen] = useState(false)
   const [sourcesData, setSourcesData] = useState<ResourceItem[]>([])
+  const [exporting, setExporting] = useState(false)
 
   const {
     messages,
@@ -60,6 +65,8 @@ export function OwnGPTPage({ sessionId, projectId }: OwnGPTPageProps) {
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const lastUserMsg = useMemo(() => messages.filter(m => m.role === 'user').pop(), [messages])
+
+  const exportMessages = useMemo(() => selectExportMessages(messages), [messages])
 
   const handleRegenerate = useCallback(() => {
     if (lastUserMsg) setInput(lastUserMsg.content)
@@ -227,6 +234,11 @@ export function OwnGPTPage({ sessionId, projectId }: OwnGPTPageProps) {
                     streamingId={streamingId}
                     onAnchorClick={handleChapterClick}
                   />
+                  <ConversationExportButton
+                    hasContent={exportMessages.length > 0}
+                    loading={exporting}
+                    onExport={() => setExporting(true)}
+                  />
                 </div>
               )}
 
@@ -332,6 +344,13 @@ export function OwnGPTPage({ sessionId, projectId }: OwnGPTPageProps) {
       </div>
 
       <ContextPanel open={contextPanelOpen} onClose={() => setContextPanelOpen(false)} sources={sourcesData} />
+
+      <PrintConversation
+        title={title}
+        messages={exportMessages}
+        exporting={exporting}
+        onExportComplete={() => setExporting(false)}
+      />
     </div>
   )
 }

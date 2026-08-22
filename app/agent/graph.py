@@ -17,6 +17,21 @@ logger = logging.getLogger(__name__)
 MEMORY_TOOL_NAMES = frozenset({"remember_user_fact", "remember_session_fact", "forget_user_fact"})
 
 
+# Phase 3.3 — Markdown formatting contract appended to every answer-generation
+# system prompt. Defense-in-depth only; the root-cause fix for glued Markdown
+# lives in the SSE assembly path, not here. Kept intentionally small and static.
+_RESPONSE_FORMATTING_CONTRACT = (
+    "\n--- Response Formatting ---\n"
+    "Generate valid Markdown:\n"
+    "- Put a space after Markdown heading markers (### Heading).\n"
+    "- Separate headings, paragraphs, lists, tables, code blocks, and horizontal rules with blank lines.\n"
+    "- Start and end fenced code blocks on their own lines; never merge prose with code fences.\n"
+    "- Preserve indentation inside code blocks exactly and never alter code content.\n"
+    "- Keep lists and Markdown tables structurally valid.\n"
+    "- Never alter URLs.\n"
+)
+
+
 def _strip_images(content) -> str:
     """Convert structured content blocks to plain text, removing image_url blocks."""
     if isinstance(content, str):
@@ -194,6 +209,8 @@ def call_model(state: AgentState) -> dict:
     memory_context = state.get("memory_context", "")
     if memory_context:
         sections.append("\n" + memory_context)
+
+    sections.append(_RESPONSE_FORMATTING_CONTRACT)
 
     full_prompt = "\n".join(sections)
 

@@ -15,6 +15,8 @@ export interface ResourceItem {
   page?: number | null;
   section?: string | null;
   confidence_label?: 'high' | 'medium' | 'low' | 'no_evidence' | null;
+  // 0-based position in the evidence candidate list ([Chunk N] marker)
+  citation_index?: number | null;
 }
 
 export interface ArtifactAction {

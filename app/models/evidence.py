@@ -35,6 +35,10 @@ class EvidenceItem(BaseModel):
     document_id: Optional[str] = None    # filename / stable document reference
     page: Optional[int] = None           # PDF page number (1-based), when available
     section: Optional[str] = None        # Chapter / heading when available
+    citation_index: Optional[int] = None # canonical 1-based citation index (the single
+                                         # authoritative numbering used across UI pill,
+                                         # hover card, resource list, and PDF export;
+                                         # maps [Chunk N]→N+1 and [N]→N)
     metadata: dict[str, Any] = {}
 
     # Internal / developer-only fields (not serialized for public)

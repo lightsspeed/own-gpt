@@ -66,7 +66,10 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
             : 'px-1',
         )}
       >
-        <MarkdownRenderer content={content} />
+        <MarkdownRenderer
+          content={content}
+          resources={!isStreaming && role === 'assistant' ? resources : undefined}
+        />
       </div>
 
       {/* Actions */}

@@ -28,10 +28,11 @@ _KB_DIRECTIVE = (
     "You are an expert AI assistant answering questions using the provided Knowledge Base.\n\n"
     "GUIDELINES FOR YOUR RESPONSE:\n"
     "1. PROVIDE A DETAILED, COMPREHENSIVE, AND IN-DEPTH ANSWER using ONLY the provided Knowledge Base documents.\n"
-    "2. DO NOT INCLUDE RAW `[Chunk N]` OR `[Chunk 0]` TAGS IN YOUR ANSWER TEXT. Write clean, natural, professional, and well-structured Markdown prose.\n"
+    "2. CITE SOURCES INLINE, ATTACHED TO CLAIMS: When you make a claim or state a fact that relies on a specific source, cite it with the exact `[Chunk N]` marker shown next to that source above (zero-based: `[Chunk 0]`, `[Chunk 3]`, ...). Place each marker immediately after the specific statement it supports — do not attach markers to whole paragraphs or bullet lists. A claim without a marker is treated as ungrounded. Only use indices that actually appear in the sources list above; never invent indices. When a single statement is supported by several sources, list all of their markers together at the end of that statement (e.g. `Statement text. [Chunk 1] [Chunk 4]`). Keep the prose clean and natural, with markers placed unobtrusively.\n"
     "3. CRITICAL THINKING & REASONING: If the user asks to compare two mismatched concepts or entities from completely different categories (e.g., an abstract cognitive process vs a specific human athlete), explicitly call out the category error/mismatch first, then bridge to any meaningful connection.\n"
     "4. Structure your response clearly using headers (`###`), bullet points, bold key terms, and code blocks where appropriate.\n"
-    "5. STRICT GROUNDING: You MUST answer using ONLY the provided Knowledge Base documents below. If the provided documents do NOT contain information or documentation on the topic asked, state clearly and concisely that the topic is not covered in your knowledge base. DO NOT use general training knowledge or world knowledge to answer questions about unmentioned topics."
+    "5. STRICT GROUNDING: You MUST answer using ONLY the provided Knowledge Base documents below. If the provided documents do NOT contain information or documentation on the topic asked, do not invent, speculate, or fall back on general knowledge. Respond that the available material is insufficient, for example with: 'The uploaded documents do not provide enough information to answer this confidently.' and stop.\n"
+    "6. NEVER cite web/memory/external sources for knowledge-base claims, and never import outside knowledge into a document-grounded answer."
 )
 
 _MEMORY_DIRECTIVE = (
@@ -68,7 +69,7 @@ _DEFAULT_CONTRACTS: dict[SourcePolicy, CitationContract] = {
         max_evidence=20,
         allow_external_knowledge=False,
         temperature=0.2,
-        system_directive="Provide a comprehensive, detailed answer using the attached document. Write clean Markdown prose without raw chunk labels.",
+        system_directive="Provide a comprehensive, detailed answer using the attached document. Cite every claim from the document with the exact `[Chunk N]` marker shown next to that source above (zero-based). Attach each marker to the specific claim it supports (place the marker immediately after the statement, not on whole paragraphs). If several sources support one statement, list their markers together at the end of that statement (e.g. `Statement text. [Chunk 1] [Chunk 3]`). If the attached document does not contain the information needed to answer, respond that the available material is insufficient rather than using general knowledge. Write clean, well-structured Markdown prose.",
     ),
     SourcePolicy.REASONING: CitationContract(
         requires_evidence=False,

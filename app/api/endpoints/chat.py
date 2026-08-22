@@ -19,8 +19,9 @@ from app.api.deps import get_current_user, api_error
 from app.services import chat_persistence as store
 from app.services.memory import resolve_owned_project
 from app.agent.pipeline import RAGPipeline, PipelineContext, load_pipeline_config
-from app.agent.pipeline.evidence_builder import _parse_chunk_references
+from app.agent.pipeline.evidence_builder import _parse_chunk_references, parse_web_results
 from app.agent.pipeline.source_validator import SourceValidator
+from app.agent.pipeline.markdown_integrity import normalize_markdown
 from app.services.vector_store import vector_store, embeddings as _embeddings
 from app.learning.telemetry.collector import learning_collector
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -82,6 +83,7 @@ class ResourceItem(BaseModel):
     page: Optional[int] = None
     section: Optional[str] = None
     confidence_label: Optional[str] = None
+    citation_index: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
@@ -143,7 +145,15 @@ search_logger = logging.getLogger("search")
 
 
 def _flatten_content(content) -> str:
-    """Convert structured content (list of content blocks) to plain text."""
+    """Convert structured content (list of content blocks) to plain text.
+
+    Phase 3.3: text blocks are concatenated byte-for-byte. Provider deltas
+    (e.g. Gemini-3) arrive as lists of `{"type": "text", "text": token}`
+    blocks whose leading/trailing whitespace — the normal token boundaries
+    between headings, paragraphs, words, and code lines — must be preserved.
+    Stripping or dropping whitespace-only blocks (the previous behavior)
+    glued headings/prose, words, and YAML lines together.
+    """
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -158,7 +168,7 @@ def _flatten_content(content) -> str:
                     parts.append(str(block))
             else:
                 parts.append(str(block))
-        return "\n".join(p.strip() for p in parts if p.strip())
+        return "".join(parts)
     return str(content)
 
 
@@ -171,6 +181,24 @@ def _extract_tool_names(messages_subset) -> List[str]:
                 if name:
                     tools_used.append(name)
     return tools_used
+
+
+def _web_candidates_from_context(ctx) -> list:
+    """Extract structured web citations from the pipeline context.
+
+    Web tool results are stored verbatim on ctx.context.sources with
+    source_type="web" (their content is the raw tool output, e.g.
+    "Web Search Results for 'query': [1] Title: ... URL: ..."). We parse
+    that output back into structural WebCandidates for the evidence builder.
+    """
+    try:
+        results = []
+        for src in getattr(getattr(ctx, "context", None), "sources", []) or []:
+            if getattr(src, "source_type", None) == "web":
+                results.extend(parse_web_results(getattr(src, "content", "")))
+        return results
+    except Exception:
+        return []
 
 
 def _agent_usage_metadata(messages) -> list:
@@ -395,6 +423,7 @@ async def chat_endpoint(
         response = last_message.content
         if not isinstance(response, str):
             response = _flatten_content(response)
+        response = normalize_markdown(response)
 
         # V4.9: capture the agent LLM usage from this run's messages into the
         # shared request TokenBudget (same accounting executor uses).
@@ -408,9 +437,21 @@ async def chat_endpoint(
             source_policy=ctx.source_policy,
             answer_mode=ctx.answer_mode,
             answer_mode_metadata=ctx.answer_mode_metadata,
+            web_candidates=_web_candidates_from_context(ctx),
         )
         resources = [
-            ResourceItem(type=e.source_type, title=e.title, url=e.url, snippet=e.chunk[:180] if e.chunk else None)
+            ResourceItem(
+                type=e.source_type,
+                title=e.title,
+                url=e.url,
+                snippet=e.chunk[:180] if e.chunk else None,
+                document_id=e.document_id,
+                chunk_index=e.chunk_index,
+                page=e.page,
+                section=e.section,
+                confidence_label=e.confidence_label.value if e.confidence_label else None,
+                citation_index=e.citation_index,
+            )
             for e in evidence_result.evidence
         ]
 
@@ -881,7 +922,7 @@ async def chat_stream_endpoint(
                 final_state = graph.get_state(config)
                 if final_state and final_state.values:
                     new_msgs = final_state.values.get("messages", [])[existing_len:]
-                    response_text = "".join(accumulated).strip()
+                    response_text = normalize_markdown("".join(accumulated).strip())
 
                     # Build evidence items from what the LLM actually cited
                     evidence_result = _pipeline._evidence_builder.build(
@@ -890,6 +931,7 @@ async def chat_stream_endpoint(
                         source_policy=ctx.source_policy,
                         answer_mode=ctx.answer_mode,
                         answer_mode_metadata=ctx.answer_mode_metadata,
+                        web_candidates=_web_candidates_from_context(ctx),
                     )
                     evidence_items = evidence_result.evidence
 
@@ -912,6 +954,7 @@ async def chat_stream_endpoint(
                             "page": e.page,
                             "section": e.section,
                             "confidence_label": e.confidence_label.value if e.confidence_label else None,
+                            "citation_index": e.citation_index,
                         }
                         for e in evidence_items
                     ]
@@ -1061,7 +1104,7 @@ async def chat_stream_endpoint(
                         "retryable": info.retryable,
                         "message": info.safe_message,
                     }))
-                partial = "".join(accumulated).strip()
+                partial = normalize_markdown("".join(accumulated).strip())
                 if partial:
                     # Case C: partial output exists → preserve it, marked failed.
                     # Raw provider text is stored server-side only (never sent

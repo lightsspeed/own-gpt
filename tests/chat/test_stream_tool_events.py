@@ -24,6 +24,7 @@ class FakeEvidence:
     page: Optional[int]
     section: Optional[str]
     confidence_label: object = None
+    citation_index: Optional[int] = None
 
     def model_dump(self, exclude=None):
         return {
@@ -36,6 +37,7 @@ class FakeEvidence:
             "page": self.page,
             "section": self.section,
             "confidence_label": getattr(self.confidence_label, "value", None),
+            "citation_index": self.citation_index,
         }
 
 
@@ -169,6 +171,7 @@ def test_history_keeps_resources_from_stream(client, chat_module, fake_graph, al
             "page": 2,
             "section": "Intro",
             "confidence_label": None,
+            "citation_index": None,
         }
     ]
 

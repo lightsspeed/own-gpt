@@ -321,9 +321,44 @@ class ContextOrchestrator:
             total_chars += len(src.content)
 
         # Group accepted sources back into target fields
+        # Chunk citation numbering: [Chunk N] uses the position of the chunk in
+        # the global ranked order (ranked_chunks_acc), NOT the grouped position.
+        # This keeps prompt markers consistent with EvidenceBuilder's
+        # candidates[idx] mapping (live path uses ctx.ranked_chunks directly).
+        rank_lookup: dict[str, int] = {}
+        for pos, rc in enumerate(ranked_chunks_acc):
+            chunk = getattr(rc, "chunk", rc)
+            cid = getattr(chunk, "chunk_id", None)
+            if cid:
+                rank_lookup[str(cid)] = pos
+        for src in accepted_sources:
+            if src.source_type in ("knowledge", "document"):
+                ri = rank_lookup.get(src.source_id)
+                if ri is not None:
+                    src.metadata["rank_index"] = ri
+
+        def _labelled_parts(sources: list[ContextSource], with_title: bool) -> list[str]:
+            """Render accepted sources with deterministic [Chunk N] markers."""
+            parts = []
+            for s in sources:
+                ri = s.metadata.get("rank_index")
+                if ri is not None:
+                    header = f"[Chunk {ri}] {s.title}" if with_title else f"[Chunk {ri}]"
+                else:
+                    header = s.title if with_title else ""
+                if with_title:
+                    parts.append(f"Source: {header}\n{s.content}")
+                else:
+                    parts.append(f"{header}\n{s.content}" if header else s.content)
+            return parts
+
         memory_parts = [s.content for s in accepted_sources if s.source_type == "memory"]
-        doc_parts = [f"Source: {s.title}\n{s.content}" for s in accepted_sources if s.source_type == "document"]
-        kb_parts = [f"Source: {s.title}\n{s.content}" for s in accepted_sources if s.source_type == "knowledge"]
+        doc_parts = _labelled_parts(
+            [s for s in accepted_sources if s.source_type == "document"], with_title=True
+        )
+        kb_parts = _labelled_parts(
+            [s for s in accepted_sources if s.source_type == "knowledge"], with_title=True
+        )
         web_parts = [s.content for s in accepted_sources if s.source_type == "web"]
 
         memory_context = ""
