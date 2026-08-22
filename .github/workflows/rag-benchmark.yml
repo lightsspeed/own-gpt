@@ -90,9 +90,19 @@ jobs:
           echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/owngpt" >> .env
           echo "REDIS_URL=redis://localhost:6379/0" >> .env
 
+      - name: Wait for PostgreSQL & Redis
+        run: |
+          for i in $(seq 1 30); do
+            if nc -z localhost 5432 && nc -z localhost 6379; then
+              echo "Postgres and Redis are ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
       - name: Start backend
         run: |
-          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
           APP_PID=$!
           echo "APP_PID=$APP_PID" >> $GITHUB_ENV
           # Wait for backend to be ready
@@ -103,16 +113,11 @@ jobs:
             fi
             sleep 2
           done
-
-      - name: Wait for services
-        run: |
-          for i in $(seq 1 15); do
-            if pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
-              echo "Postgres ready after ${i}s"
-              break
-            fi
-            sleep 2
-          done
+          if ! curl -sf http://localhost:8000/docs > /dev/null 2>&1; then
+            echo "Backend failed to start. Logs:"
+            cat uvicorn.log
+            exit 1
+          fi
 
       - name: Rebuild search index
         run: |
@@ -136,42 +141,31 @@ jobs:
           # Extract gate status from JSON output
           GATE_STATUS=$(python -c "
 import json
-with open('benchmark_result.json') as f:
-    data = json.load(f)
-print(data.get('gates', 'unknown'))
+try:
+    with open('benchmark_result.json') as f:
+        data = json.load(f)
+    print(data.get('gates', 'unknown'))
+except Exception:
+    print('parse_error')
 " 2>/dev/null || echo "parse_error")
 
           echo "GATE_STATUS=$GATE_STATUS" >> $GITHUB_ENV
 
-      - name: Find report directory
-        id: report
-        run: |
-          REPORT_DIR=$(python -c "
-import json
-with open('benchmark_result.json') as f:
-    data = json.load(f)
-print(data.get('report_path', ''))
-" 2>/dev/null || echo "")
-          echo "REPORT_DIR=$REPORT_DIR" >> $GITHUB_ENV
-          echo "Report: $REPORT_DIR"
-
-      - name: Extract PR summary
+      - name: Extract report and PR summary
         id: pr_summary
         run: |
-          PR_SUMMARY=$(python -c "
+          python -c "
 import json
-with open('benchmark_result.json') as f:
-    data = json.load(f)
-print(data.get('pr_summary', 'No summary available'))
-" 2>/dev/null || echo "No summary available")
-
-          # Write to file for artifact
-          echo "$PR_SUMMARY" > pr_summary.md
-
-          # Escape for GitHub output
-          echo "summary<<EOF" >> $GITHUB_OUTPUT
-          echo "$PR_SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+try:
+    with open('benchmark_result.json') as f:
+        data = json.load(f)
+    summary = data.get('pr_summary', 'No summary available')
+    with open('pr_summary.md', 'w') as out:
+        out.write(summary)
+except Exception:
+    with open('pr_summary.md', 'w') as out:
+        out.write('No summary available')
+"
 
       - name: Upload benchmark artifacts
         if: always()
@@ -179,9 +173,9 @@ print(data.get('pr_summary', 'No summary available'))
         with:
           name: benchmark-${{ env.DATASET }}-${{ env.RETRIEVER }}-${{ github.sha }}
           path: |
-            ${{ env.REPORT_DIR }}/
             benchmark_result.json
             pr_summary.md
+            uvicorn.log
           retention-days: 30
 
       - name: Post PR comment
@@ -190,13 +184,15 @@ print(data.get('pr_summary', 'No summary available'))
         with:
           script: |
             const fs = require('fs');
-            const summary = fs.readFileSync('pr_summary.md', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
+            if (fs.existsSync('pr_summary.md')) {
+              const summary = fs.readFileSync('pr_summary.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: summary
+              });
+            }
 
       - name: Check gate status
         id: gate_check
@@ -216,12 +212,40 @@ print(data.get('pr_summary', 'No summary available'))
       - name: Stop backend
         if: always()
         run: |
-          kill ${{ env.APP_PID }} 2>/dev/null || true
+          if [ -n "${{ env.APP_PID }}" ]; then
+            kill ${{ env.APP_PID }} 2>/dev/null || true
+          fi
 
   benchmark-matrix:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: benchmark
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: ankane/pgvector:latest
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: owngpt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     strategy:
       matrix:
         retriever: [vector, bm25, hybrid]
@@ -243,6 +267,27 @@ print(data.get('pr_summary', 'No summary available'))
         run: |
           pip install -r requirements-lock.txt
 
+      - name: Create .env file
+        run: |
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
+          echo "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}" >> .env
+          echo "LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}" >> .env
+          echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/owngpt" >> .env
+          echo "REDIS_URL=redis://localhost:6379/0" >> .env
+
+      - name: Start backend
+        run: |
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+          APP_PID=$!
+          echo "APP_PID=$APP_PID" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/docs > /dev/null 2>&1; then
+              echo "Backend ready after ${i}s"
+              break
+            fi
+            sleep 2
+          done
+
       - name: Run benchmark
         run: |
           python -m app.evaluation.cli benchmark \
@@ -258,3 +303,11 @@ print(data.get('pr_summary', 'No summary available'))
           name: benchmark-${{ env.DATASET }}-${{ matrix.retriever }}-${{ github.sha }}
           path: benchmark_matrix_${{ matrix.retriever }}.json
           retention-days: 30
+
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -n "${{ env.APP_PID }}" ]; then
+            kill ${{ env.APP_PID }} 2>/dev/null || true
+          fi
+

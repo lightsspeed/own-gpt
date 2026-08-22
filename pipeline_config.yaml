@@ -3,12 +3,14 @@
 
 # ── Stage 1: Intent Classification ──────────────────────────────────────────
 intent_enabled: true
-intent_model: "gpt-4o-mini"
+# Empty model = provider default via build_llm (LLM_MODEL under Ollama,
+# DEFAULT_MODEL under OpenAI) — keeps this config provider-agnostic.
+intent_model: ""
 # Max latency budget before falling back: rule_based <50ms, llm <300ms
 
 # ── Stage 3: Query Rewriting ─────────────────────────────────────────────────
 rewrite_enabled: true
-rewrite_model: "gpt-4o-mini"
+rewrite_model: ""
 # Only applied when intent is "rag" or "web"
 
 # ── Stage 4: Knowledge Retrieval (Hybrid Search) ────────────────────────────
@@ -32,13 +34,13 @@ reranker_cache_dir: "/app/.cache/flashrank"
 
 # ── Stage 6: Confidence Evaluation ───────────────────────────────────────────
 # Composite score combines: retrieval, reranker, intent confidence, source agreement
-confidence_high: 0.70    # >= 0.70 → answer directly
+confidence_high: 0.55    # >= 0.55 → answer directly
 confidence_medium: 0.45  # >= 0.45 → fallback to web search
 # < 0.45 → ask for clarification
 
 # ── Stage 8: Response Validation ─────────────────────────────────────────────
 validation_enabled: true
-validation_model: "gpt-4o-mini"
+validation_model: ""
 # Rule-based validation runs first (no LLM cost)
 # LLM validation only fires when rules fail
 

@@ -66,4 +66,27 @@ async def system_status(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         results["whoosh"] = {"status": "error", "detail": str(e)}
 
+    # Ollama — local LLM/embedding provider (optional at runtime)
+    from app.core.config import settings
+    from app.core.llm_provider import LLMProviderError
+    try:
+        import httpx
+        base = settings.OLLAMA_BASE_URL.rstrip("/")
+        r = httpx.get(f"{base}/api/tags", timeout=2.0)
+        r.raise_for_status()
+        tags = [m.get("name", "") for m in r.json().get("models", [])]
+        expected = [settings.LLM_MODEL] if settings.LLM_PROVIDER == "ollama" else []
+        missing = [m for m in expected if m not in tags]
+        results["ollama"] = {
+            "status": "ok" if not missing else "degraded",
+            "provider": settings.LLM_PROVIDER,
+            "base_url": base,
+            "models": sorted(tags),
+            "missing_models": missing,
+        }
+    except LLMProviderError as e:
+        results["ollama"] = {"status": "error", "detail": str(e)}
+    except Exception as e:
+        results["ollama"] = {"status": "unavailable", "detail": str(e)}
+
     return {"status": "ok", "services": results}

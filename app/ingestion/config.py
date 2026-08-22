@@ -8,8 +8,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CHUNK_SIZE = 1000
-DEFAULT_CHUNK_OVERLAP = 200
+DEFAULT_CHUNK_SIZE = 1500
+DEFAULT_CHUNK_OVERLAP = 100
+DEFAULT_CHUNK_STRATEGY = "semantic"
 DEFAULT_MANIFEST_PATH = "data/ingestion/manifest.json"
 DEFAULT_BATCH_SIZE = 10
 DEFAULT_MAX_RETRIES = 3
@@ -39,6 +40,7 @@ class IngestionConfig:
 
     chunk_size: int = DEFAULT_CHUNK_SIZE
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
+    chunk_strategy: str = DEFAULT_CHUNK_STRATEGY  # "recursive" | "semantic"
 
     manifest_path: str = DEFAULT_MANIFEST_PATH
     batch_size: int = DEFAULT_BATCH_SIZE
@@ -68,6 +70,7 @@ class IngestionConfig:
             ),
             chunk_size=sec.get("chunking", {}).get("chunk_size", DEFAULT_CHUNK_SIZE),
             chunk_overlap=sec.get("chunking", {}).get("chunk_overlap", DEFAULT_CHUNK_OVERLAP),
+            chunk_strategy=sec.get("chunking", {}).get("strategy", DEFAULT_CHUNK_STRATEGY),
             manifest_path=sec.get("manifest", {}).get("path", DEFAULT_MANIFEST_PATH),
             batch_size=sec.get("processing", {}).get("batch_size", DEFAULT_BATCH_SIZE),
             max_retries=sec.get("processing", {}).get("max_retries", DEFAULT_MAX_RETRIES),

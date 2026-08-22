@@ -1,3 +1,11 @@
+# The existing suite is written against OpenAI model semantics (gpt-4o-mini
+# allowlist, ChatOpenAI). Pin the provider BEFORE any app import so module
+# scope resolution (model_config, config) matches those tests. Ollama
+# behavior is covered by dedicated tests that set LLM_PROVIDER explicitly.
+import os
+
+os.environ["LLM_PROVIDER"] = "openai"
+
 import pytest
 from langchain_core.documents import Document
 from app.agent.pipeline.retriever import RetrievedChunk

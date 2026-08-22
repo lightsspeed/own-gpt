@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Own Platform | Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            background-color: #0f172a; /* Slate 900 */
+            color: #cbd5e1; /* Slate 300 */
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155; /* Slate 700 */
+            border-radius: 10px;
+        }
+        .active-nav-indicator {
+            position: absolute;
+            left: 0;
+            width: 4px;
+            height: 20px;
+            background-color: #64748b; /* Slate 500 */
+            border-radius: 0 4px 4px 0;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "text-primary": "#f1f5f9", /* Slate 100 */
+                        "on-secondary-container": "#f1f5f9",
+                        "ai-presence": "#475569", /* Slate 600 */
+                        "secondary": "#1e293b", /* Slate 800 */
+                        "surface-container-lowest": "#020617", /* Slate 950 */
+                        "on-surface": "#e2e8f0", /* Slate 200 */
+                        "inverse-primary": "#94a3b8", /* Slate 400 */
+                        "on-surface-variant": "#94a3b8", /* Slate 400 */
+                        "on-background": "#f1f5f9",
+                        "secondary-fixed": "#334155",
+                        "bg-tertiary": "#1e293b",
+                        "surface-container-low": "#0f172a", /* Slate 900 */
+                        "error": "#94a3b8",
+                        "on-tertiary-fixed": "#f1f5f9",
+                        "inverse-surface": "#f1f5f9",
+                        "background": "#020617",
+                        "on-primary-container": "#f1f5f9",
+                        "on-primary": "#0f172a",
+                        "primary-fixed": "#f1f5f9",
+                        "on-tertiary-fixed-variant": "#94a3b8",
+                        "slate-gray": "#475569",
+                        "surface-tint": "#94a3b8",
+                        "inverse-on-surface": "#0f172a",
+                        "border-subtle": "#1e293b", /* Slate 800 */
+                        "surface-bright": "#334155",
+                        "outline": "#475569",
+                        "surface-container-highest": "#334155",
+                        "on-secondary-fixed-variant": "#94a3b8",
+                        "on-tertiary-container": "#f1f5f9",
+                        "error-container": "#1e293b",
+                        "primary-container": "#334155",
+                        "surface-dim": "#0f172a",
+                        "surface-container": "#1e293b",
+                        "primary-fixed-dim": "#94a3b8",
+                        "tertiary-fixed": "#f1f5f9",
+                        "text-secondary": "#64748b", /* Slate 500 */
+                        "tertiary-container": "#334155",
+                        "on-tertiary": "#f1f5f9",
+                        "on-primary-fixed": "#0f172a",
+                        "secondary-fixed-dim": "#94a3b8",
+                        "success-teal": "#94a3b8",
+                        "surface-container-high": "#1e293b",
+                        "on-error": "#f1f5f9",
+                        "tertiary": "#94a3b8",
+                        "on-error-container": "#f1f5f9",
+                        "on-secondary": "#f1f5f9",
+                        "outline-variant": "#334155",
+                        "bg-primary": "#020617",
+                        "bg-secondary": "#0f172a",
+                        "secondary-container": "#1e293b",
+                        "on-primary-fixed-variant": "#94a3b8",
+                        "primary": "#f1f5f9",
+                        "surface": "#0f172a",
+                        "tertiary-fixed-dim": "#94a3b8",
+                        "surface-variant": "#1e293b",
+                        "on-secondary-fixed": "#f1f5f9"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "context-panel-width": "400px",
+                        "stack-md": "16px",
+                        "stack-lg": "24px",
+                        "max-content-width": "800px",
+                        "stack-sm": "8px",
+                        "gutter": "24px",
+                        "inset-md": "16px",
+                        "sidebar-width": "280px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "code-sm": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                        "label-md": ["13px", {"lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "code-sm": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-md": ["15px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-primary text-text-primary h-screen flex">
+<!-- SideNavBar (Execution from JSON) -->
+<aside class="hidden md:flex flex-col h-full py-inset-md w-sidebar-width border-r border-border-subtle fixed left-0 top-0 z-50 bg-secondary">
+<!-- Header / Logo Area -->
+<div class="px-inset-md mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'FILL' 1;">terminal</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md text-on-surface leading-none">OwnOps</h1>
+<p class="font-label-md text-label-md text-text-secondary">AI Engineering</p>
+</div>
+</div>
+<!-- Main Navigation Scrollable Area -->
+<nav class="flex-1 overflow-y-auto px-inset-md space-y-6 custom-scrollbar">
+<!-- Section: Core -->
+<div>
+<div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-container-highest text-on-surface border-l-4 border-slate-gray relative transition-all cursor-pointer">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-md text-label-md">Home</span>
+</div>
+</div>
+<!-- Section: Observe -->
+<div class="space-y-1">
+<div class="flex items-center gap-2 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">visibility</span>
+<span class="font-label-md text-label-md">Observe</span>
+</div>
+<div class="pl-9 space-y-1">
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Findings</div>
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Evaluation</div>
+</div>
+</div>
+<!-- Section: Analyze -->
+<div class="space-y-1">
+<div class="flex items-center gap-2 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-md text-label-md">Analyze</span>
+</div>
+<div class="pl-9 space-y-1">
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Recommendations</div>
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Experiments</div>
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Analytics</div>
+</div>
+</div>
+<!-- Section: Govern -->
+<div class="space-y-1">
+<div class="flex items-center gap-2 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">gavel</span>
+<span class="font-label-md text-label-md">Govern</span>
+</div>
+<div class="pl-9 space-y-1">
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Config</div>
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Decisions</div>
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Governance</div>
+</div>
+</div>
+<!-- Section: Operate -->
+<div class="space-y-1">
+<div class="flex items-center gap-2 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">settings_input_component</span>
+<span class="font-label-md text-label-md">Operate</span>
+</div>
+<div class="pl-9 space-y-1">
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">OwnOps</div>
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Automation</div>
+</div>
+</div>
+<!-- Section: System -->
+<div class="space-y-1">
+<div class="flex items-center gap-2 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">settings_ethernet</span>
+<span class="font-label-md text-label-md">System</span>
+</div>
+<div class="pl-9 space-y-1">
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Capabilities</div>
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Ledger</div>
+<div class="text-on-surface-variant hover:text-on-surface cursor-pointer py-1 font-label-md text-label-md">Artifacts</div>
+</div>
+</div>
+</nav>
+<!-- Footer Navigation -->
+<div class="mt-auto px-inset-md pt-4 space-y-2 border-t border-border-subtle">
+<div class="flex items-center gap-2 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-md text-label-md">History</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">help_outline</span>
+<span class="font-label-md text-label-md">Help</span>
+</div>
+</div>
+</aside>
+<!-- Main Viewport Container -->
+<main class="flex-1 flex flex-col ml-0 md:ml-sidebar-width h-full relative">
+<!-- TopNavBar (Execution from JSON) -->
+<header class="fixed top-0 left-0 md:left-sidebar-width right-0 z-40 flex items-center px-gutter h-[56px] w-auto gap-stack-lg bg-surface border-b border-border-subtle">
+<!-- Search Bar On Left -->
+<div class="flex-1 flex items-center max-w-xl">
+<div class="relative w-full group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="block w-full pl-10 pr-12 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg font-body-md text-body-md focus:ring-1 focus:ring-outline focus:border-transparent transition-all placeholder:text-outline" placeholder="Search (⌘K)" type="text"/>
+<div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+<kbd class="hidden sm:inline-block px-1.5 py-0.5 font-code-sm text-code-sm bg-surface-container-highest text-on-surface-variant rounded border border-border-subtle">⌘K</kbd>
+</div>
+</div>
+</div>
+<!-- Command Bar Actions -->
+<div class="flex items-center gap-4">
+<!-- 24h Filter -->
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle font-label-md text-label-md text-on-surface-variant hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[18px]">schedule</span>
+<span class="">24h</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<!-- Quick Action Plus -->
+<button class="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-highest border border-outline-variant text-on-surface hover:bg-surface-bright active:scale-95 transition-all">
+<span class="material-symbols-outlined">add</span>
+</button>
+<!-- Icon Actions from JSON -->
+<div class="flex items-center gap-2 text-on-surface-variant">
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-slate-gray rounded-full opacity-50"></span>
+</button>
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined">history</span>
+</button>
+</div>
+<!-- Profile Image / Avatar -->
+<div class="flex items-center pl-2 border-l border-border-subtle">
+<button class="w-8 h-8 rounded-full overflow-hidden border border-border-subtle hover:ring-2 hover:ring-slate-gray transition-all grayscale opacity-80">
+<img alt="User Avatar" class="w-full h-full object-cover" data-alt="A professional headshot of a software engineer with short dark hair, wearing a dark navy blazer, set against a blurred corporate office background with cool blue and slate-gray lighting. The image captures a clean, corporate modern aesthetic with high technical clarity and a calm, authoritative expression." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC77156ICSN_0Zc--LLKfyMPDeix9_GoechCSwWYP7N9CK03brNUVOk6yacbw4ppiuBFEPoUyr9UY1XYQDXT8DIUur_P8bMJP_yROkPxmBWMmIvnt8m_1mokP_Y-zeZTk_Y7tDG9XtCf1RDDVAaQq_q3vE-OoIxmFVrWKg_Aw1kUlrrAJ-AvQYjWQVEAwZG-awzbnlaKyjcUWz4tQCigsZ8fBtHDgH0yY4gAdSahZ8yZ0X9bQDS17eKazEqXvw6E2m18gK8wlWW1as"/>
+</button>
+</div>
+</div>
+</header>
+<!-- Content Canvas Placeholder -->
+<div class="mt-[56px] flex-1 overflow-auto bg-primary relative custom-scrollbar">
+<div class="max-w-[1200px] mx-auto p-gutter">
+<!-- Empty Placeholder State -->
+<div class="h-[calc(100vh-160px)] flex flex-col items-center justify-center text-center border-2 border-dashed border-border-subtle rounded-xl bg-surface-container-low">
+<div class="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center mb-6 text-outline border border-outline-variant">
+<span class="material-symbols-outlined text-[40px]">dashboard_customize</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">Platform Canvas</h2>
+<p class="font-body-md text-body-md text-text-secondary max-w-md">
+                        This is the main interaction zone for OwnOps. Select a module from the sidebar or use the search bar to initialize a session.
+                    </p>
+<div class="mt-8 flex gap-4">
+<button class="px-6 py-2.5 bg-surface-container-highest text-on-surface border border-outline-variant rounded-lg font-label-md text-label-md hover:bg-surface-bright active:scale-95 transition-all">
+                            Initialize Dashboard
+                        </button>
+<button class="px-6 py-2.5 border border-border-subtle text-on-surface-variant rounded-lg font-label-md text-label-md hover:bg-surface-container-high transition-all">
+                            View Documentation
+                        </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Floating Action Button -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-surface-container-highest text-on-surface rounded-full shadow-xl border border-outline-variant flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-50">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</button>
+</main>
+<!-- Micro-interaction Script -->
+<script>
+        // Simple Command-K focus simulation
+        document.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                document.querySelector('input[type="text"]').focus();
+            }
+        });
+
+        // Navigation state simulation
+        const navItems = document.querySelectorAll('nav [class*="cursor-pointer"]');
+        navItems.forEach(item => {
+            item.addEventListener('click', () => {
+                console.log('Navigating to:', item.textContent.trim());
+            });
+        });
+    </script>
+</body></html>

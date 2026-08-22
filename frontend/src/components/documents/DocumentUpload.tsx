@@ -3,6 +3,8 @@ import { UploadCloud, CheckCircle2, Loader2, FileText, AlertCircle, X } from 'lu
 
 const API_BASE = 'http://localhost:8000/api/v1';
 const SUPPORTED_EXTS = ['.pdf', '.txt', '.md'];
+const POLL_INTERVAL_MS = 2000;
+const TERMINAL = new Set(['completed', 'duplicate', 'failed']);
 
 interface UploadedFile {
   name: string;
@@ -15,11 +17,43 @@ interface DocumentUploadProps {
   onFileUploaded: (file: UploadedFile) => void;
 }
 
+interface ActiveJob {
+  filename: string;
+  jobId: string;
+  status: 'queued' | 'processing';
+  error?: string;
+}
+
 export function DocumentUpload({ uploadedFiles, onFileUploaded }: DocumentUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const pollJob = async (jobId: string, filename: string, ext: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/ingestion/jobs/${jobId}`);
+      if (!res.ok) {
+        throw new Error('Failed to check ingestion status');
+      }
+      const job = await res.json();
+      if (TERMINAL.has(job.status)) {
+        if (job.status === 'failed') {
+          setActiveJob(null);
+          setError(`Ingestion failed: ${job.error || 'unknown error'}`);
+        } else {
+          setActiveJob(null);
+          onFileUploaded({ name: filename, chunks: job.chunks, type: ext });
+        }
+        return;
+      }
+      setTimeout(() => pollJob(jobId, filename, ext), POLL_INTERVAL_MS);
+    } catch (e: any) {
+      setActiveJob(null);
+      setError(e.message);
+    }
+  };
 
   const handleFile = async (file: File) => {
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();
@@ -41,7 +75,14 @@ export function DocumentUpload({ uploadedFiles, onFileUploaded }: DocumentUpload
         throw new Error(err.detail || 'Upload failed');
       }
       const data = await res.json();
-      onFileUploaded({ name: data.filename, chunks: data.chunks, type: ext });
+      if (data.status === 'duplicate') {
+        onFileUploaded({ name: data.filename, chunks: data.chunks, type: ext });
+      } else if (data.job_id) {
+        setActiveJob({ filename: data.filename, jobId: data.job_id, status: 'queued' });
+        setTimeout(() => pollJob(data.job_id, data.filename, ext), POLL_INTERVAL_MS);
+      } else {
+        throw new Error('Upload did not return a job');
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -72,7 +113,7 @@ export function DocumentUpload({ uploadedFiles, onFileUploaded }: DocumentUpload
         {isUploading ? (
           <>
             <Loader2 className="w-7 h-7 text-primary animate-spin" />
-            <p className="text-xs text-muted-foreground">Embedding document…</p>
+            <p className="text-xs text-muted-foreground">Uploading document…</p>
           </>
         ) : (
           <>
@@ -84,6 +125,22 @@ export function DocumentUpload({ uploadedFiles, onFileUploaded }: DocumentUpload
           </>
         )}
       </div>
+
+      {/* Active job */}
+      {activeJob && (
+        <div className="flex items-center gap-2 text-xs bg-primary/5 border border-primary/20 rounded-lg px-2 py-1.5">
+          <Loader2 size={11} className="text-primary animate-spin flex-shrink-0" />
+          <span className="truncate text-foreground flex-1">{activeJob.filename}</span>
+          <span className="text-muted-foreground flex-shrink-0">Embedding…</span>
+          <button
+            className="text-muted-foreground hover:text-foreground flex-shrink-0"
+            onClick={() => setActiveJob(null)}
+            title="Dismiss"
+          >
+            <X size={11} />
+          </button>
+        </div>
+      )}
 
       {/* Error */}
       {error && (

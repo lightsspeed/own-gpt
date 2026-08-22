@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: owngpt-postgres
+  namespace: owngpt
+  labels:
+    app.kubernetes.io/name: owngpt
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app.kubernetes.io/name: owngpt
+    app.kubernetes.io/component: database
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: owngpt-postgres
+  namespace: owngpt
+  labels:
+    app.kubernetes.io/name: owngpt
+    app.kubernetes.io/component: database
+spec:
+  serviceName: owngpt-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: owngpt
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: owngpt
+        app.kubernetes.io/component: database
+    spec:
+      containers:
+        - name: postgres
+          image: ankane/pgvector:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: owngpt-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: owngpt-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: owngpt-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 10Gi

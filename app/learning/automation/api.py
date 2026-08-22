@@ -9,8 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from .scheduler import run_job, get_run_history, get_schedules
 from .state import SnapshotStore
 from .reports import generate_daily_brief
-from .jobs import run_daily_evaluation
-from .models import JobType, AutomationRun
+from .models import JobType
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/automation", tags=["automation"])
@@ -23,6 +22,13 @@ def get_store() -> SnapshotStore:
 # ── Jobs ───────────────────────────────────────────────────────────────
 
 
+@router.post("/run/daily-evaluation", response_model=dict)
+async def run_daily_evaluation_endpoint():
+    """Run a full daily evaluation immediately."""
+    run = run_job(JobType.DAILY_EVALUATION)
+    return run.to_dict()
+
+
 @router.post("/run/{job_type}", response_model=dict)
 async def run_job_endpoint(job_type: str):
     """Execute a job immediately."""
@@ -31,13 +37,6 @@ async def run_job_endpoint(job_type: str):
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Unknown job type: {job_type}")
     run = run_job(jt)
-    return run.to_dict()
-
-
-@router.post("/run/daily-evaluation", response_model=dict)
-async def run_daily_evaluation_endpoint():
-    """Run a full daily evaluation immediately."""
-    run = run_daily_evaluation()
     return run.to_dict()
 
 

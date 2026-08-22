@@ -6,11 +6,11 @@ Purpose: Decide whether retrieval is needed based on intent.
 
 Routing table:
   knowledge → RETRIEVAL     (vector search needed)
-  web       → WEB_SEARCH    (Tavily, skip vector search)
-  memory    → MEMORY        (Redis read/write, skip vector search)
-  general   → RETRIEVAL     (attempt retrieval for corpus-backed answers)
-  coding    → DIRECT_LLM    (LLM sufficient)
-  reasoning → DIRECT_LLM    (LLM sufficient)
+  memory    → MEMORY        (memory store read/write, skip vector search)
+  general   → DIRECT_LLM    (chitchat ONLY when rule-matched: greetings/thanks/arithmetic)
+              RETRIEVAL     (LLM-classified "general" is informational — must be grounded)
+  coding    → RETRIEVAL     (KB-only policy: answer only from knowledge base)
+  reasoning → RETRIEVAL     (KB-only policy: answer only from knowledge base)
   tool      → DIRECT_LLM    (let agent decide which tool)
   unknown   → RETRIEVAL     (attempt retrieval, may help)
 """
@@ -28,10 +28,9 @@ logger = logging.getLogger(__name__)
 
 
 class RouteDecision(str, Enum):
-    RETRIEVAL   = "retrieval"
-    WEB_SEARCH  = "web_search"
-    MEMORY      = "memory"
-    DIRECT_LLM  = "direct_llm"
+    RETRIEVAL     = "retrieval"
+    MEMORY        = "memory"
+    DIRECT_LLM    = "direct_llm"
     CLARIFICATION = "clarification"
 
 
@@ -44,14 +43,16 @@ class RouterResult:
 
 # ── Routing table ─────────────────────────────────────────────────────────────
 _ROUTING_TABLE: dict[Intent, tuple[RouteDecision, bool]] = {
-    Intent.KNOWLEDGE: (RouteDecision.RETRIEVAL,    False),
-    Intent.WEB:       (RouteDecision.WEB_SEARCH,   True),
-    Intent.MEMORY:    (RouteDecision.MEMORY,        True),
-    Intent.GENERAL:   (RouteDecision.RETRIEVAL,    False),  # Always retrieve when corpus exists
-    Intent.CODING:    (RouteDecision.DIRECT_LLM,   True),
-    Intent.REASONING: (RouteDecision.DIRECT_LLM,   True),
-    Intent.TOOL:      (RouteDecision.DIRECT_LLM,   True),
-    Intent.UNKNOWN:   (RouteDecision.RETRIEVAL,     False),  # Attempt retrieval for unknowns
+    Intent.KNOWLEDGE:    (RouteDecision.RETRIEVAL,    False),
+    Intent.DOCUMENT:     (RouteDecision.RETRIEVAL,    False),
+    Intent.MEMORY:       (RouteDecision.MEMORY,        True),
+    Intent.GENERAL:      (RouteDecision.RETRIEVAL,    False),  # Rule-matched chitchat handled in route()
+    Intent.WEB:          (RouteDecision.DIRECT_LLM,   True),   # Web search handled via tool gate / tavily
+    Intent.CODING:       (RouteDecision.RETRIEVAL,    False),  # KB-only policy when RAG enabled
+    Intent.REASONING:    (RouteDecision.RETRIEVAL,    False),  # KB-only policy when RAG enabled
+    Intent.MULTI_INTENT: (RouteDecision.RETRIEVAL,    False),  # Retrieval enabled for combined intents
+    Intent.TOOL:         (RouteDecision.DIRECT_LLM,   True),
+    Intent.UNKNOWN:      (RouteDecision.RETRIEVAL,     False),  # Attempt retrieval for unknowns
 }
 
 
@@ -63,10 +64,17 @@ class RequestRouter:
 
     @traceable(name="request_router", metadata={"stage": 2})
     def route(self, intent: IntentResult) -> RouterResult:
-        decision, skip = _ROUTING_TABLE.get(
-            intent.intent,
-            (RouteDecision.DIRECT_LLM, True),
-        )
+        # Rule-matched chitchat (greetings/thanks/arithmetic) is the ONLY
+        # general query answered without retrieval. LLM-classified "general"
+        # (pasted errors, vague statements) is informational — it must be
+        # grounded in the knowledge base or refused.
+        if intent.intent == Intent.GENERAL and intent.matched_rule == "GENERAL_CHAT":
+            decision, skip = RouteDecision.DIRECT_LLM, True
+        else:
+            decision, skip = _ROUTING_TABLE.get(
+                intent.intent,
+                (RouteDecision.DIRECT_LLM, True),
+            )
 
         result = RouterResult(
             decision=decision,

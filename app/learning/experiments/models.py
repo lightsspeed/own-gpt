@@ -113,26 +113,49 @@ class ExperimentDefinition:
 
 @dataclass
 class ExperimentResult:
-    """The complete outcome of running an experiment."""
+    """
+    The complete outcome of one AUTHORIZED experiment execution (V3.14).
+
+    Every result is an immutable artifact:
+      - execution_id (unique per execution), status, timestamps
+      - authorization code reference (raw code kept internal, NEVER serialized)
+      - lineage: parent is the AuthorizationCode that authorized it
+    """
     experiment_id: str = ""
+    execution_id: str = ""
+    status: str = "completed"        # completed | failed | blocked
     baseline_metrics: dict = field(default_factory=dict)
     candidate_metrics: dict = field(default_factory=dict)
     deltas: dict = field(default_factory=dict)
     summary: str = ""
     records_processed: int = 0
     duration_ms: float = 0.0
-    completed_at: str = ""
+    started_at: str = ""
+    finished_at: str = ""
+    completed_at: str = ""           # legacy alias of finished_at
+    authorization_code: str = ""     # INTERNAL — the raw code, redacted on serialize
+    authorization_code_id: str = ""  # non-secret artifact reference
+    error: str = ""
+    lineage: Optional[Lineage] = None
 
     def to_dict(self) -> dict:
+        # Secret redaction: the raw authorization_code is NEVER serialized.
         return {
             "experiment_id": self.experiment_id,
+            "execution_id": self.execution_id,
+            "status": self.status,
             "baseline_metrics": self.baseline_metrics,
             "candidate_metrics": self.candidate_metrics,
             "deltas": self.deltas,
             "summary": self.summary,
             "records_processed": self.records_processed,
             "duration_ms": round(self.duration_ms, 1),
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
             "completed_at": self.completed_at,
+            "authorization_code_id": self.authorization_code_id,
+            "error": self.error,
+            "lineage": self.lineage.to_dict() if self.lineage else None,
         }
 
 

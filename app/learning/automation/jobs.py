@@ -10,11 +10,17 @@ from typing import Optional
 from ..analytics.engine import AnalyticsEngine
 from ..evidence.engine import EvidenceEngine
 from ..experiments.models import ExperimentDefinition
-from .models import AutomationRun, JobType, JobStatus, EvaluationSnapshot
-from .state import SnapshotStore
+from .models import AutomationRun, JobType, JobStatus, EvaluationSnapshot, BenchmarkBaseline
+from .state import SnapshotStore, BaselineStore
 from .health import compute_all
-
 logger = logging.getLogger(__name__)
+
+# Benchmark regression job defaults
+DEFAULT_BENCHMARK_DATASET = "intent_accuracy"
+DEFAULT_SAMPLE_SIZE = 10          # bounded subset for a light weekly check
+DEFAULT_BASE_URL = "http://localhost:8000"
+REGRESSION_THRESHOLD = 0.05       # success-rate drop >= 5 points = regression
+LATENCY_REGRESSION_PCT = 1.5      # avg latency > 1.5x baseline = regression
 
 
 def run_daily_evaluation(limit: int = 500) -> AutomationRun:
@@ -114,18 +120,137 @@ def run_calibration_check() -> AutomationRun:
     return run
 
 
-def run_benchmark_regression() -> AutomationRun:
-    """Check benchmarks for regressions. Stub — full benchmark integration is future work."""
+def run_memory_retention() -> AutomationRun:
+    """Archive expired memory entities in their own sync session.
+
+    Orchestrates the memory service (business logic lives there); a failure
+    is logged, never fatal. Never deletes anything.
+    """
+    run = AutomationRun(job_type=JobType.MEMORY_RETENTION, status=JobStatus.RUNNING)
+    start = time.time()
+    try:
+        from app.core.database import SyncSessionLocal
+        from app.services import memory
+
+        with SyncSessionLocal() as db:
+            archived = memory.archive_expired_memories(db)
+        run.status = JobStatus.COMPLETED
+        run.completed_at = datetime.now(timezone.utc).isoformat()
+        run.duration_ms = (time.time() - start) * 1000
+        run.records_processed = archived
+        run.findings_generated = 0
+    except Exception as e:
+        logger.exception("Memory retention failed")
+        run.status = JobStatus.FAILED
+        run.completed_at = str(time.time())
+        run.error = str(e)
+    return run
+
+
+def run_benchmark_regression(
+    dataset: str = DEFAULT_BENCHMARK_DATASET,
+    sample_size: int = DEFAULT_SAMPLE_SIZE,
+    base_url: str = DEFAULT_BASE_URL,
+) -> AutomationRun:
+    """Run a bounded benchmark subset and detect regressions vs the latest baseline.
+
+    Orchestrates existing benchmark modules (app.evaluation) — no business logic
+    is duplicated here. Intent datasets run offline through the classifier; RAG
+    datasets run against the chat API. A new BenchmarkBaseline artifact is
+    written on every run; the previous baseline is never mutated.
+    """
     run = AutomationRun(job_type=JobType.BENCHMARK_REGRESSION, status=JobStatus.RUNNING)
     start = time.time()
+    store = BaselineStore()
 
     try:
-        # TODO: Run benchmark datasets and compare against stored baselines
-        run.status = JobStatus.SKIPPED
+        if dataset == "intent_accuracy":
+            from app.evaluation.intent_accuracy import evaluate_intent_accuracy
+            result = evaluate_intent_accuracy()
+            total = result.total
+            successful_count = result.correct
+            avg_latency = (
+                sum(d["latency_ms"] for d in result.details) / len(result.details)
+                if result.details else 0.0
+            )
+            metrics = {
+                "by_intent": result.by_intent,
+                "by_rule": result.by_rule,
+                "sample_size": total,
+            }
+            display_name = "Intent Accuracy"
+        else:
+            from app.evaluation.loader import load_dataset
+            from app.evaluation.benchmark import run_benchmark_subset
+
+            ds = load_dataset(dataset)
+            if not ds.questions:
+                run.status = JobStatus.SKIPPED
+                run.duration_ms = (time.time() - start) * 1000
+                run.error = f"Dataset '{dataset}' has no questions"
+                return run
+
+            subset = ds.questions[:sample_size]
+            results = run_benchmark_subset(subset, base_url=base_url)
+            successful = [r for r in results if r["status"] == "success"]
+            successful_count = len(successful)
+            total = len(results)
+            avg_latency = (
+                sum(r.get("latency_ms", 0) for r in successful) / successful_count
+                if successful_count else 0.0
+            )
+            metrics = {
+                "sample_size": total,
+                "missing_claims": sum(len(r.get("missing_claims", [])) for r in successful),
+                "hallucinated_terms": sum(len(r.get("hallucinated_terms", [])) for r in successful),
+                "errors": [r.get("error") for r in results if r.get("error")][:10],
+            }
+            display_name = ds.display_name
+
+        success_rate = successful_count / total if total else 0.0
+
+        previous = store.latest(dataset)
+        baseline = BenchmarkBaseline(
+            dataset=dataset,
+            display_name=display_name,
+            total=total,
+            successful=successful_count,
+            failed=total - successful_count,
+            success_rate=success_rate,
+            avg_latency_ms=avg_latency,
+            metrics=metrics,
+            previous_baseline_id=previous.id if previous else None,
+        )
+        store.save(baseline)
+
+        # Regression detection
+        regressions = []
+        if previous:
+            prev_rate = previous.success_rate
+            if success_rate < prev_rate - REGRESSION_THRESHOLD:
+                regressions.append(
+                    f"success_rate {success_rate:.1%} vs baseline {prev_rate:.1%}"
+                )
+            if previous.avg_latency_ms and avg_latency > previous.avg_latency_ms * LATENCY_REGRESSION_PCT:
+                regressions.append(
+                    f"latency {avg_latency:.0f}ms vs baseline {previous.avg_latency_ms:.0f}ms"
+                )
+
+        run.status = JobStatus.COMPLETED
+        run.completed_at = datetime.now(timezone.utc).isoformat()
         run.duration_ms = (time.time() - start) * 1000
-        run.error = "Benchmark integration not yet configured"
+        run.records_processed = total
+        run.findings_generated = len(regressions)
+        run.snapshot_id = baseline.id
+        if regressions:
+            run.error = f"Benchmark regression detected: {'; '.join(regressions)}"
+        else:
+            run.error = None
+
     except Exception as e:
+        logger.exception("Benchmark regression failed")
         run.status = JobStatus.FAILED
+        run.completed_at = str(time.time())
         run.error = str(e)
 
     return run

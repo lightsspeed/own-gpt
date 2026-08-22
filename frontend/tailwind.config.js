@@ -162,6 +162,14 @@ module.exports = {
           '0%, 100%': { opacity: 1 },
           '50%':      { opacity: 0 },
         },
+        'highlight-fade': {
+          '0%':   { boxShadow: 'inset 0 0 0 2px hsl(221 90% 55% / 0.5)', opacity: 1 },
+          '100%': { boxShadow: 'inset 0 0 0 2px hsl(221 90% 55% / 0)', opacity: 1 },
+        },
+        'bounce-subtle': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%':      { transform: 'translateY(-2px)' },
+        },
       },
 
       /* ── Animations ── */
@@ -178,6 +186,8 @@ module.exports = {
         'scale-in':    'scale-in 0.15s ease-out',
         'shimmer':     'shimmer 2s linear infinite',
         'cursor-blink':'cursor-blink 1s step-end infinite',
+        'highlight-fade': 'highlight-fade 2s ease-out forwards',
+        'bounce-subtle': 'bounce-subtle 1s ease-in-out infinite',
       },
     },
   },

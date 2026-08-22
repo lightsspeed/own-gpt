@@ -18,6 +18,14 @@ from ..pii.sanitizer import sanitize
 logger = logging.getLogger(__name__)
 
 
+def _default_model() -> str:
+    # Provider-resolved default (model_config.DEFAULT_MODEL), so recorded
+    # telemetry labels reflect the provider that actually runs.
+    from app.core.model_config import DEFAULT_MODEL
+
+    return DEFAULT_MODEL
+
+
 def build_learning_record(
     ctx: PipelineContext,
     response: str = "",
@@ -35,16 +43,18 @@ def build_learning_record(
         A populated LearningRecord ready for storage.
     """
     sanitized = sanitize(ctx.question)
+    model = (ctx.trace.model if ctx.trace and ctx.trace.model else None) or _default_model()
     record = LearningRecord(
         session_id=ctx.session_id,
         question=ctx.question,
         normalized_question=sanitized,
+        response=sanitize(response),
         intent=ctx.intent_label if ctx.intent else "unknown",
         matched_rule=ctx.intent.matched_rule if ctx.intent else "",
         intent_confidence=ctx.intent.confidence if ctx.intent else 0.0,
         retriever=ctx.answer_mode_metadata.get("retrieval_method", ""),
         answer_mode=ctx.answer_mode,
-        model="gpt-4o-mini",
+        model=model,
         latency_ms=ctx.trace.total_latency_ms if ctx.trace else 0.0,
         tokens_in=ctx.trace.prompt_tokens if ctx.trace else 0,
         tokens_out=ctx.trace.completion_tokens if ctx.trace else 0,

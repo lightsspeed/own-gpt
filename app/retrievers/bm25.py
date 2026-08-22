@@ -25,6 +25,7 @@ SCHEMA = Schema(
     content=TEXT(stored=True, analyzer=StandardAnalyzer()),
     source=TEXT(stored=True),
     collection=TEXT(stored=True),
+    project_id=TEXT(stored=True),
 )
 
 
@@ -35,6 +36,7 @@ class BM25Result:
     source: str
     collection: str
     score: float  # BM25 score
+    project_id: str = ""
 
 
 class BM25Retriever:
@@ -56,7 +58,7 @@ class BM25Retriever:
 
     # ── Index management ──────────────────────────────────────────────────────
 
-    def add_document(self, chunk_id: str, content: str, source: str = "", collection: str = "") -> None:
+    def add_document(self, chunk_id: str, content: str, source: str = "", collection: str = "", project_id: str = "") -> None:
         """Insert or update a single document in the Whoosh index."""
         writer = self._ix.writer()
         writer.update_document(
@@ -64,11 +66,12 @@ class BM25Retriever:
             content=content,
             source=source,
             collection=collection,
+            project_id=project_id,
         )
         writer.commit()
 
     def add_documents(self, docs: List[dict]) -> None:
-        """Batch insert documents. Each dict must have chunk_id, content, source, collection."""
+        """Batch insert documents. Each dict may have chunk_id, content, source, collection, project_id."""
         writer = self._ix.writer()
         for d in docs:
             writer.update_document(
@@ -76,6 +79,7 @@ class BM25Retriever:
                 content=d["content"],
                 source=d.get("source", ""),
                 collection=d.get("collection", "own_gpt_docs"),
+                project_id=d.get("project_id", ""),
             )
         writer.commit()
 
@@ -113,10 +117,11 @@ class BM25Retriever:
 
     # ── Search ────────────────────────────────────────────────────────────────
 
-    def search(self, query: str, k: int = 20) -> List[BM25Result]:
+    def search(self, query: str, k: int = 20, project_id: Optional[str] = None) -> List[BM25Result]:
         """
         BM25 full-text search. Returns top-k results sorted by BM25 score descending.
         Searches across 'content' and 'source' fields.
+        If project_id is provided, filters results to only matching project_id.
         """
         if not self._ix:
             return []
@@ -126,20 +131,28 @@ class BM25Retriever:
             with self._ix.searcher() as searcher:
                 parser = MultifieldParser(["content", "source"], schema=SCHEMA, group=OrGroup)
                 parsed = parser.parse(query)
-                hits = searcher.search(parsed, limit=k)
+                # If filtering by project, fetch up to k * 5 candidate hits to allow filtering
+                fetch_limit = k * 5 if project_id else k
+                hits = searcher.search(parsed, limit=fetch_limit)
                 for hit in hits:
+                    hit_pid = hit.get("project_id", "")
+                    if project_id and hit_pid != project_id:
+                        continue
                     results.append(BM25Result(
                         chunk_id=hit["chunk_id"],
                         content=hit["content"],
                         source=hit.get("source", ""),
                         collection=hit.get("collection", ""),
                         score=hit.score,
+                        project_id=hit_pid,
                     ))
+                    if len(results) >= k:
+                        break
         except Exception as exc:
             logger.warning("whoosh_search_error query=%r error=%s", query[:60], exc)
         elapsed = round((time.monotonic() - start) * 1000, 2)
         logger.debug(
-            "stage=bm25_search query=%r k=%d hits=%d latency_ms=%.1f",
-            query[:60], k, len(results), elapsed,
+            "stage=bm25_search query=%r k=%d hits=%d latency_ms=%.1f project_id=%s",
+            query[:60], k, len(results), elapsed, project_id,
         )
         return results

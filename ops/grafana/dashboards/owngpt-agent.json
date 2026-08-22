@@ -1,0 +1,255 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Operational dashboard for the agent request/tool subsystem (Phase 3.2 / V4.12). Every panel answers one operational question: A requests by status, B request latency, C token consumption by model, D cost by model, E tool calls by tool/outcome, F tool latency, G tool failures by error code, H tool blocks by reason. Bounded-label metrics only: request statuses follow the V4.12 API contract, tools/models collapse to allowlists plus 'other', and no user/session/request/execution IDs ever appear as labels.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "owngpt_prometheus"
+      },
+      "description": "A. Are agent requests landing and how do they end? Bounded V4.12 statuses only: completed / partial / failed / blocked / cancelled / timed_out. The same statuses appear on the request_completed trace events — Prometheus and the trace can never disagree.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }, "unit": "reqps" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 6, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(owngpt_agent_requests_total[5m]))",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent requests by status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "owngpt_prometheus"
+      },
+      "description": "B. Is the agent getting slower? End-to-end request duration (request start to finalization) at p50/p90/p95. Trend, not absolute value, is the question here.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 0, "lineWidth": 2, "showPoints": "never" }, "unit": "s" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 0 },
+      "id": 2,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(owngpt_agent_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum by (le) (rate(owngpt_agent_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p90",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(owngpt_agent_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "C"
+        }
+      ],
+      "title": "Agent request duration p50/p90/p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "owngpt_prometheus"
+      },
+      "description": "C. Which model is consuming what share of agent tokens? Final per-request totals (pipeline stages plus the graph agent LLM, one shared TokenBudget). Model label is config-allowlisted (plus 'other'), never free-form.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 6, "y": 7 },
+      "id": 3,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(owngpt_agent_request_tokens_total[5m]))",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent LLM tokens by model",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "owngpt_prometheus"
+      },
+      "description": "D. What is the agent estimated cost by model? Governance estimate from the same TokenBudget totals as the API contract (never a billing system). A sudden cost trend signals model drift or runaway token consumption.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }, "unit": "currencyUSD" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 7 },
+      "id": 4,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (model) (rate(owngpt_agent_request_cost_usd_total[5m]))",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent LLM cost by model",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "owngpt_prometheus"
+      },
+      "description": "E. What are tools doing? Tool call throughput by bounded outcome: completed / failed / blocked. Recorded at the single guarded gate (request_tool_execution / execute_approved); approval-pending calls are counted once, with their real terminal outcome.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }, "unit": "reqps" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 6, "y": 14 },
+      "id": 5,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (tool, status) (rate(owngpt_agent_tool_calls_total[5m]))",
+          "legendFormat": "{{tool}} {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent tool calls by tool and outcome",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "owngpt_prometheus"
+      },
+      "description": "F. Are tools getting slower? Executed tool duration at p50/p95 per tool. Sustained drift on one tool points at the upstream service (vector store, web provider), not the agent.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 0, "lineWidth": 2, "showPoints": "never" }, "unit": "s" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 },
+      "id": 6,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, tool) (rate(owngpt_agent_tool_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{tool}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, tool) (rate(owngpt_agent_tool_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{tool}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Agent tool duration p50/p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "owngpt_prometheus"
+      },
+      "description": "G. Are tool executions failing? Failure rate by bounded error code: execution_failed (in-process), sandbox_failed / sandbox_timed_out (post-approval), unregistered_impl. Raw exception text never appears here.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 30, "lineWidth": 1, "showPoints": "never" }, "unit": "reqps" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 6, "y": 21 },
+      "id": 7,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (error_code) (rate(owngpt_agent_tool_failures_total[5m]))",
+          "legendFormat": "{{error_code}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent tool failures by error code",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "owngpt_prometheus"
+      },
+      "description": "H. Why are tools being blocked before execution? Guardrail denials by bounded reason taxonomy (unregistered_tool, deny_listed, fact_too_long, empty_fact, secret_content, session_too_long, invalid_target, invalid_action). A new reason appearing or any sustained rate is actionable.",
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 30, "lineWidth": 1, "showPoints": "never" }, "unit": "reqps" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "id": 8,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(owngpt_agent_tool_blocked_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent tool blocks by reason",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["owngpt", "agent-execution", "v4.12"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]
+  },
+  "timezone": "browser",
+  "title": "OwnGPT Agent Execution",
+  "uid": "owngpt-agent",
+  "version": 1,
+  "weekStart": ""
+}

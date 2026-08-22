@@ -11,6 +11,8 @@ A Finding answers five questions:
 
 from __future__ import annotations
 
+import hashlib
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -162,15 +164,35 @@ class Finding:
     evidence: Evidence = field(default_factory=Evidence)
     recommendation_text: str = ""
     created_at: str = ""
+    signature: str = ""            # stable semantic identity seed for the id
     lineage: Optional[Lineage] = None
 
     def __post_init__(self):
         if not self.id:
-            self.id = f"fi-{uuid.uuid4().hex[:12]}"
+            self.id = self._stable_id()
         if not self.created_at:
             self.created_at = datetime.now(timezone.utc).isoformat()
         if self.lineage is None:
             self.lineage = Lineage(artifact_id=self.id, parent_type=ArtifactType.ANALYTICS_REPORT)
+
+    def _stable_id(self) -> str:
+        """Deterministic content-addressed id.
+
+        Findings describe *repeatable conditions* (a topic that lacks coverage,
+        a calibration bucket that drifts). The same condition recur
+        across recomputes, so the artifact id must be stable for review and
+        lineage workflows to key on it. Generators set `signature` to a
+        canonical seed (topic, bucket, class); if absent we fall back to the
+        category + root cause (less granular but still deterministic).
+        """
+        if self.signature:
+            seed = self.signature
+        else:
+            cat = self.category.value if isinstance(self.category, Enum) else str(self.category)
+            rc = self.root_cause.category.value if hasattr(self.root_cause.category, "value") else str(self.root_cause.category)
+            seed = f"{cat}|{rc}|{self.title}"
+        digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
+        return f"fi-{digest}"
 
     def to_dict(self) -> dict:
         return {
@@ -183,5 +205,6 @@ class Finding:
             "evidence": self.evidence.to_dict(),
             "recommendation_text": self.recommendation_text,
             "created_at": self.created_at,
+            "signature": self.signature,
             "lineage": self.lineage.to_dict() if self.lineage else None,
         }

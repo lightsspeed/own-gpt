@@ -26,14 +26,16 @@ export interface MessageData {
   tool?: ToolCall;
   timestamp?: Date;
   resources?: ResourceItem[];
+  evidence?: any[];  // EvidenceItem[] from V3 Phase 5
   images?: string[];
   feedback?: 'liked' | 'disliked' | null;
-  answerMode?: 'grounded' | 'hybrid' | 'synthesis' | 'no_evidence';
+  answerMode?: 'grounded' | 'hybrid' | 'synthesis' | 'web' | 'no_evidence';
   answerModeMetadata?: {
     chunk_count: number;
     doc_count: number;
     confidence: number;
     retrieval_method: string;
+    retrieved_count?: number;
   };
 }
 
@@ -113,7 +115,7 @@ function MessageActionButton({ icon, label, active, onClick }: {
   );
 }
 
-export const ChatMessage = memo(function ChatMessage({ id, role, content, tool, timestamp, resources, images, feedback, answerMode, answerModeMetadata, onEdit, onFeedback, isStreaming }: ChatMessageProps) {
+export const ChatMessage = memo(function ChatMessage({ id, role, content, tool, timestamp, resources, evidence, images, feedback, answerMode, answerModeMetadata, onEdit, onFeedback, isStreaming }: ChatMessageProps) {
   // Tool event pill – shown inline between messages
   if (role === 'tool_event' && tool) {
     const meta = TOOL_META[tool.name] || {
@@ -250,7 +252,9 @@ export const ChatMessage = memo(function ChatMessage({ id, role, content, tool, 
               chunkCount={answerModeMetadata?.chunk_count}
               docCount={answerModeMetadata?.doc_count}
               confidence={answerModeMetadata?.confidence}
+              retrievedCount={answerModeMetadata?.retrieved_count}
               resources={resources}
+              evidence={evidence}
               isStreaming={isStreaming}
             />
             {/* Answer actions — only after streaming completes */}

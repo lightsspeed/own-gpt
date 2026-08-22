@@ -55,19 +55,21 @@ Return ONLY valid JSON — no markdown, no explanation:
 class QueryRewriter:
     """
     Rewrites and expands user queries for better retrieval.
-    Only runs when intent is KNOWLEDGE or WEB — skipped for all other intents.
+    Only runs when intent is KNOWLEDGE — skipped for all other intents.
     """
 
-    _RETRIEVAL_INTENTS = {Intent.KNOWLEDGE, Intent.WEB}
+    _RETRIEVAL_INTENTS = {Intent.KNOWLEDGE}
 
-    def __init__(self, model_name: str = "gpt-4o-mini") -> None:
+    def __init__(self, model_name: str | None = None) -> None:
+        # None resolves the provider default (LLM_MODEL under Ollama,
+        # DEFAULT_MODEL under OpenAI) via the provider boundary.
         self._model_name = model_name
         self._llm: object | None = None
 
     def _get_llm(self):
         if self._llm is None:
-            from langchain_openai import ChatOpenAI
-            self._llm = ChatOpenAI(model=self._model_name, temperature=0, max_tokens=256)
+            from app.core.llm_provider import build_llm
+            self._llm = build_llm(model=self._model_name, temperature=0, max_tokens=256)
         return self._llm
 
     @traceable(name="query_rewrite", metadata={"stage": 3})
@@ -87,20 +89,31 @@ class QueryRewriter:
         start = time.monotonic()
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        response = self._get_llm().invoke([
-            SystemMessage(content=_SYSTEM_PROMPT),
-            HumanMessage(content=query),
-        ])
-        elapsed = round((time.monotonic() - start) * 1000, 2)
-
-        data = json.loads(response.content.strip())
-        result = RewriteResult(
-            original=query,
-            rewritten=data.get("rewritten", query),
-            expanded=data.get("expanded", []),
-            was_rewritten=True,
-            latency_ms=elapsed,
-        )
+        try:
+            response = self._get_llm().invoke([
+                SystemMessage(content=_SYSTEM_PROMPT),
+                HumanMessage(content=query),
+            ])
+            elapsed = round((time.monotonic() - start) * 1000, 2)
+            data = json.loads(response.content.strip())
+            result = RewriteResult(
+                original=query,
+                rewritten=data.get("rewritten", query),
+                expanded=data.get("expanded", []),
+                was_rewritten=True,
+                latency_ms=elapsed,
+            )
+        except Exception as exc:
+            # Malformed JSON from the LLM (possible with local models) degrades
+            # to a no-op rewrite: retrieval proceeds on the original query.
+            logger.warning("query_rewrite_failed error=%s", exc)
+            result = RewriteResult(
+                original=query,
+                rewritten=query,
+                expanded=[],
+                was_rewritten=False,
+                latency_ms=round((time.monotonic() - start) * 1000, 2),
+            )
 
         logger.info(
             "stage=query_rewrite original=%r rewritten=%r expanded_count=%d latency_ms=%.1f",

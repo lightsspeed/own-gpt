@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: owngpt
+  labels:
+    app.kubernetes.io/name: owngpt
+    app.kubernetes.io/part-of: owngpt-platform

@@ -76,6 +76,12 @@ class ConfigManager:
         if not snapshot:
             logger.warning("Cannot set current to unknown snapshot %s", snapshot_id)
             return False
+        # Clear stale current flags (the pointer is the source of truth; the
+        # flag is a derived presentation value, not artifact history).
+        for other in self.list_snapshots():
+            if other.is_current and other.id != snapshot_id:
+                other.is_current = False
+                self.save_snapshot(other)
         self._write_pointer(snapshot_id)
         snapshot.is_current = True
         self.save_snapshot(snapshot)

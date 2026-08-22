@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OwnLab | Precision Engineering Canvas</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #404040;
+        }
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 24px;
+        }
+        .glass-card {
+            background: rgba(23, 23, 23, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid #262626;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "text-primary": "#F5F5F5",
+                      "on-surface-variant": "#c7c4d7",
+                      "on-tertiary-container": "#452000",
+                      "error": "#ffb4ab",
+                      "on-primary": "#1000a9",
+                      "inverse-surface": "#e4e1ed",
+                      "bg-secondary": "#171717",
+                      "tertiary-container": "#d97721",
+                      "surface-container-high": "#292932",
+                      "bg-tertiary": "#262626",
+                      "inverse-on-surface": "#303038",
+                      "inverse-primary": "#494bd6",
+                      "primary-fixed": "#e1e0ff",
+                      "surface": "#13131b",
+                      "on-tertiary-fixed-variant": "#703700",
+                      "on-secondary": "#003731",
+                      "bg-primary": "#0A0A0A",
+                      "primary-container": "#8083ff",
+                      "surface-variant": "#34343d",
+                      "on-primary-container": "#0d0096",
+                      "secondary": "#4fdbc8",
+                      "primary": "#c0c1ff",
+                      "on-error-container": "#ffdad6",
+                      "tertiary-fixed-dim": "#ffb783",
+                      "secondary-fixed": "#71f8e4",
+                      "on-secondary-fixed": "#00201c",
+                      "error-container": "#93000a",
+                      "ai-presence": "#6366F1",
+                      "surface-container": "#1f1f27",
+                      "surface-container-lowest": "#0d0d15",
+                      "surface-bright": "#393841",
+                      "on-error": "#690005",
+                      "border-subtle": "#262626",
+                      "tertiary-fixed": "#ffdcc5",
+                      "secondary-fixed-dim": "#4fdbc8",
+                      "background": "#13131b",
+                      "slate-gray": "#404040",
+                      "on-tertiary": "#4f2500",
+                      "on-background": "#e4e1ed",
+                      "surface-container-highest": "#34343d",
+                      "surface-container-low": "#1b1b23",
+                      "secondary-container": "#04b4a2",
+                      "on-secondary-container": "#003f38",
+                      "on-primary-fixed-variant": "#2f2ebe",
+                      "primary-fixed-dim": "#c0c1ff",
+                      "outline-variant": "#464554",
+                      "success-teal": "#14B8A6",
+                      "text-secondary": "#A3A3A3",
+                      "tertiary": "#ffb783",
+                      "outline": "#908fa0",
+                      "surface-tint": "#c0c1ff",
+                      "on-secondary-fixed-variant": "#005048",
+                      "on-surface": "#e4e1ed",
+                      "on-primary-fixed": "#07006c",
+                      "surface-dim": "#13131b",
+                      "on-tertiary-fixed": "#301400"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "stack-lg": "24px",
+                      "stack-md": "16px",
+                      "sidebar-width": "280px",
+                      "inset-md": "16px",
+                      "max-content-width": "800px",
+                      "context-panel-width": "400px",
+                      "stack-sm": "8px",
+                      "gutter": "24px"
+              },
+              "fontFamily": {
+                      "headline-md": ["Inter"],
+                      "body-md": ["Inter"],
+                      "label-md": ["Inter"],
+                      "code-md": ["JetBrains Mono"],
+                      "headline-lg": ["Inter"],
+                      "code-sm": ["JetBrains Mono"],
+                      "body-lg": ["Inter"]
+              }
+            },
+          },
+        }
+    </script>
+</head>
+<body class="bg-bg-primary text-text-primary font-body-md selection:bg-ai-presence selection:text-white overflow-hidden">
+<div class="flex h-screen w-full">
+<!-- Sidebar Navigation -->
+<aside class="w-sidebar-width h-screen sticky top-0 left-0 bg-bg-secondary border-r border-border-subtle flex flex-col p-inset-md gap-stack-md z-50">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 bg-ai-presence rounded-lg flex items-center justify-center text-white font-bold">
+<span class="material-symbols-outlined">science</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-text-primary tracking-tight">OwnOps</h1>
+<p class="font-label-md text-label-md text-text-secondary">Platform Engineering</p>
+</div>
+</div>
+<button class="w-full py-3 px-4 bg-ai-presence text-white rounded-lg font-label-md text-label-md font-bold flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined" style="font-variation-settings: 'wght' 600">add</span>
+                New Experiment
+            </button>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface-container-high text-ai-presence font-bold transition-colors" href="#">
+<span class="material-symbols-outlined">science</span>
+<span class="font-body-md text-body-md">OwnLab</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container-low transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">OwnAnalytics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container-low transition-colors" href="#">
+<span class="material-symbols-outlined">folder_open</span>
+<span class="font-body-md text-body-md">OwnArtifacts</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-container-low transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">OwnConfig</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-border-subtle pt-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">menu_book</span>
+<span class="font-label-md text-label-md">Documentation</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:text-text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">support_agent</span>
+<span class="font-label-md text-label-md">Support</span>
+</a>
+<div class="flex items-center gap-3 px-3 py-4 mt-2">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center border border-border-subtle overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a software engineer in a high-tech office environment. The image is captured with shallow depth of field, focusing on the individual's confident expression. The lighting is cold and clinical, typical of a modern server room or advanced lab, with deep blue and purple ambient tones echoing an enterprise tech aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCReiTZh5zYpwxCBlEfEjCb9e6p6FY00YanFiEFUzhsXt63GG_N07_JcgEsl4brZqz-Buw-gzk3WbipzCKp-MZKSAtvkr_qfkPHix3v7VUOj0wnqe4fE2k1ikx2ZYUnP5ZyQjKXWWWWs9Ktq9zJmfIgrue8phBGHCnGDdQriEsCx_OwWqS_AZJ4UpF2WELbFdkHQUgu207LJ1lWnVrDa2nKYwDQ8dTOyMj8gknqWZVbV6FMkQOrvjrpZyK_LMxCNIUquMzKf_J69XM"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-label-md font-bold truncate">Alex Chen</p>
+<p class="text-xs text-text-secondary truncate">Lead Architect</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="flex-1 h-screen overflow-y-auto bg-bg-primary relative">
+<!-- Top Navigation Bar -->
+<header class="h-16 w-full sticky top-0 z-40 bg-bg-primary/80 backdrop-blur-md border-b border-border-subtle flex justify-between items-center px-gutter">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 bg-surface-container rounded-full px-4 py-1.5 border border-border-subtle">
+<span class="material-symbols-outlined text-text-secondary text-[20px]">search</span>
+<input class="bg-transparent border-none p-0 focus:ring-0 text-label-md w-48 text-text-primary" placeholder="Search experiments..." type="text"/>
+</div>
+<nav class="hidden md:flex gap-6">
+<a class="font-label-md text-label-md text-text-primary border-b-2 border-ai-presence pb-1" href="#">Explorer</a>
+<a class="font-label-md text-label-md text-text-secondary hover:text-text-primary transition-colors" href="#">History</a>
+<a class="font-label-md text-label-md text-text-secondary hover:text-text-primary transition-colors" href="#">Compare</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-text-secondary hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined">filter_alt</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined">schedule</span>
+</button>
+<div class="h-6 w-[1px] bg-border-subtle mx-2"></div>
+<button class="px-4 py-1.5 bg-surface-variant text-text-primary rounded-lg font-label-md text-label-md border border-border-subtle hover:bg-surface-container-high transition-colors">Save</button>
+<button class="px-4 py-1.5 bg-ai-presence text-white rounded-lg font-label-md text-label-md font-bold shadow-lg shadow-ai-presence/20 hover:opacity-90 active:scale-95 transition-all">Deploy</button>
+</div>
+</header>
+<!-- Page Content -->
+<div class="p-gutter max-w-[1400px] mx-auto space-y-stack-lg">
+<div class="flex items-end justify-between">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-text-primary tracking-tight">Active Experiments</h2>
+<p class="text-text-secondary font-body-md">Monitoring telemetry and variant performance across 12 active nodes.</p>
+</div>
+<div class="flex gap-3">
+<div class="flex items-center gap-2 bg-surface-container px-3 py-1.5 rounded-lg border border-border-subtle">
+<span class="w-2 h-2 rounded-full bg-success-teal animate-pulse"></span>
+<span class="text-label-md font-bold text-success-teal">8 Running</span>
+</div>
+<div class="flex items-center gap-2 bg-surface-container px-3 py-1.5 rounded-lg border border-border-subtle">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="text-label-md font-bold text-error">1 Failed</span>
+</div>
+</div>
+</div>
+<!-- Experiment Bento Grid -->
+<div class="bento-grid">
+<!-- Card: Running -->
+<div class="glass-card rounded-xl p-inset-md hover:border-ai-presence transition-colors group cursor-pointer relative overflow-hidden">
+<div class="absolute top-0 right-0 p-3">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-ai-presence">open_in_new</span>
+</div>
+<div class="flex items-start gap-4 mb-6">
+<div class="w-12 h-12 bg-surface-container rounded-lg flex items-center justify-center border border-border-subtle">
+<span class="material-symbols-outlined text-ai-presence">analytics</span>
+</div>
+<div>
+<h3 class="font-bold text-lg text-text-primary group-hover:text-ai-presence transition-colors">Latency Optimization X-04</h3>
+<p class="text-xs text-text-secondary font-code-sm">ID: LAB-29402-Q</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-secondary">Status</span>
+<span class="px-2 py-0.5 rounded bg-ai-presence/10 text-ai-presence font-bold text-xs uppercase border border-ai-presence/20">Running</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-secondary">Variants</span>
+<span class="text-text-primary font-bold">Control, Canary-V2</span>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs text-text-secondary">
+<span>Progress</span>
+<span>68%</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-ai-presence h-full rounded-full w-[68%]"></div>
+</div>
+</div>
+<div class="pt-4 border-t border-border-subtle flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-text-secondary">schedule</span>
+<span class="text-xs text-text-secondary">Started 4h ago</span>
+</div>
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-bg-secondary bg-slate-gray"></div>
+<div class="w-6 h-6 rounded-full border-2 border-bg-secondary bg-ai-presence"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card: Completed -->
+<div class="glass-card rounded-xl p-inset-md hover:border-success-teal transition-colors group cursor-pointer">
+<div class="flex items-start gap-4 mb-6">
+<div class="w-12 h-12 bg-surface-container rounded-lg flex items-center justify-center border border-border-subtle">
+<span class="material-symbols-outlined text-success-teal">check_circle</span>
+</div>
+<div>
+<h3 class="font-bold text-lg text-text-primary">Cache Warm-up Phase 2</h3>
+<p class="text-xs text-text-secondary font-code-sm">ID: LAB-18472-A</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-secondary">Status</span>
+<span class="px-2 py-0.5 rounded bg-success-teal/10 text-success-teal font-bold text-xs uppercase border border-success-teal/20">Completed</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-secondary">Variants</span>
+<span class="text-text-primary font-bold">Cold, Pre-warm (10m)</span>
+</div>
+<div class="p-3 bg-surface-container-low rounded-lg border border-border-subtle flex items-center justify-between">
+<div class="text-center flex-1 border-r border-border-subtle">
+<p class="text-[10px] uppercase text-text-secondary">Perf Gain</p>
+<p class="text-success-teal font-bold text-lg">+14.2%</p>
+</div>
+<div class="text-center flex-1">
+<p class="text-[10px] uppercase text-text-secondary">CPU Impact</p>
+<p class="text-text-primary font-bold text-lg">-2.1%</p>
+</div>
+</div>
+<div class="pt-4 border-t border-border-subtle flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-text-secondary">history</span>
+<span class="text-xs text-text-secondary">Duration: 12h 4m</span>
+</div>
+<span class="text-xs text-text-secondary">Oct 24, 2023</span>
+</div>
+</div>
+</div>
+<!-- Card: Failed -->
+<div class="glass-card rounded-xl p-inset-md border-red-500/30 hover:border-red-500 transition-colors group cursor-pointer">
+<div class="flex items-start gap-4 mb-6">
+<div class="w-12 h-12 bg-red-500/10 rounded-lg flex items-center justify-center border border-red-500/20">
+<span class="material-symbols-outlined text-error">error</span>
+</div>
+<div>
+<h3 class="font-bold text-lg text-text-primary">Global DNS Propagation</h3>
+<p class="text-xs text-text-secondary font-code-sm">ID: LAB-00921-F</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-secondary">Status</span>
+<span class="px-2 py-0.5 rounded bg-error/10 text-error font-bold text-xs uppercase border border-error/20">Failed</span>
+</div>
+<div class="p-3 bg-error-container/20 rounded-lg border border-error/20">
+<p class="text-xs text-error font-code-sm leading-relaxed">Critical timeout at Edge Node: SG-01. Simulation halted to prevent cascade.</p>
+</div>
+<div class="pt-4 border-t border-border-subtle flex justify-between items-center">
+<button class="text-xs font-bold text-text-primary hover:underline flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">replay</span> Retry
+                                </button>
+<span class="text-xs text-text-secondary">2h 15m elapsed</span>
+</div>
+</div>
+</div>
+<!-- Card: Draft -->
+<div class="glass-card rounded-xl p-inset-md hover:border-slate-gray transition-colors group cursor-pointer border-dashed">
+<div class="flex items-start gap-4 mb-6">
+<div class="w-12 h-12 bg-surface-container rounded-lg flex items-center justify-center border border-border-subtle">
+<span class="material-symbols-outlined text-text-secondary">edit_note</span>
+</div>
+<div>
+<h3 class="font-bold text-lg text-text-primary">Kubernetes Pod Autoscaling</h3>
+<p class="text-xs text-text-secondary font-code-sm">ID: LAB-XXXXX-D</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-secondary">Status</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-text-secondary font-bold text-xs uppercase border border-border-subtle">Draft</span>
+</div>
+<p class="text-sm text-text-secondary leading-relaxed italic">Testing HPA thresholds with synthetic traffic bursts in us-east-1.</p>
+<div class="pt-4 border-t border-border-subtle flex gap-2">
+<button class="flex-1 py-2 rounded bg-surface-container hover:bg-surface-container-high text-xs font-bold transition-colors">Edit Plan</button>
+<button class="px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high border border-border-subtle transition-colors">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card: Running (Variant) -->
+<div class="glass-card rounded-xl p-inset-md hover:border-ai-presence transition-colors group cursor-pointer relative">
+<div class="flex items-start gap-4 mb-6">
+<div class="w-12 h-12 bg-surface-container rounded-lg flex items-center justify-center border border-border-subtle">
+<span class="material-symbols-outlined text-ai-presence">bolt</span>
+</div>
+<div>
+<h3 class="font-bold text-lg text-text-primary group-hover:text-ai-presence transition-colors">Edge Computing Latency</h3>
+<p class="text-xs text-text-secondary font-code-sm">ID: LAB-31005-E</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-secondary">Status</span>
+<span class="px-2 py-0.5 rounded bg-ai-presence/10 text-ai-presence font-bold text-xs uppercase border border-ai-presence/20">Running</span>
+</div>
+<div class="h-16 w-full bg-surface-container-lowest rounded overflow-hidden flex items-end px-1 gap-0.5 border border-border-subtle">
+<div class="bg-ai-presence/40 w-full h-[20%]"></div>
+<div class="bg-ai-presence/40 w-full h-[30%]"></div>
+<div class="bg-ai-presence/60 w-full h-[45%]"></div>
+<div class="bg-ai-presence/80 w-full h-[60%]"></div>
+<div class="bg-ai-presence w-full h-[75%] animate-pulse"></div>
+<div class="bg-ai-presence/60 w-full h-[40%]"></div>
+<div class="bg-ai-presence/40 w-full h-[30%]"></div>
+<div class="bg-ai-presence/20 w-full h-[20%]"></div>
+</div>
+<div class="pt-4 border-t border-border-subtle flex justify-between items-center">
+<span class="text-xs text-text-secondary">4 nodes active</span>
+<span class="text-xs text-text-secondary">Est. 2h remaining</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Secondary Data Visualization Section -->
+<section class="glass-card rounded-2xl overflow-hidden border border-border-subtle mt-stack-lg">
+<div class="p-inset-md border-b border-border-subtle bg-surface-container/30 flex justify-between items-center">
+<div>
+<h4 class="font-bold text-text-primary">Resource Utilization Over Time</h4>
+<p class="text-xs text-text-secondary">Global cluster impact of all parallel experiments</p>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1 rounded-md bg-surface-container-high text-xs font-bold border border-border-subtle">CPU</button>
+<button class="px-3 py-1 rounded-md text-xs font-bold text-text-secondary hover:bg-surface-container transition-colors">RAM</button>
+<button class="px-3 py-1 rounded-md text-xs font-bold text-text-secondary hover:bg-surface-container transition-colors">Network</button>
+</div>
+</div>
+<div class="h-64 relative bg-surface-container-lowest p-inset-md flex items-end gap-1">
+<!-- Simulated Chart -->
+<div class="absolute inset-0 opacity-10 pointer-events-none">
+
+</div>
+<div class="flex-1 h-[40%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[55%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[70%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[65%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[85%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[60%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[45%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[50%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[75%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[90%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[70%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+<div class="flex-1 h-[55%] bg-ai-presence/20 border-t-2 border-ai-presence rounded-t"></div>
+</div>
+</section>
+</div>
+</main>
+<!-- Context Panel -->
+<aside class="w-context-panel-width h-screen bg-bg-secondary border-l border-border-subtle flex flex-col transition-transform duration-300 ease-in-out shadow-md z-30">
+<header class="p-inset-md border-b border-border-subtle">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h2 class="font-bold text-lg text-text-primary">Resource Details</h2>
+<p class="text-label-md text-text-secondary">Metadata &amp; Relations</p>
+</div>
+<button class="p-1 hover:bg-surface-container rounded-md">
+<span class="material-symbols-outlined text-text-secondary">close</span>
+</button>
+</div>
+<div class="flex gap-4 border-b border-border-subtle">
+<button class="pb-2 px-1 text-ai-presence border-b-2 border-ai-presence font-bold text-sm">Inspector</button>
+<button class="pb-2 px-1 text-text-secondary hover:text-text-primary font-bold text-sm transition-colors">Timeline</button>
+<button class="pb-2 px-1 text-text-secondary hover:text-text-primary font-bold text-sm transition-colors">Links</button>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto p-inset-md space-y-stack-md">
+<div class="bg-surface-container-low rounded-lg border border-border-subtle p-4">
+<h5 class="text-[10px] uppercase text-text-secondary font-bold mb-3 tracking-widest">Environment Metadata</h5>
+<div class="space-y-3">
+<div class="flex justify-between items-center">
+<span class="text-xs text-text-secondary">Provider</span>
+<span class="text-xs font-code-sm">AWS-EKS-01</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-xs text-text-secondary">Region</span>
+<span class="text-xs font-code-sm">us-west-2</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-xs text-text-secondary">Orchestrator</span>
+<span class="text-xs font-code-sm">K8s v1.28.4</span>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<h5 class="text-[10px] uppercase text-text-secondary font-bold tracking-widest">Telemetry Stream</h5>
+<div class="space-y-2">
+<div class="p-2.5 rounded bg-surface-container-lowest border-l-2 border-success-teal flex gap-3">
+<span class="material-symbols-outlined text-success-teal text-sm mt-0.5">info</span>
+<div>
+<p class="text-xs text-text-primary">Deployment successful in <span class="text-success-teal">cluster-omega</span>.</p>
+<p class="text-[10px] text-text-secondary mt-1">14:02:11 UTC</p>
+</div>
+</div>
+<div class="p-2.5 rounded bg-surface-container-lowest border-l-2 border-ai-presence flex gap-3">
+<span class="material-symbols-outlined text-ai-presence text-sm mt-0.5">query_stats</span>
+<div>
+<p class="text-xs text-text-primary">Metric collection initialized for <span class="text-ai-presence">canary-v2</span>.</p>
+<p class="text-[10px] text-text-secondary mt-1">14:02:15 UTC</p>
+</div>
+</div>
+<div class="p-2.5 rounded bg-surface-container-lowest border-l-2 border-tertiary flex gap-3">
+<span class="material-symbols-outlined text-tertiary text-sm mt-0.5">warning</span>
+<div>
+<p class="text-xs text-text-primary">Memory pressure detected on <span class="text-tertiary">node-3</span>. Scaling triggers standby.</p>
+<p class="text-[10px] text-text-secondary mt-1">14:05:22 UTC</p>
+</div>
+</div>
+</div>
+</div>
+<div class="pt-4">
+<div class="w-full aspect-square rounded-xl bg-surface-container relative overflow-hidden border border-border-subtle group">
+<img class="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition-opacity" data-alt="A futuristic 3D architectural visualization of a decentralized data center network. Glowing blue data lines interconnect metallic spherical nodes in a dark, atmospheric void. The style is hyper-detailed technical illustration with shallow depth of field, emphasizing precision engineering and high-end enterprise infrastructure in a dark-mode palette." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDHvccp8VQdDzpUkudwMXqRyUIzfcRMUQkpKZFj15xy69FJQNXeuYO9TlB5hR5DF6DfvVG3jurwcuDgNkAkL3B-1PbCfubEmtH5eROYIyTfS7tWOhOgtwLncA_nNPQ7rSxFQlhZCCFr45QPjEGKxpMSVBDFeU-74NeOetQCQAwRV5u1LBkNvsIA-EIfnt6HMcxFX66q6-xqw7ccoZqr_TW5jjBZ1WJg873QMGJv6bAHg6ehsdOe37krbvixtlEE-2kb09PgjKb8YE"/>
+<div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+<span class="material-symbols-outlined text-4xl text-ai-presence mb-2">hub</span>
+<h6 class="font-bold text-sm">Cluster Topology View</h6>
+<button class="mt-4 px-4 py-2 bg-surface-variant rounded-lg text-xs font-bold border border-border-subtle hover:bg-surface-container-high">Expand Map</button>
+</div>
+</div>
+</div>
+</div>
+<footer class="p-inset-md border-t border-border-subtle bg-surface-container-lowest">
+<button class="w-full py-2.5 bg-surface-variant text-text-primary rounded-lg font-label-md text-label-md border border-border-subtle flex items-center justify-center gap-2 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[20px]">file_download</span>
+                    Export Metadata (JSON)
+                </button>
+</footer>
+</aside>
+</div>
+<!-- Micro-interaction script -->
+<script>
+        document.querySelectorAll('.glass-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.style.transform = 'translateY(-4px)';
+                card.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'translateY(0)';
+            });
+        });
+    </script>
+</body></html>

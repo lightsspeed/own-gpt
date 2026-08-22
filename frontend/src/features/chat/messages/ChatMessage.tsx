@@ -25,6 +25,7 @@ export interface MessageData {
   tool?: ToolCall;
   timestamp?: Date;
   resources?: ResourceItem[];
+  evidence?: any[];  // EvidenceItem[] from V3 Phase 5
   images?: string[];
   feedback?: 'liked' | 'disliked' | null;
   answerMode?: 'grounded' | 'hybrid' | 'synthesis' | 'web' | 'no_evidence';
@@ -33,6 +34,7 @@ export interface MessageData {
     doc_count: number;
     confidence: number;
     retrieval_method: string;
+    retrieved_count?: number;
   };
 }
 
@@ -49,6 +51,7 @@ export const ChatMessage = memo(function ChatMessage({
   tool,
   timestamp,
   resources,
+  evidence,
   images,
   feedback,
   answerMode,
@@ -106,7 +109,9 @@ export const ChatMessage = memo(function ChatMessage({
             chunkCount={answerModeMetadata?.chunk_count}
             docCount={answerModeMetadata?.doc_count}
             confidence={answerModeMetadata?.confidence}
+            retrievedCount={answerModeMetadata?.retrieved_count}
             resources={resources}
+            evidence={evidence}
             isStreaming={isStreaming}
           />
         )}

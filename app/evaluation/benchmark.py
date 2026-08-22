@@ -143,6 +143,33 @@ def _run_single_question(
     return result
 
 
+def run_benchmark_subset(
+    questions: list[BenchmarkQuestion],
+    base_url: str = "http://localhost:8000",
+    timeout: int = 120,
+) -> list[dict]:
+    """Run a bounded subset of benchmark questions sequentially.
+
+    Lightweight public entry used by the automation scheduler for periodic
+    regression checks — no ragas scoring, no reports. Returns raw per-question
+    results for the caller to aggregate and compare against baselines.
+    """
+    results = []
+    for q in questions:
+        try:
+            results.append(_run_single_question(q, base_url, timeout))
+        except Exception as e:  # noqa: BLE001
+            results.append({
+                "id": q.id,
+                "category": q.category,
+                "difficulty": q.difficulty,
+                "question": q.question,
+                "status": "error",
+                "error": f"Unexpected error: {e}",
+            })
+    return results
+
+
 def run_benchmark(
     dataset_name: str,
     base_url: str = "http://localhost:8000",

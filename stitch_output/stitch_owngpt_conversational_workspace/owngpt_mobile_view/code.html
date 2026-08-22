@@ -1,0 +1,275 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>OwnGPT Mobile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-background": "#e4e1ed",
+                        "on-surface": "#e4e1ed",
+                        "primary-fixed": "#e1e0ff",
+                        "error": "#ffb4ab",
+                        "surface-container-lowest": "#0d0d15",
+                        "on-secondary-fixed-variant": "#005048",
+                        "surface-container": "#1f1f27",
+                        "on-tertiary-container": "#452000",
+                        "on-secondary-container": "#003f38",
+                        "on-tertiary": "#4f2500",
+                        "tertiary-fixed": "#ffdcc5",
+                        "on-primary-container": "#0d0096",
+                        "inverse-on-surface": "#303038",
+                        "primary": "#c0c1ff",
+                        "text-primary": "#F5F5F5",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed": "#301400",
+                        "secondary": "#4fdbc8",
+                        "tertiary": "#ffb783",
+                        "surface-container-high": "#292932",
+                        "surface-variant": "#34343d",
+                        "primary-container": "#8083ff",
+                        "bg-tertiary": "#262626",
+                        "surface-container-low": "#1b1b23",
+                        "ai-presence": "#6366F1",
+                        "success-teal": "#14B8A6",
+                        "background": "#13131b",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "secondary-container": "#04b4a2",
+                        "tertiary-container": "#d97721",
+                        "inverse-surface": "#e4e1ed",
+                        "on-error": "#690005",
+                        "inverse-primary": "#494bd6",
+                        "outline": "#908fa0",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "surface-container-highest": "#34343d",
+                        "slate-gray": "#404040",
+                        "on-primary-fixed": "#07006c",
+                        "surface-dim": "#13131b",
+                        "outline-variant": "#464554",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "on-primary": "#1000a9",
+                        "on-secondary-fixed": "#00201c",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "bg-secondary": "#171717",
+                        "secondary-fixed": "#71f8e4",
+                        "on-surface-variant": "#c7c4d7",
+                        "on-secondary": "#003731",
+                        "text-secondary": "#A3A3A3",
+                        "surface": "#13131b",
+                        "border-subtle": "#262626",
+                        "on-error-container": "#ffdad6",
+                        "surface-bright": "#393841",
+                        "surface-tint": "#c0c1ff",
+                        "on-tertiary-fixed-variant": "#703700",
+                        "bg-primary": "#0A0A0A"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "label-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #13131b;
+            color: #e4e1ed;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #464554;
+            border-radius: 10px;
+        }
+        .glass-header {
+            background: rgba(19, 19, 27, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #34343d;
+        }
+        .chat-bubble-ai {
+            background-color: #1f1f27;
+            border: 1px solid #34343d;
+        }
+        .chat-bubble-user {
+            background-color: #8083ff;
+            color: #0d0096;
+        }
+        .chip-active {
+            background-color: #34343d;
+            border: 1px solid #464554;
+            transition: all 0.2s ease;
+        }
+        .chip-active:active {
+            background-color: #464554;
+            transform: scale(0.95);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="flex flex-col h-screen max-w-full overflow-hidden">
+<!-- Top Bar -->
+<header class="glass-header fixed top-0 w-full z-50 flex items-center justify-between px-4 h-16">
+<div class="flex items-center gap-3">
+<button aria-label="Menu" class="p-2 -ml-2 rounded-full hover:bg-surface-variant active:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-on-surface" style="font-size: 24px;">menu</span>
+</button>
+<h1 class="text-headline-md text-on-surface">OwnGPT</h1>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-full border border-outline-variant">
+<div class="w-2 h-2 rounded-full bg-ai-presence animate-pulse"></div>
+<span class="text-label-md text-on-surface-variant uppercase tracking-wider">GPT-4o</span>
+</div>
+</header>
+<!-- Main Chat Thread Area -->
+<main class="flex-1 overflow-y-auto pt-20 pb-40 px-4 custom-scrollbar space-y-8">
+<!-- User Message -->
+<div class="flex flex-col items-end gap-2 max-w-[85%] ml-auto">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-label-md text-outline">You</span>
+<div class="w-6 h-6 rounded-full overflow-hidden border border-outline-variant bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A profile avatar for a modern tech user, featuring a clean minimalist 3D character design against a vibrant purple background. The lighting is soft and global, reflecting a high-end digital lifestyle aesthetic that fits perfectly into a dark-mode UI theme with indigo and slate accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeb20tOIWWq86MF9yaCzdHexMc1ymbQEofzTDgH1iyqUjcySeqdhF0rZj7DhhTlSns56rCHQVd9khwHdHht_4A4eVUo7S8J5z2ESNJLrEsaIkadLgdGhM7Oh4_bn2uQ56xS3nyY3Ga10G6cgU3ff59PRp4qwybSR8W4slhETXwedM2CFXErz4Wf-Tqoai2tJ3K1QWFAJAtKu5dmn6qA5U5zffZCyxGX_OGKhPvj0WVSMsxl9hYiLVc8xhfalj_MA0Lvsg58zqV2xk">
+</div>
+</div>
+<div class="chat-bubble-user px-4 py-3 rounded-2xl rounded-tr-none shadow-sm">
+<p class="text-body-md font-medium">Can you explain the difference between quantum entanglement and superposition in simple terms?</p>
+</div>
+</div>
+<!-- AI Message -->
+<div class="flex flex-col items-start gap-2 max-w-[90%]">
+<div class="flex items-center gap-2 mb-1">
+<div class="w-8 h-8 rounded-full flex items-center justify-center bg-primary-container shadow-lg">
+<span class="material-symbols-outlined text-on-primary-container" style="font-size: 18px; font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<span class="text-label-md text-on-surface-variant">OwnGPT</span>
+</div>
+<div class="chat-bubble-ai p-4 rounded-2xl rounded-tl-none shadow-md">
+<div class="space-y-4 text-body-md text-on-surface leading-relaxed">
+<p>Think of it this way:</p>
+<p><strong class="text-primary">Superposition</strong> is like a spinning coin. Before it lands, it's technically both heads and tails at the same time. In quantum physics, a particle exists in all possible states simultaneously until we measure it.</p>
+<p><strong class="text-secondary">Entanglement</strong> is like having two "magic" coins. If you flip one and it lands on heads, the other coin instantly lands on tails, no matter how far apart they are. They are perfectly linked across space.</p>
+</div>
+<!-- Follow-up Chips -->
+<div class="mt-6 flex flex-wrap gap-2">
+<button class="chip-active px-3 py-2 rounded-lg text-label-md text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" style="font-size: 16px;">psychology</span>
+                        Tell me more about "spooky action"
+                    </button>
+<button class="chip-active px-3 py-2 rounded-lg text-label-md text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary" style="font-size: 16px;">school</span>
+                        Practical applications?
+                    </button>
+<button class="chip-active px-3 py-2 rounded-lg text-label-md text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary" style="font-size: 16px;">history</span>
+                        Who discovered this?
+                    </button>
+</div>
+</div>
+</div>
+<!-- Visual Aid Placeholder (Simulating AI generating an image) -->
+<div class="w-full rounded-xl overflow-hidden border border-outline-variant bg-surface-container-low shadow-lg">
+<div class="h-48 w-full relative">
+<img class="w-full h-full object-cover opacity-80" data-alt="A stylized scientific visualization of quantum entanglement featuring two glowing, interconnected spheres suspended in a dark cosmic void. The spheres are pulsing with ethereal blue and magenta energy, with fine, crystalline threads of light weaving between them. The visual style is sleek, cinematic, and high-fidelity, using deep blacks and neon primary accents consistent with a premium AI interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYx-rT_0J5J23QAqu2sBfa2e2dWBn_wvwLNt9MkT8bREYyKWF-BxazwG8pbZK9ZdCBnsWYS230XQCu3BIdbvjb6NC7jjYo6eGl_Ln1azLM2pMlrT690u39-tyYZWu1-QTuTdsIverHRBSsSLf74IRbTQdf0xOpMeNYB82I5BvlVL_lZb1OGlKhc6z2jqSgDULWz2UB0XjAfGbuE1hHEHu__9lH4qe6Ad4Z2ZfGFUbKbZF0w9l2A9h6FNd3T_5INrK73ufAJ04IjSY">
+<div class="absolute inset-0 bg-gradient-to-t from-background to-transparent opacity-60"></div>
+<div class="absolute bottom-3 left-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" style="font-size: 18px;">auto_awesome</span>
+<span class="text-label-md text-white">Generated visualization</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Composer Area -->
+<footer class="fixed bottom-0 w-full p-4 bg-gradient-to-t from-background via-background/95 to-transparent pb-8">
+<div class="max-w-2xl mx-auto flex flex-col gap-3">
+<!-- Quick Actions Toolbar -->
+<div class="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+<button class="flex-shrink-0 p-2 rounded-lg bg-surface-container-high border border-outline-variant">
+<span class="material-symbols-outlined text-outline" style="font-size: 20px;">image</span>
+</button>
+<button class="flex-shrink-0 p-2 rounded-lg bg-surface-container-high border border-outline-variant">
+<span class="material-symbols-outlined text-outline" style="font-size: 20px;">attach_file</span>
+</button>
+<button class="flex-shrink-0 p-2 rounded-lg bg-surface-container-high border border-outline-variant">
+<span class="material-symbols-outlined text-outline" style="font-size: 20px;">mic</span>
+</button>
+<div class="h-8 w-px bg-outline-variant mx-1"></div>
+<button class="flex-shrink-0 px-3 py-1 rounded-lg bg-surface-container-high border border-outline-variant text-label-md text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-primary" style="font-size: 16px;">code</span>
+                    Code
+                </button>
+<button class="flex-shrink-0 px-3 py-1 rounded-lg bg-surface-container-high border border-outline-variant text-label-md text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-secondary" style="font-size: 16px;">edit</span>
+                    Draft
+                </button>
+</div>
+<!-- Input Container -->
+<div class="relative flex items-end gap-2 bg-surface-container-highest border border-outline-variant rounded-2xl p-2 pl-4 focus-within:ring-2 focus-within:ring-primary/50 transition-all shadow-2xl">
+<textarea class="flex-1 bg-transparent border-none focus:ring-0 text-body-md text-on-surface placeholder:text-outline py-2.5 resize-none max-h-32 custom-scrollbar" oninput="this.style.height = &quot;&quot;;this.style.height = this.scrollHeight + &quot;px&quot;" placeholder="Message OwnGPT..." rows="1"></textarea>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl bg-primary text-on-primary hover:brightness-110 active:scale-95 transition-all shadow-md">
+<span class="material-symbols-outlined" style="font-size: 22px; font-variation-settings: 'FILL' 1;">arrow_upward</span>
+</button>
+</div>
+<!-- Context Hint -->
+<p class="text-center text-[10px] text-outline px-4">
+                OwnGPT can make mistakes. Check important info.
+            </p>
+</div>
+</footer>
+<!-- Atmosphere Overlay (Floating Particles) -->
+<div class="fixed inset-0 pointer-events-none z-[-1] opacity-30">
+<webgl-shader class="w-full h-full" src="{{DATA:ANIMATION:ANIMATION_1}}"></webgl-shader>
+</div>
+<script>
+        // Simple micro-interaction for follow-up chips
+        document.querySelectorAll('.chip-active').forEach(chip => {
+            chip.addEventListener('click', function() {
+                const text = this.innerText.trim();
+                const textarea = document.querySelector('textarea');
+                textarea.value = text;
+                textarea.style.height = textarea.scrollHeight + "px";
+                textarea.focus();
+            });
+        });
+
+        // Handle focus states for mobile keyboard visual adjustments
+        const textarea = document.querySelector('textarea');
+        const footer = document.querySelector('footer');
+        
+        textarea.addEventListener('focus', () => {
+            // Mobile specific logic for keyboard appearance could go here
+            footer.classList.remove('bg-gradient-to-t');
+            footer.classList.add('bg-background');
+        });
+
+        textarea.addEventListener('blur', () => {
+            footer.classList.add('bg-gradient-to-t');
+            footer.classList.remove('bg-background');
+        });
+    </script>
+</body></html>

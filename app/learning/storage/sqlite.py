@@ -50,6 +50,7 @@ class LearningStore:
                     question          TEXT,
                     normalized_question TEXT,
                     question_hash     TEXT,
+                    response          TEXT,
                     intent            TEXT,
                     matched_rule      TEXT,
                     intent_confidence REAL,
@@ -98,6 +99,25 @@ class LearningStore:
                     created_at TEXT DEFAULT (datetime('now')),
                     FOREIGN KEY (record_id) REFERENCES learning_records(record_id)
                 );
+
+                CREATE TABLE IF NOT EXISTS quality_reports (
+                    record_id          TEXT PRIMARY KEY,
+                    session_id         TEXT NOT NULL,
+                    question           TEXT,
+                    answer_mode        TEXT,
+                    citation_valid     INTEGER,
+                    cited              INTEGER DEFAULT 0,
+                    required           INTEGER DEFAULT 0,
+                    unique_chunks      INTEGER DEFAULT 0,
+                    total_uses         INTEGER DEFAULT 0,
+                    warnings           TEXT,
+                    reason             TEXT,
+                    claims_total       INTEGER DEFAULT 0,
+                    claims_supported   INTEGER DEFAULT 0,
+                    claims_unsupported INTEGER DEFAULT 0,
+                    claims             TEXT,
+                    created_at         TEXT DEFAULT (datetime('now'))
+                );
             """)
             # Indexes created separately so old schemas don't block startup
             for idx_sql in [
@@ -122,6 +142,7 @@ class LearningStore:
                     "ADD COLUMN question_hash TEXT",
                     "ADD COLUMN learning_schema_version INTEGER DEFAULT 1",
                     "ADD COLUMN normalized_question TEXT",
+                    "ADD COLUMN response TEXT",
                 ]:
                     try:
                         conn.execute(f"ALTER TABLE learning_records {col_sql}")
@@ -172,6 +193,64 @@ class LearningStore:
                      json.dumps(event.metadata) if event.metadata else None,
                      event.created_at),
                 )
+
+    def save_quality_report(self, report: dict) -> None:
+        """Append an answer-quality report. Idempotent on record_id."""
+        with self._lock:
+            with self._connection() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO quality_reports "
+                    "(record_id, session_id, question, answer_mode, citation_valid, cited, required, "
+                    " unique_chunks, total_uses, warnings, reason, claims_total, claims_supported, "
+                    " claims_unsupported, claims) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        report["record_id"],
+                        report.get("session_id", ""),
+                        report.get("question"),
+                        report.get("answer_mode"),
+                        report.get("citation_valid"),
+                        report.get("cited", 0),
+                        report.get("required", 0),
+                        report.get("unique_chunks", 0),
+                        report.get("total_uses", 0),
+                        json.dumps(report.get("warnings") or []),
+                        report.get("reason"),
+                        report.get("claims_total", 0),
+                        report.get("claims_supported", 0),
+                        report.get("claims_unsupported", 0),
+                        json.dumps(report.get("claims") or []),
+                    ),
+                )
+
+    def list_quality_reports(self, limit: int = 50) -> list[dict]:
+        """List quality reports newest-first. Claims/warnings are JSON-decoded."""
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM quality_reports ORDER BY created_at DESC, record_id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        reports = []
+        for r in rows:
+            d = dict(r)
+            d["warnings"] = json.loads(d["warnings"]) if d.get("warnings") else []
+            d["claims"] = json.loads(d["claims"]) if d.get("claims") else []
+            d["citation_valid"] = bool(d["citation_valid"])
+            reports.append(d)
+        return reports
+
+    def get_quality_report(self, record_id: str) -> Optional[dict]:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM quality_reports WHERE record_id = ?", (record_id,)
+            ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["warnings"] = json.loads(d["warnings"]) if d.get("warnings") else []
+        d["claims"] = json.loads(d["claims"]) if d.get("claims") else []
+        d["citation_valid"] = bool(d["citation_valid"])
+        return d
 
     # ── Query ─────────────────────────────────────────────────────────────
 
@@ -234,6 +313,21 @@ class LearningStore:
                 "SELECT intent, COUNT(*) as cnt FROM learning_records GROUP BY intent ORDER BY cnt DESC"
             ).fetchall()
         return {r["intent"]: r["cnt"] for r in rows}
+
+    def usage_totals(self) -> dict:
+        """Aggregate token usage and record count across the learning ledger."""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(tokens_in), 0)   AS tokens_in, "
+                "       COALESCE(SUM(tokens_out), 0)  AS tokens_out, "
+                "       COUNT(*)                      AS records "
+                "FROM learning_records"
+            ).fetchone()
+        return {
+            "tokens_in": int(row["tokens_in"]),
+            "tokens_out": int(row["tokens_out"]),
+            "records": int(row["records"]),
+        }
 
     # ── Raw SQL for analytics ────────────────────────────────────────────
 

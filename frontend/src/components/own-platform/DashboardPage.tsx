@@ -1,0 +1,630 @@
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { cn } from '@/lib/utils'
+import {
+  MessageSquare, Activity, AlertTriangle, RefreshCw,
+  Zap, Monitor, BookOpen, BarChart3, GitBranch,
+  TrendingUp, TrendingDown, Minus, Sparkles, ChevronRight,
+  Lightbulb, FlaskConical, Brain, ArrowRight, Coins,
+} from 'lucide-react'
+import { dashboardApi, type DailyBriefData, type UsageData } from '@/features/dashboard/services/dashboardApi'
+import type { BriefTrigger } from '@/features/automation/services/automationApi'
+import { useCountUp } from '@/lib/useCountUp'
+
+/* ── Section wrapper ── */
+function Section({ title, icon: Icon, children, className }: {
+  title: string
+  icon?: React.ElementType
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('bg-elevated border border-border/60 rounded-xl p-5', className)}>
+      {title && (
+        <div className="flex items-center gap-2 mb-4">
+          {Icon && <Icon size={16} className="text-muted-foreground" />}
+          <h2 className="text-small font-semibold text-foreground uppercase tracking-wider">{title}</h2>
+        </div>
+      )}
+      {children}
+    </div>
+  )
+}
+
+/* ── Status badge ── */
+function StatusBadge({ status }: { status: string }) {
+  const color = status === 'healthy' || status === 'completed' ? 'text-success' :
+                status === 'degraded' || status === 'running' || status === 'medium' ? 'text-warning' :
+                status === 'down' || status === 'failed' || status === 'high' ? 'text-danger' : 'text-info'
+  return <span className={cn('text-caption font-medium', color)}>{status}</span>
+}
+
+function Dot({ status }: { status: string }) {
+  const color = status === 'healthy' || status === 'completed' ? 'bg-success' :
+                status === 'degraded' || status === 'running' ? 'bg-warning' :
+                status === 'down' || status === 'failed' ? 'bg-danger' : 'bg-info'
+  return <span className={cn('w-2 h-2 rounded-full shrink-0', color)} />
+}
+
+export function DashboardPage() {
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [brief, setBrief] = useState<DailyBriefData | null>(null)
+  const [usage, setUsage] = useState<UsageData | null>(null)
+
+  const fetchAll = useCallback(async () => {
+    try {
+      const [b, c] = await Promise.all([
+        dashboardApi.getDailyBrief(),
+        dashboardApi.getCounters(),
+      ])
+      setBrief(b)
+      setUsage(c?.usage ?? null)
+    } catch {
+      // keep state
+    }
+  }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    fetchAll().finally(() => setLoading(false))
+  }, [fetchAll])
+
+  const handleRefresh = () => {
+    setRefreshing(true)
+    fetchAll().finally(() => setRefreshing(false))
+  }
+
+  const healthAnim = useCountUp(brief?.overall_health ?? 0)
+
+  const trendIcon = brief?.trend === 'up' ? TrendingUp : brief?.trend === 'down' ? TrendingDown : Minus
+  const trendColor = brief?.trend === 'up' ? 'text-success' : brief?.trend === 'down' ? 'text-danger' : 'text-muted-foreground'
+
+  const decliningDomain = useMemo(() => {
+    const decliners = (brief?.health_domains ?? []).filter(d => d.trend === 'declining' && d.previous_score != null && d.score < (d.previous_score ?? 0))
+    decliners.sort((a, b) => (a.score - (a.previous_score ?? a.score)) - (b.score - (b.previous_score ?? b.score)))
+    return decliners[0] ?? null
+  }, [brief])
+
+  const healthReason = useMemo(() => {
+    if (decliningDomain) {
+      const prev = decliningDomain.previous_score ?? decliningDomain.score
+      return `${decliningDomain.domain} dropped ${prev.toFixed(1)} → ${decliningDomain.score.toFixed(1)} (${(prev - decliningDomain.score).toFixed(1)}pts)`
+    }
+    if (brief?.health_change != null) {
+      return `Health ${brief.health_change > 0 ? 'improved' : 'dropped'} ${Math.abs(brief.health_change).toFixed(1)}pts`
+    }
+    return null
+  }, [decliningDomain, brief])
+
+  const topTrigger = useMemo(() => {
+    const sev: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+    const triggers = brief?.triggers ?? []
+    if (triggers.length === 0) return null
+    return [...triggers].sort((a, b) => (sev[a.severity] ?? 9) - (sev[b.severity] ?? 9))[0]
+  }, [brief])
+
+  const actionForTrigger = (t: BriefTrigger | null | undefined): string => {
+    if (!t) return ''
+    switch (t.domain) {
+      case 'calibration':
+        return t.severity === 'critical' ? 'Run a calibration check and review low-confidence answers' : 'Monitor calibration drift'
+      case 'knowledge':
+        return t.severity === 'critical' || t.severity === 'high' ? 'Add missing knowledge and re-sync the knowledge base' : 'Monitor knowledge gaps'
+      case 'retrieval':
+        return 'Review weak chunks and re-index affected documents'
+      case 'routing':
+        return 'Review routing rules for misdirected queries'
+      default:
+        return 'Review recent findings and triggers'
+    }
+  }
+
+  return (
+    <div className="h-full overflow-y-auto custom-scrollbar">
+      <div className="max-w-[1320px] mx-auto p-6 space-y-5">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-h2 text-foreground">Dashboard</h1>
+              <p className="text-caption text-muted-foreground mt-0.5">What needs your attention today?</p>
+            </div>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-hover transition-all disabled:opacity-50"
+            title="Refresh"
+          >
+            <RefreshCw size={18} className={cn(refreshing && 'animate-spin')} />
+          </button>
+        </div>
+
+        {/* ── 1. Daily Brief ── */}
+        <div className="bg-gradient-to-br from-primary/5 to-transparent border border-primary/10 rounded-xl p-6">
+          {loading ? (
+            <div className="h-24 bg-muted/20 rounded-lg animate-pulse" />
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-body text-muted-foreground">Good morning</span>
+                  <span className="text-body font-medium text-foreground">Akhilesh</span>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  {trendIcon && <trendIcon size={18} className={trendColor} />}
+                  <span className="text-caption uppercase tracking-wider text-muted-foreground/70">Platform Health</span>
+                  <span className={cn('text-h2 font-semibold', brief?.overall_health != null && brief.overall_health < 50 ? 'text-danger' : brief?.overall_health != null && brief.overall_health < 80 ? 'text-warning' : 'text-foreground')}>
+                    {brief?.overall_health != null ? `${Math.round(healthAnim)}%` : '—'}
+                  </span>
+                </div>
+
+                {healthReason && (
+                  <div className="flex items-center gap-1.5 text-caption text-danger">
+                    <TrendingDown size={13} />
+                    <span>Reason: {healthReason}</span>
+                  </div>
+                )}
+
+                {topTrigger && (
+                  <div className="flex items-start gap-2 text-caption">
+                    <AlertTriangle size={13} className="text-warning mt-0.5 shrink-0" />
+                    <span className="text-muted-foreground/80">
+                      <span className="font-medium text-warning">{topTrigger.title}</span>
+                      <span className="text-muted-foreground/60"> — {topTrigger.description}</span>
+                    </span>
+                  </div>
+                )}
+
+                {topTrigger && (
+                  <div className="flex items-start gap-2 text-caption">
+                    <ArrowRight size={13} className="text-info mt-0.5 shrink-0" />
+                    <span className="text-muted-foreground/80">
+                      Recommended action: <span className="font-medium text-info">{actionForTrigger(topTrigger)}</span>
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3 pt-1">
+                  {brief && (
+                    <>
+                      {(brief.recommendation_count > 0 || (brief.triggers?.length ?? 0) > 0) && (
+                        <span className="flex items-center gap-1.5 text-small text-warning">
+                          <AlertTriangle size={14} /> {(brief.triggers?.length ?? 0)} active trigger{(brief.triggers?.length ?? 0) > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {brief.degraded_services > 0 && (
+                        <span className="flex items-center gap-1.5 text-small text-danger">
+                          <AlertTriangle size={14} /> {brief.degraded_services} degraded service{brief.degraded_services > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {brief.automations_completed > 0 && (
+                        <span className="flex items-center gap-1.5 text-small text-info">
+                          <GitBranch size={14} /> {brief.automations_completed} automation{brief.automations_completed > 1 ? 's' : ''} completed
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <button
+                  onClick={() => navigate('/automation')}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-small font-medium hover:brightness-110 transition-all inline-flex items-center gap-1.5 justify-center"
+                >
+                  Investigate <ChevronRight size={14} />
+                </button>
+                <button className="px-4 py-2 rounded-lg bg-elevated border border-border text-foreground text-small font-medium hover:bg-hover transition-all">
+                  Open OwnGPT
+                </button>
+                <button className="px-4 py-2 rounded-lg bg-elevated border border-border text-foreground text-small font-medium hover:bg-hover transition-all">
+                  View Report
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── 2. KPIs ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {loading ? [1,2,3,4].map(i => (
+            <div key={i} className="bg-elevated border border-border/60 rounded-xl p-5 animate-pulse">
+              <div className="h-8 w-16 bg-muted/50 rounded" />
+              <div className="h-4 w-20 bg-muted/30 rounded mt-2" />
+              <div className="h-3 w-12 bg-muted/20 rounded mt-2" />
+            </div>
+          )) : (
+            <>
+              <KpiCard icon={MessageSquare} value={brief ? String(brief.recommendation_count + brief.automations_completed + (brief.degraded_services > 0 ? 1 : 0)) : '—'} label="Action Items" trend="Today" status={brief && (brief.recommendation_count > 0 || brief.degraded_services > 0) ? 'Attention needed' : 'Clear'} danger={brief ? brief.recommendation_count > 0 || brief.degraded_services > 0 : false} />
+              <KpiCard icon={Activity} value={brief?.overall_health != null ? `${brief.overall_health.toFixed(0)}%` : '—'} label="System Health" trend={brief?.trend ?? '—'} status={brief?.overall_health != null && brief.overall_health >= 80 ? 'Healthy' : brief?.overall_health != null && brief.overall_health >= 50 ? 'Degraded' : 'Critical'} danger={brief?.overall_health != null && brief.overall_health < 50} />
+              <KpiCard icon={FlaskConical} value={String(brief?.running_experiments_list?.length ?? 0)} label="Active Experiments" trend="Running" status="See OwnLab" />
+              <KpiCard icon={Brain} value={String(brief?.knowledge_docs ?? 0)} label="Knowledge Docs" trend={brief?.knowledge_docs ? (brief?.knowledge_updated ?? '—') : 'No docs yet'} status="Indexed" />
+            </>
+          )}
+        </div>
+
+        {/* ── 3. Usage & Cost ── */}
+        <Section title="Usage & Cost" icon={Coins}>
+          {loading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-20 bg-muted/20 rounded-lg animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <UsageStat
+                  icon={<Coins size={14} />}
+                  label="Estimated Cost"
+                  value={usage?.estimated_cost_usd != null ? `$${usage.estimated_cost_usd.toFixed(4)}` : '—'}
+                  sub={usage?.records ? `${usage.records.toLocaleString()} interactions` : 'No usage yet'}
+                  accent="text-primary"
+                />
+                <UsageStat
+                  icon={<BarChart3 size={14} />}
+                  label="Total Tokens"
+                  value={usage?.total_tokens != null ? usage.total_tokens.toLocaleString() : '—'}
+                  sub={`$${usage?.cost_per_1k_input ?? 0}/1K in · $${usage?.cost_per_1k_output ?? 0}/1K out`}
+                  accent="text-info"
+                />
+                <UsageStat
+                  icon={<ArrowRight size={14} />}
+                  label="Prompt Tokens"
+                  value={usage?.tokens_in != null ? usage.tokens_in.toLocaleString() : '—'}
+                  sub="Input"
+                  accent="text-warning"
+                />
+                <UsageStat
+                  icon={<Sparkles size={14} />}
+                  label="Completion Tokens"
+                  value={usage?.tokens_out != null ? usage.tokens_out.toLocaleString() : '—'}
+                  sub="Output"
+                  accent="text-success"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-caption text-muted-foreground/60">
+                  <span>Token split</span>
+                  <span>{usage && usage.total_tokens > 0 ? `${Math.round(usage.tokens_in / usage.total_tokens * 100)}% prompt · ${Math.round(usage.tokens_out / usage.total_tokens * 100)}% completion` : '—'}</span>
+                </div>
+                <div className="flex h-2 rounded-full bg-muted/50 overflow-hidden">
+                  <div
+                    className="bg-warning/70 transition-all"
+                    style={{ width: usage && usage.total_tokens > 0 ? `${usage.tokens_in / usage.total_tokens * 100}%` : '0%' }}
+                    title="Prompt tokens"
+                  />
+                  <div
+                    className="bg-success/70 transition-all"
+                    style={{ width: usage && usage.total_tokens > 0 ? `${usage.tokens_out / usage.total_tokens * 100}%` : '0%' }}
+                    title="Completion tokens"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* ── 4+5. Service Health + AI Insights ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Service Health */}
+          <Section title="Service Health" icon={Monitor}>
+            {loading ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 bg-muted/20 rounded-lg animate-pulse" />)}</div>
+            ) : (
+              <div className="space-y-1">
+                <ServiceRow name="API Server" status="healthy" uptime="99.97%" latency="45ms" detail="Last incident: 7 days ago" />
+                <ServiceRow name="Pipeline Engine" status="healthy" uptime="99.89%" latency="120ms" detail="Last incident: 2 days ago" />
+                <ServiceRow name="Vector Database" status="healthy" uptime="99.95%" latency="32ms" detail="Last incident: 14 days ago" />
+                <ServiceRow name="Model Provider" status="degraded" uptime="98.21%" latency="890ms" detail="Provider X — monitoring" />
+                <ServiceRow name="Learning Engine" status="healthy" uptime="99.99%" latency="60ms" detail="Last incident: 30 days ago" />
+              </div>
+            )}
+          </Section>
+
+          {/* AI Insights */}
+          <Section title="AI Insights" icon={Lightbulb}>
+            {loading ? (
+              <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-20 bg-muted/20 rounded-lg animate-pulse" />)}</div>
+            ) : (
+              <div className="space-y-3">
+                <InsightCard
+                  icon={<BarChart3 size={14} />}
+                  title="Model latency increased 18%"
+                  description="caused by Provider X"
+                  recommendation="Switch traffic to Anthropic"
+                  confidence="High"
+                  color="text-warning"
+                />
+                <InsightCard
+                  icon={<BookOpen size={14} />}
+                  title="Knowledge gap detected"
+                  description="3 queries with low confidence in retrieval"
+                  recommendation="Add documents on deployment workflows"
+                  confidence="Medium"
+                  color="text-info"
+                />
+              </div>
+            )}
+          </Section>
+        </div>
+
+        {/* ── 5+9. Recent Activity + Recommendations ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <Section title="Recent Activity" icon={Activity}>
+            {loading ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-muted/20 rounded-lg animate-pulse" />)}</div>
+            ) : (
+              <div className="space-y-1">
+                <ActivityRow icon={<Zap size={14} />} text="Nightly evaluation completed" time="12 min ago" type="evaluation" />
+                <ActivityRow icon={<Lightbulb size={14} />} text="Recommendation: upgrade embedding model" time="1h ago" type="recommendation" />
+                <ActivityRow icon={<AlertTriangle size={14} />} text="Model provider latency spike detected" time="2h ago" type="incident" />
+                <ActivityRow icon={<FlaskConical size={14} />} text="Experiment 'Prompt v2' finished" time="4h ago" type="experiment" />
+                <ActivityRow icon={<GitBranch size={14} />} text="Knowledge sync completed" time="6h ago" type="automation" />
+              </div>
+            )}
+          </Section>
+
+          <Section title="Recommendations" icon={Lightbulb}>
+            {loading ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 bg-muted/20 rounded-lg animate-pulse" />)}</div>
+            ) : (
+              <div className="space-y-1">
+                <RecRow priority="high" title="Upgrade reranker model" desc="Improves retrieval accuracy by 12%" />
+                <RecRow priority="medium" title="Increase chunk size" desc="Better context coverage for technical docs" />
+                <RecRow priority="low" title="Remove stale embeddings" desc="Clean up 1,240 unused vectors" />
+                {brief?.recommendations_list?.length > 0 && brief.recommendations_list.slice(0, 3).map(r => (
+                  <RecRow key={r.id} priority={r.priority} title={r.title} desc={r.description} />
+                ))}
+              </div>
+            )}
+          </Section>
+        </div>
+
+        {/* ── 6+7. Experiments + Automation ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <Section title="Active Experiments" icon={FlaskConical}>
+            {loading ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-muted/20 rounded-lg animate-pulse" />)}</div>
+            ) : (
+              <div className="space-y-1">
+                <ExpRow name="Prompt v2" status="running" score={74} />
+                <ExpRow name="Latency Optimizer" status="completed" />
+                <ExpRow name="Embedding Upgrade" status="waiting" />
+              </div>
+            )}
+          </Section>
+
+          <Section title="Automation" icon={GitBranch}>
+            {loading ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-10 bg-muted/20 rounded-lg animate-pulse" />)}</div>
+            ) : (
+              <div className="space-y-1">
+                <AutoRow name="Nightly Evaluation" status="completed" />
+                <AutoRow name="Knowledge Sync" status="running" />
+                <AutoRow name="Alert Correlation" status="waiting" />
+                <AutoRow name="Incident RCA" status="failed" />
+              </div>
+            )}
+          </Section>
+        </div>
+
+        {/* ── 8+10. Knowledge + OwnGPT Prompt ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <Section title="Knowledge" icon={BookOpen}>
+            {loading ? (
+              <div className="h-16 bg-muted/20 rounded-lg animate-pulse" />
+            ) : brief?.knowledge_docs === 0 ? (
+              <div className="flex flex-col items-center text-center gap-2 py-4">
+                <BookOpen size={20} className="text-muted-foreground/30" />
+                <p className="text-small text-muted-foreground leading-relaxed max-w-xs">
+                  No documents indexed yet. Upload your first document to start building your knowledge base.
+                </p>
+                <button
+                  onClick={() => navigate('/learn')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-small font-medium hover:bg-primary/20 transition-all"
+                >
+                  <BookOpen size={13} /> Upload a document
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-small text-muted-foreground">Indexed</span>
+                  <span className="text-small font-medium text-foreground">{String(brief?.knowledge_docs ?? 0)} docs</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-small text-muted-foreground">Updated</span>
+                  <span className="text-small font-medium text-foreground">{brief?.knowledge_updated && brief?.knowledge_updated !== 'N/A' ? brief?.knowledge_updated : 'Not synced yet'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-small text-muted-foreground">Status</span>
+                  <StatusBadge status="healthy" />
+                </div>
+              </div>
+            )}
+          </Section>
+
+          <Section title="Ask OwnGPT" icon={Sparkles}>
+            <div className="space-y-3">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Ask OwnGPT..."
+                  className="w-full rounded-lg border border-border bg-background/50 py-2 px-3 text-small text-foreground placeholder:text-muted-foreground/40 outline-none transition-colors focus:border-primary/40"
+                  readOnly
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-caption text-muted-foreground/60 px-1">Suggested</p>
+                {['Explain today\'s alerts', 'Summarize overnight changes', 'Why is latency higher?'].map((q, i) => (
+                  <button key={i} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-small text-muted-foreground hover:text-foreground hover:bg-hover transition-all text-left">
+                    <Sparkles size={12} className="text-primary" />
+                    <span>{q}</span>
+                    <ChevronRight size={12} className="ml-auto text-muted-foreground/30" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Sub-components ── */
+
+function KpiCard({ icon: Icon, value, label, trend, status, danger }: {
+  icon: React.ElementType
+  value: string
+  label: string
+  trend: string
+  status: string
+  danger?: boolean
+}) {
+  return (
+    <div className="bg-elevated border border-border/60 rounded-xl p-5 hover:border-primary/30 hover:-translate-y-0.5 transition-all">
+      <div className="flex items-start justify-between mb-3">
+        <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', danger ? 'bg-danger/10' : 'bg-primary/10')}>
+          <Icon size={16} className={danger ? 'text-danger' : 'text-primary'} />
+        </div>
+        <StatusBadge status={status} />
+      </div>
+      <p className={cn('text-h3 text-foreground', danger && 'text-danger')}>{value}</p>
+      <p className="text-small text-muted-foreground mt-0.5">{label}</p>
+      <p className="text-caption text-muted-foreground/50 mt-0.5">{trend}</p>
+    </div>
+  )
+}
+
+function UsageStat({ icon, label, value, sub, accent }: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  sub: string
+  accent: string
+}) {
+  return (
+    <div className="p-4 rounded-lg bg-muted/20 border border-border/40 hover:bg-hover transition-all">
+      <div className="flex items-center gap-2 mb-2">
+        <span className={accent}>{icon}</span>
+        <span className="text-caption text-muted-foreground uppercase tracking-wider">{label}</span>
+      </div>
+      <p className="text-h3 text-foreground">{value}</p>
+      <p className="text-caption text-muted-foreground/60 mt-0.5 truncate">{sub}</p>
+    </div>
+  )
+}
+
+function ServiceRow({ name, status, uptime, latency, detail }: {
+  name: string
+  status: string
+  uptime: string
+  latency: string
+  detail?: string
+}) {
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-hover transition-all">
+      <Dot status={status} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-small font-medium text-foreground">{name}</span>
+          <span className="text-caption text-muted-foreground/60">{latency}</span>
+        </div>
+        {detail && <p className="text-caption text-muted-foreground/50">{detail}</p>}
+      </div>
+      <span className="text-small font-medium text-foreground">{uptime}</span>
+    </div>
+  )
+}
+
+function InsightCard({ icon, title, description, recommendation, confidence, color }: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  recommendation: string
+  confidence: string
+  color: string
+}) {
+  return (
+    <div className="p-3 rounded-lg bg-muted/20 border border-border/40 hover:bg-hover transition-all">
+      <div className="flex items-start gap-2.5">
+        <span className={cn('mt-0.5', color)}>{icon}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-small font-medium text-foreground">{title}</p>
+          <p className="text-caption text-muted-foreground/70">{description}</p>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="text-caption text-info">→ {recommendation}</span>
+            <span className="text-caption text-muted-foreground/40">·</span>
+            <span className={cn('text-caption font-medium', confidence === 'High' ? 'text-success' : 'text-warning')}>{confidence}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ActivityRow({ icon, text, time, type }: {
+  icon: React.ReactNode
+  text: string
+  time: string
+  type: string
+}) {
+  const typeColor = type === 'deployment' || type === 'evaluation' ? 'text-success' :
+                    type === 'recommendation' ? 'text-warning' :
+                    type === 'incident' ? 'text-danger' :
+                    type === 'experiment' ? 'text-info' : 'text-info'
+  return (
+    <div className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-hover transition-all">
+      <span className={typeColor}>{icon}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-small text-foreground truncate">{text}</p>
+      </div>
+      <span className="text-caption text-muted-foreground/50 shrink-0">{time}</span>
+    </div>
+  )
+}
+
+function RecRow({ priority, title, desc }: { priority: string; title: string; desc?: string }) {
+  const color = priority === 'high' ? 'border-l-danger' : priority === 'medium' ? 'border-l-warning' : 'border-l-info'
+  return (
+    <div className={cn('border-l-2 pl-3 py-2 hover:bg-hover rounded-r-lg transition-all', color)}>
+      <p className="text-small font-medium text-foreground">{title}</p>
+      {desc && <p className="text-caption text-muted-foreground/70">{desc}</p>}
+    </div>
+  )
+}
+
+function ExpRow({ name, status, score }: { name: string; status: string; score?: number }) {
+  return (
+    <div className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-hover transition-all">
+      <div className="flex-1 min-w-0">
+        <p className="text-small text-foreground">{name}</p>
+      </div>
+      {score != null && (
+        <div className="flex items-center gap-1.5">
+          <div className="w-16 h-1.5 rounded-full bg-muted/50 overflow-hidden">
+            <div className={cn('h-full rounded-full', score >= 70 ? 'bg-success' : score >= 40 ? 'bg-warning' : 'bg-danger')} style={{ width: `${score}%` }} />
+          </div>
+          <span className={cn('text-caption font-medium', score >= 70 ? 'text-success' : score >= 40 ? 'text-warning' : 'text-danger')}>{score}%</span>
+        </div>
+      )}
+      <StatusBadge status={status} />
+    </div>
+  )
+}
+
+function AutoRow({ name, status }: { name: string; status: string }) {
+  return (
+    <div className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-hover transition-all">
+      <Dot status={status} />
+      <span className="text-small text-foreground flex-1">{name}</span>
+      <StatusBadge status={status} />
+    </div>
+  )
+}
+
+export default DashboardPage

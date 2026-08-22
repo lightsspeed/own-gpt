@@ -7,11 +7,95 @@ import logging
 import os
 from typing import Optional
 
-from .models import EvaluationSnapshot
+from .models import EvaluationSnapshot, BenchmarkBaseline
 
 logger = logging.getLogger(__name__)
 
 SNAPSHOT_DIR = "eval_snapshots"
+RUN_DIR = "eval_run_history"
+BASELINE_DIR = "benchmark_baselines"
+
+
+class RunStore:
+    """Persists AutomationRun history as JSON files (append-only, newest-first)."""
+
+    def __init__(self, run_dir: str = RUN_DIR):
+        self._run_dir = run_dir
+        os.makedirs(run_dir, exist_ok=True)
+
+    def record(self, run) -> run.__class__:
+        path = self._path(run.id)
+        with open(path, "w") as f:
+            json.dump(run.to_dict(), f, indent=2, default=str)
+        return run
+
+    def _path(self, run_id: str) -> str:
+        return os.path.join(self._run_dir, f"{run_id}.json")
+
+    def list_all(self, limit: int = 50) -> list:
+        from .models import AutomationRun
+        if not os.path.exists(self._run_dir):
+            return []
+        files = sorted(os.listdir(self._run_dir), key=lambda f: f, reverse=True)[:limit]
+        result = []
+        for fname in files:
+            path = os.path.join(self._run_dir, fname)
+            try:
+                with open(path, "r") as f:
+                    result.append(AutomationRun.from_dict(json.load(f)))
+            except (json.JSONDecodeError, IOError):
+                continue
+        return result
+
+
+class BaselineStore:
+    """Persists BenchmarkBaseline artifacts (append-only, newest first)."""
+
+    def __init__(self, baseline_dir: str = BASELINE_DIR):
+        self._baseline_dir = baseline_dir
+        os.makedirs(baseline_dir, exist_ok=True)
+
+    def save(self, baseline: BenchmarkBaseline) -> BenchmarkBaseline:
+        path = self._path(baseline.id)
+        with open(path, "w") as f:
+            json.dump(baseline.to_dict(), f, indent=2, default=str)
+        return baseline
+
+    def load(self, baseline_id: str) -> Optional[BenchmarkBaseline]:
+        path = self._path(baseline_id)
+        if not os.path.exists(path):
+            return None
+        with open(path, "r") as f:
+            return BenchmarkBaseline(**json.load(f))
+
+    def latest(self, dataset: str) -> Optional[BenchmarkBaseline]:
+        """Most recent baseline for a dataset, or None."""
+        baselines = self.list_all(dataset=dataset, limit=1)
+        return baselines[0] if baselines else None
+
+    def list_all(self, dataset: Optional[str] = None, limit: int = 50) -> list[BenchmarkBaseline]:
+        if not os.path.exists(self._baseline_dir):
+            return []
+        files = sorted(os.listdir(self._baseline_dir), reverse=True)
+        result = []
+        for fname in files:
+            if not fname.endswith(".json"):
+                continue
+            path = os.path.join(self._baseline_dir, fname)
+            try:
+                with open(path, "r") as f:
+                    data = json.load(f)
+                if dataset and data.get("dataset") != dataset:
+                    continue
+                result.append(BenchmarkBaseline(**data))
+                if len(result) >= limit:
+                    break
+            except (json.JSONDecodeError, IOError, TypeError):
+                continue
+        return result
+
+    def _path(self, baseline_id: str) -> str:
+        return os.path.join(self._baseline_dir, f"{baseline_id}.json")
 
 
 class SnapshotStore:

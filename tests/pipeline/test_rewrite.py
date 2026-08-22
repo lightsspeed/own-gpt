@@ -26,13 +26,13 @@ class TestQueryRewriter:
     def test_rewrite_preserves_original(self, rewriter):
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(rewriter, "_get_llm", lambda: _mock_llm())
-            result = rewriter.rewrite("test query", self._intent(Intent.RAG))
+            result = rewriter.rewrite("test query", self._intent(Intent.KNOWLEDGE))
             assert result.original == "test query"
 
     def test_rewrite_sets_latency_on_rag(self, rewriter):
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(rewriter, "_get_llm", lambda: _mock_llm())
-            result = rewriter.rewrite("test query", self._intent(Intent.RAG))
+            result = rewriter.rewrite("test query", self._intent(Intent.KNOWLEDGE))
             assert result.latency_ms >= 0
 
 

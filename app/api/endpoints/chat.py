@@ -8,19 +8,25 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
+from sqlalchemy.orm import Session, sessionmaker
+
 from app.agent.graph import graph, pool
 from app.evaluation.models import build_evaluation_result
-from app.core.database import get_db
-from app.models.chat import ChatSession
-from app.agent.pipeline import RAGPipeline, PipelineContext, load_pipeline_config
-from app.services.vector_store import vector_store
+from app.core.database import get_sync_db
 from app.core.config import settings
+from app.core.model_config import resolve_model, validate_temperature, ModelConfigError
+from app.api.deps import get_current_user, api_error
+from app.services import chat_persistence as store
+from app.services.memory import resolve_owned_project
+from app.agent.pipeline import RAGPipeline, PipelineContext, load_pipeline_config
+from app.agent.pipeline.evidence_builder import _parse_chunk_references, parse_web_results
+from app.agent.pipeline.source_validator import SourceValidator
+from app.agent.pipeline.markdown_integrity import normalize_markdown
+from app.services.vector_store import vector_store, embeddings as _embeddings
 from app.learning.telemetry.collector import learning_collector
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
-from datetime import datetime
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from datetime import datetime
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -42,13 +48,14 @@ _pipeline = RAGPipeline(
     bm25_retriever=_bm25,
     redis_url=settings.REDIS_URL,
     config=_pipeline_config,
+    embed_fn=_embeddings.embed_documents,
 )
 
 
 def _count_tokens(text: str) -> int:
-    import tiktoken
     try:
-        enc = tiktoken.encoding_for_model("gpt-4o-mini")
+        import tiktoken
+        enc = tiktoken.get_encoding("cl100k_base")
         return len(enc.encode(text))
     except Exception:
         return len(text) // 4
@@ -57,7 +64,13 @@ def _count_tokens(text: str) -> int:
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    model: Optional[str] = None
+    temperature: Optional[float] = None
+    request_id: Optional[str] = None
     system_prompt: Optional[str] = None
+    active_tools: Optional[dict[str, bool]] = None
+    document: Optional[str] = None
+    project_id: Optional[str] = None
 
 
 class ResourceItem(BaseModel):
@@ -65,6 +78,12 @@ class ResourceItem(BaseModel):
     title: str
     url: Optional[str] = None
     snippet: Optional[str] = None
+    document_id: Optional[str] = None
+    chunk_index: Optional[int] = None
+    page: Optional[int] = None
+    section: Optional[str] = None
+    confidence_label: Optional[str] = None
+    citation_index: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
@@ -72,12 +91,15 @@ class ChatResponse(BaseModel):
     response: str
     resources: List[ResourceItem] = []
     answer_mode: str = "grounded"
+    record_id: str = ""
 
 
 class HistoryMessage(BaseModel):
     role: str
     content: str
     resources: List[ResourceItem] = []
+    model: Optional[str] = None
+    status: str = "completed"
 
 
 class HistoryResponse(BaseModel):
@@ -89,6 +111,8 @@ class SessionListItem(BaseModel):
     id: str
     title: str
     is_pinned: bool = False
+    selected_model: Optional[str] = None
+    project_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -96,14 +120,40 @@ class SessionListItem(BaseModel):
 class SessionUpdateRequest(BaseModel):
     title: Optional[str] = None
     is_pinned: Optional[bool] = None
+    project_id: Optional[str] = None
 
 
 class SessionListResponse(BaseModel):
     sessions: List[SessionListItem]
 
 
+class SearchResultItem(BaseModel):
+    session_id: str
+    session_title: str
+    match_type: str  # 'title' | 'message'
+    preview: str
+    timestamp: datetime
+
+
+class SearchResponse(BaseModel):
+    query: str
+    results: List[SearchResultItem]
+    total: int
+
+
+search_logger = logging.getLogger("search")
+
+
 def _flatten_content(content) -> str:
-    """Convert structured content (list of content blocks) to plain text."""
+    """Convert structured content (list of content blocks) to plain text.
+
+    Phase 3.3: text blocks are concatenated byte-for-byte. Provider deltas
+    (e.g. Gemini-3) arrive as lists of `{"type": "text", "text": token}`
+    blocks whose leading/trailing whitespace — the normal token boundaries
+    between headings, paragraphs, words, and code lines — must be preserved.
+    Stripping or dropping whitespace-only blocks (the previous behavior)
+    glued headings/prose, words, and YAML lines together.
+    """
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -118,39 +168,8 @@ def _flatten_content(content) -> str:
                     parts.append(str(block))
             else:
                 parts.append(str(block))
-        return "\n".join(p.strip() for p in parts if p.strip())
+        return "".join(parts)
     return str(content)
-
-
-def _extract_resources(messages_subset) -> List[ResourceItem]:
-    resources = []
-    seen = set()
-    for msg in messages_subset:
-        if type(msg).__name__ == "ToolMessage":
-            content = str(msg.content)
-            parts = re.split(r"---|\n\n", content)
-            for part in parts:
-                match = re.search(r"Source:\s*([^\n]+)", part)
-                if match:
-                    title = match.group(1).strip()
-                    if title in seen:
-                        continue
-                    seen.add(title)
-                    snippet_lines = []
-                    for line in part.split("\n"):
-                        clean = line.strip()
-                        if clean and not clean.startswith("Source:") and not clean.startswith("Found the following") and not clean.startswith("Web search results:"):
-                            clean = re.sub(r"\*\*|#", "", clean)
-                            snippet_lines.append(clean)
-                    snippet = " ".join(snippet_lines)[:180]
-                    if len(snippet) >= 180:
-                        snippet += "..."
-
-                    if title.startswith("http://") or title.startswith("https://"):
-                        resources.append(ResourceItem(type="web", title=title, url=title, snippet=snippet))
-                    else:
-                        resources.append(ResourceItem(type="file", title=title, snippet=snippet))
-    return resources
 
 
 def _extract_tool_names(messages_subset) -> List[str]:
@@ -164,9 +183,46 @@ def _extract_tool_names(messages_subset) -> List[str]:
     return tools_used
 
 
+def _web_candidates_from_context(ctx) -> list:
+    """Extract structured web citations from the pipeline context.
+
+    Web tool results are stored verbatim on ctx.context.sources with
+    source_type="web" (their content is the raw tool output, e.g.
+    "Web Search Results for 'query': [1] Title: ... URL: ..."). We parse
+    that output back into structural WebCandidates for the evidence builder.
+    """
+    try:
+        results = []
+        for src in getattr(getattr(ctx, "context", None), "sources", []) or []:
+            if getattr(src, "source_type", None) == "web":
+                results.extend(parse_web_results(getattr(src, "content", "")))
+        return results
+    except Exception:
+        return []
+
+
+def _agent_usage_metadata(messages) -> list:
+    """Collect usage_metadata dicts from this run's agent AIMessages.
+
+    The graph agent node returns the raw provider response (which carries
+    usage_metadata) directly into the message history. Only THIS run's
+    messages are scanned — never checkpoint history — so prior turns never
+    double-count cost. Missing/malformed usage degrades to no capture.
+    """
+    usage = []
+    for m in messages or []:
+        meta = getattr(m, "usage_metadata", None)
+        if isinstance(meta, dict) and meta:
+            usage.append(meta)
+    return usage
+
+
 async def _generate_session_title(message: str) -> str:
     try:
-        title_model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        from app.core.llm_provider import build_llm
+        # Provider-resolved default: build_llm(model=None) resolves the
+        # configured provider's default model — never a hardcoded OpenAI name.
+        title_model = build_llm(model=None, temperature=0)
         res = await title_model.ainvoke([
             SystemMessage(content="Summarize the user's query in 3 to 5 words as a conversation title. Output ONLY the title, no punctuation, no quotes, no extra text."),
             HumanMessage(content=message)
@@ -178,13 +234,36 @@ async def _generate_session_title(message: str) -> str:
         return message[:30] + "..." if len(message) > 30 else message
 
 
-def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] = None) -> PipelineContext:
-    """Run the pre-processing pipeline. Returns context with intent, route, context_text."""
-    return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode)
+def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] = None, document: Optional[str] = None, project_id: Optional[str] = None) -> PipelineContext:
+    """Run the pre-processing pipeline. Returns context with intent, route, context_text.
+
+    The single request_completed is deferred to the API layer AFTER the
+    LangGraph agent runs, so its LLM usage is included in the final cost.
+    """
+    return _pipeline.process(question=message, session_id=session_id, retriever_mode=retriever_mode, filename=document, project_id=project_id, defer_request_completed=True)
 
 
-def _post_process(ctx: PipelineContext, response: str, new_messages: list) -> None:
-    """Validate response, store trace, and record telemetry."""
+def _bind_created_conversation(db: Session, user: User, conv, project_id: Optional[str]) -> None:
+    """Bind a freshly created conversation to an owned project.
+
+    Only honored at creation: an existing conversation keeps its own scope
+    (the frontend uses a dedicated session per project, so this is purely a
+    creation-time binding; later rebinds go through PATCH /chat/sessions).
+    """
+    if not project_id:
+        return
+    try:
+        resolve_owned_project(db, project_id, user.id)
+    except ValueError:
+        raise api_error(404, "project_not_found", "Project not found")
+    store.update_conversation(db, conv, project_id=project_id)
+
+
+def _post_process(ctx: PipelineContext, response: str, new_messages: list, model: str = "", temperature: float = 0.0) -> str:
+    """Validate response, store trace, and record telemetry. Returns the learning record_id."""
+    if ctx.trace:
+        ctx.trace.model = model
+        ctx.trace.temperature = temperature
     ctx.trace.memory_used = True  # memory is always checked in call_model
     ctx.trace.tools_used = _extract_tool_names(new_messages)
     ctx.trace.prompt_tokens = _count_tokens(ctx.question)
@@ -193,44 +272,127 @@ def _post_process(ctx: PipelineContext, response: str, new_messages: list) -> No
     _pipeline.validate_response(question=ctx.question, response=response, ctx=ctx)
 
     # Record learning telemetry (fire-and-forget, never blocks the response)
-    learning_collector.record(ctx, response)
+    return learning_collector.record(ctx, response)
+
+
+def _persist_quality(session_id: str, question: str, answer_mode: str, validation_result, claim_data: list[dict], record_id: str) -> None:
+    """Persist citation + grounding validation as an answer-quality report."""
+    try:
+        supported = sum(1 for c in claim_data if c.get("supported"))
+        learning_collector.store.save_quality_report({
+            "record_id": record_id,
+            "session_id": session_id,
+            "question": question[:500],
+            "answer_mode": answer_mode,
+            "citation_valid": validation_result.valid,
+            "cited": validation_result.cited_count,
+            "required": validation_result.required_count,
+            "unique_chunks": validation_result.unique_chunks_cited,
+            "total_uses": validation_result.total_citation_uses,
+            "warnings": validation_result.warnings,
+            "reason": validation_result.reason,
+            "claims_total": len(claim_data),
+            "claims_supported": supported,
+            "claims_unsupported": len(claim_data) - supported,
+            "claims": claim_data,
+        })
+    except Exception as exc:
+        logger.warning("quality_persist_failed error=%s", exc)
+
+
+def _resolve_generation_params(request: ChatRequest) -> tuple[str, float]:
+    """Validate model + temperature against the server allowlist."""
+    try:
+        model = resolve_model(request.model)
+        temperature = validate_temperature(request.temperature)
+        return model, temperature
+    except ModelConfigError as e:
+        logger.error(f"DEBUG _resolve_generation_params failed: model={request.model!r}, temp={request.temperature!r}, error={e}")
+        raise api_error(400, "invalid_generation_config", str(e))
+
+
+def _load_conversation(db: Session, user: User, session_id: str, require: bool = True):
+    """Owned conversation lookup. 404 for both missing and foreign
+    conversations — never reveal that a conversation exists."""
+    conv = store.get_conversation(db, session_id, user.id)
+    if conv is None and require:
+        raise api_error(404, "conversation_not_found", "Conversation not found")
+    return conv
+
+
+def _checkpoint_len(existing_state) -> int:
+    return len(existing_state.values.get("messages", [])) if existing_state and existing_state.values else 0
+
+
+def _checkpoint_messages(existing_state):
+    if existing_state and existing_state.values:
+        return existing_state.values.get("messages", [])
+    return []
+
+
+def _ensure_backfilled(db: Session, conv, checkpoint_messages) -> None:
+    """Idempotently backfill legacy conversations from checkpoint state."""
+    if not checkpoint_messages:
+        return
+    try:
+        store.backfill_messages_from_checkpoint(db, conv, checkpoint_messages)
+    except Exception as exc:
+        logger.warning("backfill_failed conversation=%s error=%s", conv.id, exc)
 
 
 # ---------------------------------------------------------------------------
-# POST /chat  – send a message; the checkpointer handles multi-turn context
+# POST /chat  – send a message (non-streaming); app DB is the chat history
 # ---------------------------------------------------------------------------
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat_endpoint(
+    request: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
+    model, temperature = _resolve_generation_params(request)
     try:
         config = {"configurable": {"thread_id": request.session_id}}
-        existing_state = graph.get_state(config)
-        existing_len = len(existing_state.values.get("messages", [])) if existing_state and existing_state.values else 0
+        existing_state = await asyncio.to_thread(graph.get_state, config)
+        existing_len = _checkpoint_len(existing_state)
 
-        # Upsert session
-        stmt = select(ChatSession).where(ChatSession.id == request.session_id)
-        res = await db.execute(stmt)
-        session = res.scalar_one_or_none()
-
-        if session is None:
+        # Conversation (owned) — create if missing
+        conv = _load_conversation(db, user, request.session_id, require=False)
+        if conv is None:
+            if store.get_conversation_any_owner(db, request.session_id) is not None:
+                raise api_error(404, "not_found", "Session not found")
             title = await _generate_session_title(request.message)
-            session = ChatSession(id=request.session_id, title=title)
-            db.add(session)
-            await db.commit()
+            conv = store.create_conversation(db, user, request.session_id, title=title, selected_model=model)
+            _bind_created_conversation(db, user, conv, request.project_id)
         else:
-            session.updated_at = datetime.utcnow()
-            await db.commit()
+            if conv.selected_model != model:
+                store.update_conversation(db, conv, selected_model=model)
+            store.touch_conversation(db, conv)
 
-        # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
-        ctx = _run_pipeline(request.message, request.session_id)
+        _ensure_backfilled(db, conv, _checkpoint_messages(existing_state))
+
+        # Idempotency: reject duplicate logical requests before any work
+        if request.request_id and store.get_user_message_by_request_id(db, conv.id, request.request_id):
+            raise api_error(409, "duplicate_request", "A message with this request_id already exists")
+
+        # Persist the user message BEFORE graph execution
+        user_msg = store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
+
+        # Stage 1-7: Run pre-processing pipeline
+        ctx = _run_pipeline(request.message, request.session_id, document=request.document, project_id=conv.project_id)
 
         # Check if we should short-circuit with clarification
-        if ctx.confidence and ctx.confidence.decision == "clarification":
-            response = _pipeline.clarification_message()
+        if ctx.confidence and ctx.confidence.decision == "clarification" and not request.document:
+            if not ctx.ranked_chunks:
+                response = _pipeline.kb_not_covered_message()
+            else:
+                response = _pipeline.clarification_message()
             if ctx.trace:
                 ctx.trace.final_response_len = len(response)
                 ctx.trace.total_latency_ms = 0.0
             if _pipeline_config.get("trace_enabled", True):
                 _pipeline.tracer.store(ctx.trace)
+            _pipeline.finalize_trace(ctx)
+            store.persist_assistant_message(db, conv, response, model, status=store.MESSAGE_STATUS_COMPLETED)
             return ChatResponse(
                 session_id=request.session_id,
                 response=response,
@@ -242,197 +404,428 @@ async def chat_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)
         initial_state = {
             "messages": [HumanMessage(content=request.message)],
             "system_prompt": request.system_prompt or "",
+            "answer_mode_directive": ctx.source_policy.contract.system_directive if ctx.source_policy else "",
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
+            "answer_mode": ctx.answer_mode,
+            "session_id": request.session_id,
+            "user_id": user.id,
+            "project_id": conv.project_id or "",
+            "model": model,
+            "temperature": temperature,
         }
 
-        final_state = graph.invoke(initial_state, config=config)
+        final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
 
         new_messages = final_state["messages"][existing_len:]
         last_message = final_state["messages"][-1]
         response = last_message.content
+        if not isinstance(response, str):
+            response = _flatten_content(response)
+        response = normalize_markdown(response)
 
-        # Filter resources based on answer mode
-        if ctx.answer_mode in ("grounded", "hybrid"):
-            resources = _extract_resources(new_messages)
-        elif ctx.answer_mode == "web":
-            resources = [r for r in _extract_resources(new_messages) if r.type == "web"]
-        else:
-            resources = []
+        # V4.9: capture the agent LLM usage from this run's messages into the
+        # shared request TokenBudget (same accounting executor uses).
+        for meta in _agent_usage_metadata(new_messages):
+            _pipeline.record_agent_usage(ctx, meta, fallback_model=model)
+
+        # Filter resources based on answer mode and evidence builder
+        evidence_result = _pipeline._evidence_builder.build(
+            response_text=response,
+            ranked_chunks=ctx.ranked_chunks,
+            source_policy=ctx.source_policy,
+            answer_mode=ctx.answer_mode,
+            answer_mode_metadata=ctx.answer_mode_metadata,
+            web_candidates=_web_candidates_from_context(ctx),
+        )
+        resources = [
+            ResourceItem(
+                type=e.source_type,
+                title=e.title,
+                url=e.url,
+                snippet=e.chunk[:180] if e.chunk else None,
+                document_id=e.document_id,
+                chunk_index=e.chunk_index,
+                page=e.page,
+                section=e.section,
+                confidence_label=e.confidence_label.value if e.confidence_label else None,
+                citation_index=e.citation_index,
+            )
+            for e in evidence_result.evidence
+        ]
+
+        # Citation contract check
+        ref_indices = _parse_chunk_references(response)
+        validator = SourceValidator()
+        validation_result = validator.validate(
+            ref_indices=ref_indices,
+            total_chunks=len(ctx.ranked_chunks),
+            mode=ctx.source_policy,
+        )
+        logger.info(
+            "citation_check valid=%s cited=%d required=%d reason=%s",
+            validation_result.valid,
+            validation_result.cited_count,
+            validation_result.required_count,
+            validation_result.reason,
+        )
+
+        # Grounding validation (claim-level)
+        claim_data: list[dict] = []
+        if ctx.ranked_chunks and ctx.source_policy and ctx.source_policy.contract.requires_evidence:
+            grounding = _pipeline.run_grounding(response, ctx)
+            for v in grounding.validations:
+                claim_data.append({
+                    "id": v.claim.id,
+                    "text": v.claim.text,
+                    "supported": v.supported,
+                    "best_score": v.best_score,
+                    "threshold": v.threshold,
+                    "best_chunk_idx": v.best_chunk_idx,
+                    "document": v.document_name,
+                })
+            if not grounding.all_supported:
+                logger.warning(
+                    "grounding_unsupported session_id=%s unsupported=%d total=%d threshold=%.2f",
+                    request.session_id,
+                    grounding.unsupported_count,
+                    grounding.total_count,
+                    grounding.validations[0].threshold if grounding.validations else 0,
+                )
 
         # ── Stages 8-9: Validate response + store trace ───────────────────────
-        _post_process(ctx, response, new_messages)
+        record_id = _post_process(ctx, response, new_messages, model=model, temperature=temperature)
+        if record_id:
+            _persist_quality(
+                session_id=request.session_id,
+                question=request.message,
+                answer_mode=ctx.answer_mode,
+                validation_result=validation_result,
+                claim_data=claim_data,
+                record_id=record_id,
+            )
+
+        # Persist the completed assistant message (exactly once, final content)
+        store.persist_assistant_message(db, conv, response, model, status=store.MESSAGE_STATUS_COMPLETED, resources=resources)
+
+        # Single complete request_completed AFTER the agent LLM ran (includes
+        # agent usage already recorded into the shared TokenBudget above).
+        _pipeline.finalize_trace(ctx)
+
+        # Detached memory extraction — fire-and-forget, never on the request path
+        from app.learning.extraction.extractor import schedule_extraction
+        schedule_extraction(request.session_id, user.id, conv.project_id, user_msg.id)
 
         return ChatResponse(
             session_id=request.session_id,
             response=response,
             resources=resources,
             answer_mode=ctx.answer_mode,
+            record_id=record_id,
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Chat endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        from app.core.llm_provider import classify_provider_error
+        info = classify_provider_error(e)
+        logger.error(
+            "Chat endpoint error: code=%s retryable=%s error=%s\n%s",
+            info.code, info.retryable, str(e), traceback.format_exc(),
+        )
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/sessions  – list all chat sessions
+# GET /chat/sessions  – list the CURRENT user's conversations
 # ---------------------------------------------------------------------------
 @router.get("/chat/sessions", response_model=SessionListResponse)
-async def list_sessions(db: AsyncSession = Depends(get_db)):
+async def list_sessions(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
-        stmt = select(ChatSession).order_by(ChatSession.is_pinned.desc(), ChatSession.updated_at.desc())
-        res = await db.execute(stmt)
-        sessions = res.scalars().all()
+        sessions = store.list_conversations(db, user)
         return SessionListResponse(
             sessions=[
                 SessionListItem(
                     id=s.id,
                     title=s.title,
                     is_pinned=s.is_pinned,
+                    selected_model=s.selected_model,
+                    project_id=s.project_id,
                     created_at=s.created_at,
-                    updated_at=s.updated_at
+                    updated_at=s.updated_at,
                 ) for s in sessions
             ]
         )
     except Exception as e:
         logger.error(f"Failed to list sessions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# PATCH /chat/sessions/{session_id}  – update title / pin state
+# GET /chat/search  – search titles + message content, scoped to the user
+# ---------------------------------------------------------------------------
+@router.get("/chat/search", response_model=SearchResponse)
+async def search_conversations(
+    q: str = "",
+    type: str = "all",
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
+    try:
+        query = q.strip()
+        if not query:
+            return SearchResponse(query="", results=[], total=0)
+
+        results: List[SearchResultItem] = []
+
+        # Search session titles (owned only)
+        convs = store.list_conversations(db, user, limit=100)
+        for s in convs:
+            if query.lower() in (s.title or "").lower():
+                preview = (s.title or "")[:120]
+                idx = preview.lower().index(query.lower())
+                start = max(0, idx - 30)
+                end = min(len(preview), idx + len(query) + 30)
+                preview = ("…" if start > 0 else "") + preview[start:end] + ("…" if end < len(preview) else "")
+                results.append(SearchResultItem(
+                    session_id=s.id,
+                    session_title=s.title,
+                    match_type="title",
+                    preview=preview,
+                    timestamp=s.updated_at or s.created_at,
+                ))
+                if len(results) >= limit:
+                    break
+
+        # Search message content via the application chat database — never
+        # by parsing LangGraph checkpoint blobs.
+        if len(results) < limit:
+            for msg in store.search_messages(db, user, query, limit=limit * 2):
+                if len(results) >= limit:
+                    break
+                if any(r.session_id == msg.session_id for r in results):
+                    continue
+                conv = next((c for c in convs if c.id == msg.session_id), None)
+                if conv is None:
+                    continue
+                content = msg.content or ""
+                if query.lower() in content.lower():
+                    idx = content.lower().index(query.lower())
+                    start = max(0, idx - 60)
+                    end = min(len(content), idx + len(query) + 60)
+                    preview = ("…" if start > 0 else "") + content[start:end] + ("…" if end < len(content) else "")
+                    results.append(SearchResultItem(
+                        session_id=msg.session_id,
+                        session_title=conv.title,
+                        match_type="message",
+                        preview=preview,
+                        timestamp=msg.created_at or conv.updated_at or conv.created_at,
+                    ))
+
+        search_logger.info("search query=%s hits=%d", query, len(results))
+        return SearchResponse(query=query, results=results[:limit], total=len(results))
+    except Exception as e:
+        logger.error("Search endpoint error: %s\n%s", str(e), traceback.format_exc())
+        raise api_error(500, "internal_error", "An internal error occurred")
+
+
+# ---------------------------------------------------------------------------
+# PATCH /chat/sessions/{session_id}  – update title / pin state (owned only)
 # ---------------------------------------------------------------------------
 @router.patch("/chat/sessions/{session_id}", response_model=SessionListItem)
-async def update_session(session_id: str, request: SessionUpdateRequest, db: AsyncSession = Depends(get_db)):
+async def update_session(
+    session_id: str,
+    request: SessionUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
-        stmt = select(ChatSession).where(ChatSession.id == session_id)
-        res = await db.execute(stmt)
-        session = res.scalar_one_or_none()
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        if request.title is not None:
-            session.title = request.title
-        if request.is_pinned is not None:
-            session.is_pinned = request.is_pinned
-
-        session.updated_at = datetime.utcnow()
-        await db.commit()
-        await db.refresh(session)
-
+        conv = _load_conversation(db, user, session_id)
+        body = request.model_dump(exclude_unset=True)
+        if "project_id" in body:
+            # Ownership chain: the project must belong to the requesting
+            # user; the FK proves existence, not ownership.
+            try:
+                from app.services.memory import resolve_owned_project
+                resolve_owned_project(db, body["project_id"], user.id)
+            except ValueError:
+                raise api_error(404, "project_not_found", "Project not found")
+            store.update_conversation(db, conv, project_id=body["project_id"])
+        store.update_conversation(db, conv, title=request.title, is_pinned=request.is_pinned)
         return SessionListItem(
-            id=session.id,
-            title=session.title,
-            is_pinned=session.is_pinned,
-            created_at=session.created_at,
-            updated_at=session.updated_at
+            id=conv.id,
+            title=conv.title,
+            is_pinned=conv.is_pinned,
+            selected_model=conv.selected_model,
+            project_id=conv.project_id,
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to update session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# GET /chat/{session_id}/history  – load past messages
+# GET /chat/{session_id}/history  – load messages from application persistence
 # ---------------------------------------------------------------------------
 @router.get("/chat/{session_id}/history", response_model=HistoryResponse)
-async def get_history(session_id: str):
+async def get_history(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
-        config = {"configurable": {"thread_id": session_id}}
-        state = graph.get_state(config)
+        conv = _load_conversation(db, user, session_id, require=False)
+
+        # Legacy conversations: backfill chat_messages from checkpoint state
+        # (idempotent) so the UI never parses checkpoint blobs.
+        existing_state = await asyncio.to_thread(graph.get_state, {"configurable": {"thread_id": session_id}})
+        checkpoint_msgs = _checkpoint_messages(existing_state)
+        if conv is None:
+            # No app row yet: adopt the legacy checkpoint conversation for the
+            # requesting user (404 if the id is owned by someone else).
+            if store.get_conversation_any_owner(db, session_id) is not None:
+                raise api_error(404, "not_found", "Session not found")
+            first = next((m.content for m in checkpoint_msgs if m), session_id)
+            conv = store.create_conversation(db, user, session_id, title=str(first)[:60])
+        _ensure_backfilled(db, conv, checkpoint_msgs)
 
         messages: List[HistoryMessage] = []
-        if state and state.values:
-            all_messages = state.values.get("messages", [])
-
-            current_resources = []
-
-            for msg in all_messages:
-                msg_type = type(msg).__name__
-                if msg_type == "HumanMessage":
-                    content = msg.content if isinstance(msg.content, str) else _flatten_content(msg.content)
-                    messages.append(HistoryMessage(role="user", content=content))
-                    current_resources = []
-                elif msg_type == "ToolMessage":
-                    current_resources.extend(_extract_resources([msg]))
-                elif msg_type == "AIMessage" and msg.content:
-                    content = msg.content if isinstance(msg.content, str) else _flatten_content(msg.content)
-                    messages.append(HistoryMessage(
-                        role="assistant",
-                        content=content,
-                        resources=current_resources
-                    ))
-                    current_resources = []
+        for m in store.list_messages(db, conv.id):
+            if m.role not in ("user", "assistant"):
+                continue
+            kwargs = m.additional_kwargs or {}
+            resources = [
+                ResourceItem(**r) for r in kwargs.get("resources", [])
+                if isinstance(r, dict) and r.get("title")
+            ]
+            messages.append(HistoryMessage(
+                role=m.role,
+                content=m.content,
+                resources=resources,
+                model=m.model,
+                status=m.status,
+            ))
 
         return HistoryResponse(session_id=session_id, messages=messages)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("History endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# DELETE /chat/sessions/{session_id}
+# DELETE /chat/sessions/{session_id}  – owned only; removes app rows + checkpoints
 # ---------------------------------------------------------------------------
 @router.delete("/chat/sessions/{session_id}")
-async def delete_session(session_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_session(
+    session_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
-        stmt = delete(ChatSession).where(ChatSession.id == session_id)
-        await db.execute(stmt)
-        await db.commit()
+        conv = _load_conversation(db, user, session_id)
+        store.delete_conversation(db, conv)  # cascades chat_messages
 
         try:
             with pool.connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (session_id,))
-                    cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (session_id,))
-                    cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (session_id,))
+                    cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s", (conv.thread_id,))
+                    cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (conv.thread_id,))
+                    cur.execute("DELETE FROM checkpoint_blobs WHERE thread_id = %s", (conv.thread_id,))
         except Exception as checkpoint_err:
             logger.warning(f"Failed to clean checkpointer tables for {session_id}: {checkpoint_err}")
 
         return {"status": "deleted"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to delete session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/stream  – send a message and stream the response (SSE)
+# POST /chat/stream  – SSE streaming with reliable persistence
+#
+# Lifecycle:
+#   validate user + ownership → persist user message → backfill (legacy) →
+#   run graph in a worker thread streaming tokens to the client while
+#   accumulating the final content server-side → on success persist the
+#   completed assistant message exactly once → on failure emit error and
+#   persist a failed/partial assistant row (never a fake success).
 # ---------------------------------------------------------------------------
 @router.post("/chat/stream")
-async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat_stream_endpoint(
+    request: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
+    model, temperature = _resolve_generation_params(request)
     try:
         config = {"configurable": {"thread_id": request.session_id}}
         existing_state = await asyncio.to_thread(graph.get_state, config)
-        existing_len = len(existing_state.values.get("messages", [])) if existing_state and existing_state.values else 0
+        existing_len = _checkpoint_len(existing_state)
 
-        # Upsert session
-        stmt = select(ChatSession).where(ChatSession.id == request.session_id)
-        res = await db.execute(stmt)
-        session = res.scalar_one_or_none()
-
-        if session is None:
+        # Conversation (owned) — create if missing
+        conv = _load_conversation(db, user, request.session_id, require=False)
+        if conv is None:
+            if store.get_conversation_any_owner(db, request.session_id) is not None:
+                raise api_error(404, "not_found", "Session not found")
             title = await _generate_session_title(request.message)
-            session = ChatSession(id=request.session_id, title=title)
-            db.add(session)
-            await db.commit()
+            conv = store.create_conversation(db, user, request.session_id, title=title, selected_model=model)
+            _bind_created_conversation(db, user, conv, request.project_id)
         else:
-            session.updated_at = datetime.utcnow()
-            await db.commit()
+            if conv.selected_model != model:
+                store.update_conversation(db, conv, selected_model=model)
+            store.touch_conversation(db, conv)
 
-        # ── Stage 1-7: Run pre-processing pipeline ────────────────────────────
-        ctx = _run_pipeline(request.message, request.session_id)
+        _ensure_backfilled(db, conv, _checkpoint_messages(existing_state))
 
-        # Short-circuit for clarification
-        if ctx.confidence and ctx.confidence.decision == "clarification":
-            msg = _pipeline.clarification_message()
+        # Idempotency: reject duplicate logical requests before any work
+        if request.request_id and store.get_user_message_by_request_id(db, conv.id, request.request_id):
+            raise api_error(409, "duplicate_request", "A message with this request_id already exists")
+
+        # Persist the user message BEFORE graph execution
+        user_msg = store.persist_user_message(db, conv, request.message, model, request_id=request.request_id)
+
+        # Stage 1-7: Run pre-processing pipeline
+        ctx = _run_pipeline(request.message, request.session_id, document=request.document, project_id=conv.project_id)
+
+        # Apply active_tools restrictions (frontend tool toggles)
+        at = request.active_tools or {}
+        web_on = at.get("web", False)
+        kb_on = at.get("kb", True)
+        if web_on and not kb_on:
+            ctx.answer_mode = "web"
+            ctx.context_text = ""
+            ctx.ranked_chunks = []
+        elif not web_on and not kb_on:
+            ctx.answer_mode = "synthesis"
+            ctx.context_text = ""
+            ctx.ranked_chunks = []
+
+        # Short-circuit for clarification ONLY when document-scoped chat has no matches
+        if request.document and ctx.confidence and ctx.confidence.decision == "clarification":
+            msg = (
+                _pipeline.kb_not_covered_message()
+                if not ctx.ranked_chunks
+                else _pipeline.clarification_message()
+            )
             if ctx.trace:
                 ctx.trace.final_response_len = len(msg)
                 ctx.trace.total_latency_ms = 0.0
             if _pipeline_config.get("trace_enabled", True):
                 _pipeline.tracer.store(ctx.trace)
+            store.persist_assistant_message(db, conv, msg, model, status=store.MESSAGE_STATUS_COMPLETED)
+            _pipeline.finalize_trace(ctx)
 
             async def clarify_generator():
                 yield f"data: {json.dumps({'type': 'content', 'content': msg})}\n\n"
@@ -446,18 +839,54 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
 
         human_message = HumanMessage(content=request.message)
 
+        _sp = getattr(ctx, "source_policy", None)
+        base_directive = _sp.contract.system_directive if _sp else ""
+        if request.document:
+            base_directive += (
+                f"\n\nDOCUMENT SCOPE: The user is viewing the document '{request.document}' in the Knowledge Base."
+                " Answer ONLY using content from that document. If the information is not in this document,"
+                " say so clearly — do not use other knowledge base documents."
+            )
+
         initial_state = {
             "messages": [human_message],
             "system_prompt": request.system_prompt or "",
+            "answer_mode_directive": base_directive,
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
+            "answer_mode": ctx.answer_mode,
+            "session_id": request.session_id,
+            "user_id": user.id,
+            "project_id": conv.project_id or "",
+            "model": model,
+            "temperature": temperature,
         }
 
         q: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_event_loop()
+        # Session factory bound to THIS request's engine: the stream thread
+        # must never touch the global app engine (unbounded connect time),
+        # and tests overriding the dependency get their engine here too.
+        request_session_factory = sessionmaker(bind=db.get_bind(), expire_on_commit=False)
 
         def stream_in_thread():
+            accumulated: list[str] = []
+            persisted = False
+
+            def persist_assistant(content: str, status: str, error: str | None = None, resources: list | None = None) -> None:
+                nonlocal persisted
+                if persisted:
+                    return
+                try:
+                    with request_session_factory() as sdb:
+                        store.persist_assistant_message(
+                            sdb, conv, content, model, status=status, error=error, resources=resources
+                        )
+                    persisted = True
+                except Exception as exc:
+                    logger.error("assistant_persist_failed conversation=%s error=%s", conv.id, exc)
+
             try:
                 for stream_mode, stream_event in graph.stream(
                     initial_state,
@@ -467,10 +896,14 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                     if stream_mode == "messages":
                         msg_chunk, _ = stream_event
                         if hasattr(msg_chunk, "content") and msg_chunk.content and msg_chunk.type == "AIMessageChunk":
-                            loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": msg_chunk.content}))
+                            chunk = msg_chunk.content
+                            if isinstance(chunk, list):
+                                chunk = _flatten_content(chunk)
+                            accumulated.append(chunk)
+                            loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": chunk}))
                     elif stream_mode == "updates":
                         for node_name, node_output in stream_event.items():
-                            if node_name == "tools" and isinstance(node_output, dict):
+                            if node_name == "action" and isinstance(node_output, dict):
                                 for m in node_output.get("messages", []):
                                     if hasattr(m, "name") and m.name:
                                         loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "tool_end", "tool": m.name}))
@@ -480,50 +913,147 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                                         for tc in m.tool_calls:
                                             tname = tc.get("name") or tc.get("function", {}).get("name", "tool")
                                             loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "tool_start", "tool": tname}))
+                                    # V4.9: agent LLM usage → shared request budget
+                                    meta = getattr(m, "usage_metadata", None)
+                                    if isinstance(meta, dict) and meta:
+                                        _pipeline.record_agent_usage(ctx, meta, fallback_model=model)
 
-                # Post-processing after streaming completes
+                # Streaming completed — post-processing + persistence
                 final_state = graph.get_state(config)
                 if final_state and final_state.values:
                     new_msgs = final_state.values.get("messages", [])[existing_len:]
-                    resources = []
+                    response_text = normalize_markdown("".join(accumulated).strip())
 
-                    # Sources depend on answer mode:
-                    #   grounded/hybrid → pipeline-ranked KB chunks
-                    #   web             → web search tool results
-                    #   synthesis       → no KB resources
-                    if ctx.answer_mode in ("grounded", "hybrid"):
-                        seen_titles = set()
-                        for rc in ctx.ranked_chunks:
-                            src = getattr(rc.chunk, "source", None) or getattr(rc.chunk, "filename", None) or "unknown"
-                            if src in seen_titles:
-                                continue
-                            seen_titles.add(src)
-                            resources.append(ResourceItem(
-                                type="file",
-                                title=src,
-                                snippet=rc.chunk.document.page_content[:180],
-                            ))
-                    elif ctx.answer_mode == "web":
-                        # Only include web search results, not KB chunks
-                        for tr in _extract_resources(new_msgs):
-                            if tr.type == "web":
-                                resources.append(tr)
+                    # Build evidence items from what the LLM actually cited
+                    evidence_result = _pipeline._evidence_builder.build(
+                        response_text=response_text,
+                        ranked_chunks=ctx.ranked_chunks,
+                        source_policy=ctx.source_policy,
+                        answer_mode=ctx.answer_mode,
+                        answer_mode_metadata=ctx.answer_mode_metadata,
+                        web_candidates=_web_candidates_from_context(ctx),
+                    )
+                    evidence_items = evidence_result.evidence
 
-                    # For synthesis / no_evidence: resources remain empty
-
-                    serialized = [{"type": r.type, "title": r.title, "url": r.url, "snippet": r.snippet} for r in resources]
+                    serialized = [e.model_dump(exclude={"raw_score", "reranker_score", "retrieval_latency_ms", "embedding_model"}) for e in evidence_items]
+                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                        "type": "evidence",
+                        "evidence": serialized,
+                        "answer_mode": ctx.answer_mode,
+                    }))
+                    # Backward-compat resources event — now carries full citation metadata
+                    enriched_resources = [
+                        {
+                            "type": e.source_type if e.source_type != "knowledge" else "file",
+                            "title": e.title,
+                            "url": e.url,
+                            "snippet": e.chunk[:180] if e.chunk else None,
+                            # V3 Phase 5: rich citation fields
+                            "document_id": e.document_id,
+                            "chunk_index": e.chunk_index,
+                            "page": e.page,
+                            "section": e.section,
+                            "confidence_label": e.confidence_label.value if e.confidence_label else None,
+                            "citation_index": e.citation_index,
+                        }
+                        for e in evidence_items
+                    ]
+                    # Build enriched answer_mode_metadata with retrieved_count
+                    enriched_metadata = dict(ctx.answer_mode_metadata or {})
+                    enriched_metadata["retrieved_count"] = len(ctx.retrieved_chunks)
                     loop.call_soon_threadsafe(q.put_nowait, json.dumps({
                         "type": "resources",
-                        "resources": serialized,
+                        "resources": enriched_resources,
                         "answer_mode": ctx.answer_mode,
-                        "answer_mode_metadata": ctx.answer_mode_metadata,
+                        "answer_mode_metadata": enriched_metadata,
                     }))
 
+                    # Citation contract check
+                    ref_indices = _parse_chunk_references(response_text)
+                    validator = SourceValidator()
+                    validation_result = validator.validate(
+                        ref_indices=ref_indices,
+                        total_chunks=len(ctx.ranked_chunks),
+                        mode=ctx.source_policy,
+                    )
+                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                        "type": "citation_check",
+                        "valid": validation_result.valid,
+                        "cited": validation_result.cited_count,
+                        "required": validation_result.required_count,
+                        "unique_chunks": validation_result.unique_chunks_cited,
+                        "total_uses": validation_result.total_citation_uses,
+                        "warnings": validation_result.warnings,
+                        "reason": validation_result.reason,
+                    }))
+
+                    # Grounding validation (claim-level)
+                    claim_data: list[dict] = []
+                    if ctx.ranked_chunks and ctx.source_policy and ctx.source_policy.contract.requires_evidence:
+                        grounding = _pipeline.run_grounding(response_text, ctx)
+                        for v in grounding.validations:
+                            claim_data.append({
+                                "id": v.claim.id,
+                                "text": v.claim.text,
+                                "supported": v.supported,
+                                "best_score": v.best_score,
+                                "threshold": v.threshold,
+                                "best_chunk_idx": v.best_chunk_idx,
+                                "document": v.document_name,
+                            })
+                        loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                            "type": "claim_validation",
+                            "valid": grounding.all_supported,
+                            "total": grounding.total_count,
+                            "unsupported": grounding.unsupported_count,
+                            "claims": claim_data,
+                        }))
+                        if not grounding.all_supported:
+                            logger.warning(
+                                "grounding_unsupported session_id=%s unsupported=%d/%d threshold=%.2f",
+                                request.session_id,
+                                grounding.unsupported_count,
+                                grounding.total_count,
+                                grounding.validations[0].threshold if grounding.validations else 0,
+                            )
+
                     # Stages 8-9: Validate + trace
-                    last_msg = new_msgs[-1] if new_msgs else None
-                    if last_msg and hasattr(last_msg, "content"):
-                        response_text = str(last_msg.content)
-                        _post_process(ctx, response_text, new_msgs)
+                    record_id = ""
+                    if response_text:
+                        record_id = _post_process(ctx, response_text, new_msgs, model=model, temperature=temperature)
+
+                    # Persist the completed assistant message exactly once
+                    if response_text:
+                        persist_assistant(response_text, store.MESSAGE_STATUS_COMPLETED, resources=enriched_resources)
+                        # Detached memory extraction — after the stream is done,
+                        # own thread, never on the stream path.
+                        from app.learning.extraction.extractor import schedule_extraction
+                        schedule_extraction(request.session_id, user.id, conv.project_id, user_msg.id)
+                    else:
+                        # Generation finished but produced nothing visible —
+                        # do not fabricate an assistant message.
+                        logger.warning("empty_assistant_response conversation=%s", conv.id)
+
+                    # Emit the learning record_id for feedback correlation
+                    if record_id:
+                        loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                            "type": "record_id",
+                            "record_id": record_id,
+                        }))
+
+                    if record_id:
+                        _persist_quality(
+                            session_id=request.session_id,
+                            question=request.message,
+                            answer_mode=ctx.answer_mode,
+                            validation_result=validation_result,
+                            claim_data=claim_data,
+                            record_id=record_id,
+                        )
+
+                    # Single complete request_completed AFTER the agent LLM ran
+                    # (agent usage recorded into the shared budget above).
+                    _pipeline.finalize_trace(ctx)
 
                     # Emit trace metadata as final SSE event before [DONE]
                     if ctx.trace:
@@ -554,7 +1084,33 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
                         loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "trace", "trace": trace_dict}))
             except Exception as thread_err:
                 logger.error(f"Stream thread error: {thread_err}", exc_info=True)
-                loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "error", "message": str(thread_err)}))
+                # Close the trace with a failed status unless the success path
+                # already finalized it (finalize_trace is idempotent).
+                _pipeline.finalize_trace(ctx, status="failed")
+                raw_text = str(thread_err)
+                # Friendly message for image-incompatible models
+                if "does not support image" in raw_text.lower() or "cannot read" in raw_text.lower():
+                    friendly = "This model doesn't support image analysis. Try using a different model (like gpt-4o) for image tasks, or describe the image in text."
+                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({"type": "content", "content": friendly}))
+                else:
+                    # Provider-neutral classification — the client receives a
+                    # stable machine-readable code and a safe message; raw
+                    # provider text stays in server logs only.
+                    from app.core.llm_provider import classify_provider_error
+                    info = classify_provider_error(thread_err)
+                    loop.call_soon_threadsafe(q.put_nowait, json.dumps({
+                        "type": "error",
+                        "code": info.code,
+                        "retryable": info.retryable,
+                        "message": info.safe_message,
+                    }))
+                partial = normalize_markdown("".join(accumulated).strip())
+                if partial:
+                    # Case C: partial output exists → preserve it, marked failed.
+                    # Raw provider text is stored server-side only (never sent
+                    # to the frontend via the SSE error event).
+                    persist_assistant(partial, store.MESSAGE_STATUS_FAILED, error=raw_text[:2000])
+                # Case B: no output → no fake assistant message.
             finally:
                 loop.call_soon_threadsafe(q.put_nowait, "[DONE]")
 
@@ -576,13 +1132,24 @@ async def chat_stream_endpoint(request: ChatRequest, db: AsyncSession = Depends(
             }
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Chat streaming endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        from app.core.llm_provider import classify_provider_error
+        info = classify_provider_error(e)
+        logger.error(
+            "Chat streaming endpoint error: code=%s retryable=%s error=%s\n%s",
+            info.code, info.retryable, str(e), traceback.format_exc(),
+        )
+        if info.code == "PROVIDER_UNAVAILABLE" and info.retryable:
+            raise api_error(503, "provider_unavailable", info.safe_message)
+        raise api_error(500, "internal_error", "An internal error occurred")
 
 
 # ---------------------------------------------------------------------------
-# POST /chat/evaluate  – run pipeline + agent, return structured evaluation
+# POST /chat/evaluate  – run pipeline + agent, return structured evaluation.
+# Evaluation runs use eval-* thread ids and are NOT user conversations: they
+# are not persisted to chat_messages.
 # ---------------------------------------------------------------------------
 class EvaluateRequest(BaseModel):
     message: str
@@ -591,24 +1158,37 @@ class EvaluateRequest(BaseModel):
 
 
 @router.post("/chat/evaluate")
-async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = Depends(get_db)):
+async def chat_evaluate_endpoint(
+    request: EvaluateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
     try:
         session_id = request.session_id or f"eval-{int(time.time())}"
+        # If a real conversation id is given, enforce ownership.
+        if request.session_id and not request.session_id.startswith("eval-"):
+            _load_conversation(db, user, request.session_id)
+
         config = {"configurable": {"thread_id": session_id}}
         existing_state = await asyncio.to_thread(graph.get_state, config)
-        existing_len = len(existing_state.values.get("messages", [])) if existing_state and existing_state.values else 0
+        existing_len = _checkpoint_len(existing_state)
 
         # Stage 1-7: Run pre-processing pipeline (with optional retriever mode)
         ctx = _run_pipeline(request.message, session_id, retriever_mode=request.retriever)
 
         # Short-circuit for clarification
         if ctx.confidence and ctx.confidence.decision == "clarification":
-            msg = _pipeline.clarification_message()
+            msg = (
+                _pipeline.kb_not_covered_message()
+                if not ctx.ranked_chunks
+                else _pipeline.clarification_message()
+            )
             if ctx.trace:
                 ctx.trace.final_response_len = len(msg)
                 ctx.trace.total_latency_ms = 0.0
             if _pipeline_config.get("trace_enabled", True):
                 _pipeline.tracer.store(ctx.trace)
+            _pipeline.finalize_trace(ctx)
             result = build_evaluation_result(ctx, answer=msg)
             return result.to_dict()
 
@@ -616,9 +1196,16 @@ async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = De
         initial_state = {
             "messages": [HumanMessage(content=request.message)],
             "system_prompt": "",
+            "answer_mode_directive": ctx.source_policy.contract.system_directive if ctx.source_policy else "",
             "intent": ctx.intent_label,
             "rewritten_query": ctx.final_query,
             "pipeline_context": ctx.context_text,
+            "answer_mode": ctx.answer_mode,
+            "session_id": session_id,
+            "user_id": user.id,
+            "project_id": "",
+            "model": resolve_model(None),
+            "temperature": settings.TEMPERATURE_DEFAULT,
         }
 
         final_state = await asyncio.to_thread(graph.invoke, initial_state, config)
@@ -626,6 +1213,10 @@ async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = De
         new_messages = final_state["messages"][existing_len:]
         last_message = final_state["messages"][-1]
         response = last_message.content
+
+        # V4.9: capture the agent LLM usage into the shared request TokenBudget.
+        for meta in _agent_usage_metadata(new_messages):
+            _pipeline.record_agent_usage(ctx, meta, fallback_model=initial_state["model"])
 
         # Stages 8-9: Validate + trace
         # Populate tool/token info
@@ -635,10 +1226,15 @@ async def chat_evaluate_endpoint(request: EvaluateRequest, db: AsyncSession = De
         ctx.trace.completion_tokens = _count_tokens(response)
         _pipeline.validate_response(question=ctx.question, response=response, ctx=ctx)
 
+        # Single complete request_completed AFTER the agent LLM ran.
+        _pipeline.finalize_trace(ctx)
+
         # Build structured result
         result = build_evaluation_result(ctx, answer=response)
         return result.to_dict()
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Evaluate endpoint error: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise api_error(500, "internal_error", "An internal error occurred")

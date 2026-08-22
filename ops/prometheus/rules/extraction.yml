@@ -1,0 +1,108 @@
+# OwnGPT memory-extraction alert rules (V2.2 P2.2).
+#
+# Five deliberately small, operationally meaningful rules covering the failure
+# modes named in the P2.2 audit. Thresholds are justified per rule; none of
+# them hardcode deployment-specific values (e.g. MEMORY_EXTRACTION_MAX_
+# CONCURRENCY) so config drift cannot silently change alert semantics.
+#
+# Validated deterministically by:
+#   scripts/verify_p2_2_observability.ps1
+#   (promtool check rules + promtool test rules against
+#    ops/prometheus/tests/extraction_test.yml)
+
+groups:
+  - name: extraction_operations
+    rules:
+      - alert: ExtractionFailureRateHigh
+        # Majority of extraction attempts failing for a sustained window is
+        # never correct operation (provider outage, DB outage, bad config).
+        # Windowed COUNTS (increase) rather than per-second rates: rate()
+        # returns events/second (~0.017/s at 1 event/min), so an absolute
+        # clamp of 1 on a per-second denominator would make the ratio ~0.017
+        # and the alert could never fire (verified empirically with
+        # promtool). increase() keeps the comparison materialized in events
+        # per 15m; baseline healthy operation is near-zero failures, so
+        # > 50% of attempts failing for 10m is systemic, not noise.
+        expr: >
+          increase(owngpt_memory_extraction_failed_total[15m])
+          / clamp_min(increase(owngpt_memory_extraction_scheduled_total[15m]), 1)
+          > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Extraction failure rate is high"
+          description: "More than half of extraction attempts failed over the last 15m. Check LLM provider, database, and recent extraction logs (event=memory_extraction_failed)."
+
+      - alert: ExtractionInflightStuck
+        # Workers claim tasks (inflight > 0) but nothing completes for 30m —
+        # a hung LLM call or a dead worker thread. 30m is an order of
+        # magnitude beyond any legitimate extraction duration; below that the
+        # rule would flap on slow provider calls. Critical: extraction is
+        # dead while the system believes it is running.
+        expr: >
+          owngpt_memory_extraction_inflight > 0
+          and on() rate(owngpt_memory_extraction_completed_total[30m]) == 0
+        for: 30m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Extractions are stuck in-flight"
+          description: "Workers hold inflight task(s) but zero extractions completed for 30m. Investigate hung LLM calls or worker threads (executor host)."
+
+      - alert: ExtractionQueueBacklog
+        # The bounded queue saturates when scheduling outpaces workers (e.g.
+        # workers slowed by a degraded LLM provider). 90% for 5m is sustained
+        # saturation, not a burst; short bursts are absorbed by the bound.
+        expr: >
+          owngpt_memory_extraction_queue_depth
+          / owngpt_memory_extraction_queue_capacity >= 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Extraction queue is near capacity"
+          description: "The bounded extraction queue has been >= 90% full for 5m. Scheduling is outpacing workers; check LLM latency and worker health."
+
+      - alert: RedisCoordinationDegraded
+        # Every fallback is fail-open (chat keeps working) but coordination is
+        # lost: single-flight claims and the distributed throttle degrade to
+        # in-process state, risking duplicate/parallel extraction work. Any
+        # sustained fallback rate is abnormal in the compose deployment.
+        expr: >
+          rate(owngpt_memory_extraction_redis_fallback_total[15m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis coordination is falling back to in-process state"
+          description: "Extraction continues (fail-open) but Redis claims/throttle are failing. Check the redis service and the memory_extraction_redis_unavailable events."
+
+      - alert: ExtractionSilentlyStopped
+        # Activity-aware stall detection (P2.2 amendment): per-message
+        # scheduling means ANY user chat message increments
+        # owngpt_memory_extraction_scheduled_total (absent a claim conflict or
+        # full queue, which have their own alerts). Therefore "chat traffic
+        # exists but nothing was scheduled for 12h" is a genuine breakage
+        # signal, while "no chat traffic at all" (healthy silence) never
+        # fires. The info gauge suppresses the rule when extraction is
+        # disabled by configuration. WARN, not CRITICAL: memory accumulation
+        # has stopped, but chat itself is unaffected.
+        expr: >
+          sum(increase(owngpt_http_requests_total{endpoint="chat"}[12h])) > 0
+          and on() (
+            increase(owngpt_memory_extraction_scheduled_total[12h]) == 0
+            or on() absent(owngpt_memory_extraction_scheduled_total) == 1
+          )
+          and on() (owngpt_memory_extraction_info{enabled="1"} == 1)
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Extraction stopped while chat traffic continues"
+          description: "Chat requests happened in the last 12h but no extraction was scheduled. Check MEMORY_V2_GRAPH config, the executor, and scheduling events (event=memory_extraction_scheduled)."

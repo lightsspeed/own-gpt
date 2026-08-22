@@ -30,6 +30,10 @@ class ArtifactType(str, Enum):
     DECISION_CANDIDATE = "decision_candidate"
     DECISION = "decision"
     CONFIGURATION_CHANGE = "configuration_change"
+    # V3.13: one-time checkout token that authorizes experiment execution.
+    # Deliberately NOT part of _ANCESTOR_CHAIN: it does not transform
+    # information, it gates execution. Its lineage points at the EXPERIMENT.
+    AUTHORIZATION_CODE = "authorization_code"
 
 
 @dataclass
@@ -84,6 +88,7 @@ _STAGE_MAP: dict[ArtifactType, str] = {
     ArtifactType.DECISION_CANDIDATE: "apply",
     ArtifactType.DECISION: "apply",
     ArtifactType.CONFIGURATION_CHANGE: "apply",
+    ArtifactType.AUTHORIZATION_CODE: "validate",
 }
 
 

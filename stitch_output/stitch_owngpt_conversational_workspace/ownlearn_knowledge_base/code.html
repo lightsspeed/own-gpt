@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OwnLearn Knowledge Base</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary": "#1000a9",
+                    "primary-fixed-dim": "#c0c1ff",
+                    "surface-dim": "#13131b",
+                    "primary-container": "#8083ff",
+                    "on-tertiary-container": "#452000",
+                    "on-primary-fixed-variant": "#2f2ebe",
+                    "bg-secondary": "#171717",
+                    "on-tertiary-fixed-variant": "#703700",
+                    "on-tertiary-fixed": "#301400",
+                    "on-primary-container": "#0d0096",
+                    "slate-gray": "#404040",
+                    "on-secondary-fixed-variant": "#005048",
+                    "surface-container-highest": "#34343d",
+                    "tertiary-container": "#d97721",
+                    "surface-container-low": "#1b1b23",
+                    "secondary-fixed-dim": "#4fdbc8",
+                    "bg-primary": "#0A0A0A",
+                    "surface-tint": "#c0c1ff",
+                    "error-container": "#93000a",
+                    "surface-container": "#1f1f27",
+                    "primary": "#c0c1ff",
+                    "tertiary-fixed": "#ffdcc5",
+                    "on-secondary": "#003731",
+                    "surface-variant": "#34343d",
+                    "inverse-on-surface": "#303038",
+                    "tertiary": "#ffb783",
+                    "primary-fixed": "#e1e0ff",
+                    "on-background": "#e4e1ed",
+                    "on-secondary-fixed": "#00201c",
+                    "surface-container-high": "#292932",
+                    "inverse-surface": "#e4e1ed",
+                    "tertiary-fixed-dim": "#ffb783",
+                    "secondary-container": "#04b4a2",
+                    "on-tertiary": "#4f2500",
+                    "on-error": "#690005",
+                    "inverse-primary": "#494bd6",
+                    "border-subtle": "#262626",
+                    "outline-variant": "#464554",
+                    "on-primary-fixed": "#07006c",
+                    "surface-container-lowest": "#0d0d15",
+                    "outline": "#908fa0",
+                    "on-surface": "#e4e1ed",
+                    "error": "#ffb4ab",
+                    "background": "#13131b",
+                    "secondary-fixed": "#71f8e4",
+                    "bg-tertiary": "#262626",
+                    "success-teal": "#14B8A6",
+                    "secondary": "#4fdbc8",
+                    "surface-bright": "#393841",
+                    "on-secondary-container": "#003f38",
+                    "on-error-container": "#ffdad6",
+                    "ai-presence": "#6366F1",
+                    "text-secondary": "#A3A3A3",
+                    "text-primary": "#F5F5F5",
+                    "on-surface-variant": "#c7c4d7",
+                    "surface": "#13131b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "inset-md": "16px",
+                    "gutter": "24px",
+                    "stack-lg": "24px",
+                    "stack-md": "16px",
+                    "max-content-width": "800px",
+                    "stack-sm": "8px",
+                    "sidebar-width": "280px",
+                    "context-panel-width": "400px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Inter"],
+                    "code-md": ["JetBrains Mono"],
+                    "body-lg": ["Inter"],
+                    "code-sm": ["JetBrains Mono"],
+                    "label-md": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "headline-lg-mobile": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                    "code-sm": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-md": ["13px", {"lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                    "body-md": ["15px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0A0A0A;
+            color: #F5F5F5;
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #262626; border-radius: 2px; }
+    </style>
+</head>
+<body class="overflow-hidden">
+<!-- Sidebar Navigation -->
+<aside class="fixed left-0 top-0 h-screen w-sidebar-width bg-secondary dark:bg-bg-secondary border-r border-border-subtle flex flex-col p-stack-md z-50">
+<div class="mb-8 flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-ai-presence flex items-center justify-center text-white font-bold">O</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-text-primary leading-tight">Own Platform</h1>
+<p class="font-label-md text-label-md text-text-secondary">AI Engineering</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-md text-label-md">Home</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 bg-surface-container-highest text-primary rounded-lg transition-opacity duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+<span class="font-label-md text-label-md">Observe</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-md text-label-md">Analyze</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="gavel">gavel</span>
+<span class="font-label-md text-label-md">Govern</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="settings_remote">settings_remote</span>
+<span class="font-label-md text-label-md">Operate</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="settings_input_component">settings_input_component</span>
+<span class="font-label-md text-label-md">System</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-border-subtle pt-4 space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-label-md text-label-md">Docs</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-label-md text-label-md">Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-sidebar-width min-h-screen flex flex-col bg-bg-primary">
+<!-- Top Navigation -->
+<header class="h-16 flex items-center justify-between px-gutter border-b border-border-subtle sticky top-0 bg-primary bg-opacity-10 backdrop-blur-md z-40">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-text-primary">Knowledge Base</span>
+<span class="text-text-secondary">/</span>
+<span class="font-label-md text-label-md text-text-secondary">knowledge</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<button class="flex items-center gap-2 px-4 py-2 bg-ai-presence text-white font-label-md text-label-md rounded-lg hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]" data-icon="upload">upload</span>
+                        Upload
+                    </button>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-text-secondary" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined text-text-secondary" data-icon="account_circle">account_circle</span>
+</div>
+</div>
+</header>
+<!-- Dynamic Content Canvas -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Collection View -->
+<section class="flex-1 overflow-y-auto p-gutter custom-scrollbar">
+<!-- Indexing Banner -->
+<div class="mb-stack-lg bg-surface-container-low border border-primary-container/30 rounded-xl p-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="animate-spin text-ai-presence">
+<span class="material-symbols-outlined" data-icon="progress_activity">progress_activity</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-text-primary">Indexing in progress · 3 of 12 documents indexed</p>
+<p class="font-label-md text-[11px] text-text-secondary">Analyzing semantic structure and vectorizing chunks...</p>
+</div>
+</div>
+<div class="w-32 bg-surface-container-highest h-1.5 rounded-full overflow-hidden">
+<div class="bg-ai-presence h-full w-1/4 rounded-full"></div>
+</div>
+</div>
+<!-- Filters -->
+<div class="flex items-center gap-4 mb-stack-md">
+<div class="flex items-center gap-2 bg-surface-container border border-border-subtle px-3 py-2 rounded-lg text-text-secondary focus-within:border-ai-presence transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="search">search</span>
+<input class="bg-transparent border-none outline-none font-label-md text-label-md text-text-primary w-64 placeholder:text-text-secondary" placeholder="Search knowledge..." type="text"/>
+</div>
+<button class="flex items-center gap-2 px-3 py-2 border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="filter_list">filter_list</span>
+<span class="font-label-md text-label-md">Filter by type</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="expand_more">expand_more</span>
+</button>
+</div>
+<!-- Document Table -->
+<div class="border border-border-subtle rounded-xl overflow-hidden bg-surface-container-lowest">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container text-text-secondary font-label-md text-label-md border-b border-border-subtle">
+<tr>
+<th class="px-4 py-3 font-medium">Name</th>
+<th class="px-4 py-3 font-medium">Type</th>
+<th class="px-4 py-3 font-medium">Chunks</th>
+<th class="px-4 py-3 font-medium">Status</th>
+<th class="px-4 py-3 font-medium">Uploaded</th>
+<th class="px-4 py-3 font-medium"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-subtle">
+<!-- Selected Row -->
+<tr class="bg-surface-container-high/50 hover:bg-surface-container-high transition-colors cursor-pointer group border-l-2 border-l-ai-presence">
+<td class="px-4 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="picture_as_pdf">picture_as_pdf</span>
+<span class="font-body-md text-body-md text-text-primary">spec.pdf</span>
+</div>
+</td>
+<td class="px-4 py-4">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-text-secondary font-code-sm text-code-sm">PDF</span>
+</td>
+<td class="px-4 py-4 font-code-sm text-code-sm text-text-secondary">142</td>
+<td class="px-4 py-4">
+<span class="flex items-center gap-1.5 text-success-teal font-label-md text-label-md">
+<span class="w-1.5 h-1.5 rounded-full bg-success-teal"></span>
+                                        Indexed
+                                    </span>
+</td>
+<td class="px-4 py-4 font-label-md text-label-md text-text-secondary">2 hours ago</td>
+<td class="px-4 py-4 text-right">
+<span class="material-symbols-outlined text-text-secondary opacity-0 group-hover:opacity-100" data-icon="more_vert">more_vert</span>
+</td>
+</tr>
+<!-- Next Row -->
+<tr class="hover:bg-surface-container-high transition-colors cursor-pointer group">
+<td class="px-4 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-tertiary" data-icon="markdown">markdown</span>
+<span class="font-body-md text-body-md text-text-primary">notes.md</span>
+</div>
+</td>
+<td class="px-4 py-4">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-text-secondary font-code-sm text-code-sm">MD</span>
+</td>
+<td class="px-4 py-4 font-code-sm text-code-sm text-text-secondary">12</td>
+<td class="px-4 py-4">
+<span class="flex items-center gap-1.5 text-success-teal font-label-md text-label-md">
+<span class="w-1.5 h-1.5 rounded-full bg-success-teal"></span>
+                                        Indexed
+                                    </span>
+</td>
+<td class="px-4 py-4 font-label-md text-label-md text-text-secondary">Yesterday</td>
+<td class="px-4 py-4 text-right">
+<span class="material-symbols-outlined text-text-secondary opacity-0 group-hover:opacity-100" data-icon="more_vert">more_vert</span>
+</td>
+</tr>
+<!-- Pending Row -->
+<tr class="hover:bg-surface-container-high transition-colors cursor-pointer group">
+<td class="px-4 py-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-text-secondary" data-icon="description">description</span>
+<span class="font-body-md text-body-md text-text-primary">manual.txt</span>
+</div>
+</td>
+<td class="px-4 py-4">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-text-secondary font-code-sm text-code-sm">TXT</span>
+</td>
+<td class="px-4 py-4 font-code-sm text-code-sm text-text-secondary">--</td>
+<td class="px-4 py-4">
+<span class="flex items-center gap-1.5 text-text-secondary font-label-md text-label-md animate-pulse">
+<span class="w-1.5 h-1.5 rounded-full bg-text-secondary"></span>
+                                        Pending
+                                    </span>
+</td>
+<td class="px-4 py-4 font-label-md text-label-md text-text-secondary">Just now</td>
+<td class="px-4 py-4 text-right">
+<span class="material-symbols-outlined text-text-secondary opacity-0 group-hover:opacity-100" data-icon="more_vert">more_vert</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Illustration or Placeholder Area -->
+<div class="mt-stack-lg p-stack-lg border border-dashed border-border-subtle rounded-xl flex flex-col items-center justify-center text-center">
+<div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center mb-4">
+<span class="material-symbols-outlined text-ai-presence text-3xl" data-icon="database">database</span>
+</div>
+<h3 class="font-headline-md text-[18px] text-text-primary mb-2">Connect External Sources</h3>
+<p class="font-body-md text-text-secondary max-w-sm mb-6">Sync your knowledge base with GitHub, Notion, or Slack to keep your AI context always up to date.</p>
+<button class="px-4 py-2 border border-border-subtle rounded-lg font-label-md text-label-md text-text-primary hover:bg-surface-container transition-colors">Configure Connectors</button>
+</div>
+</section>
+<!-- Inspector Panel (Expanded for 'spec.pdf') -->
+<aside class="w-context-panel-width border-l border-border-subtle bg-surface-container-low flex flex-col">
+<div class="p-stack-md border-b border-border-subtle flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="picture_as_pdf">picture_as_pdf</span>
+<h2 class="font-label-md text-label-md font-semibold text-text-primary">spec.pdf</h2>
+</div>
+<button class="text-text-secondary hover:text-text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<!-- Inspector Tabs -->
+<div class="flex border-b border-border-subtle">
+<button class="flex-1 py-3 font-label-md text-label-md text-primary border-b-2 border-primary">Chunks</button>
+<button class="flex-1 py-3 font-label-md text-label-md text-text-secondary hover:text-text-primary">Settings</button>
+<button class="flex-1 py-3 font-label-md text-label-md text-text-secondary hover:text-text-primary">History</button>
+</div>
+<!-- Chunks List -->
+<div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+<!-- Chunk 1 -->
+<div class="p-3 bg-surface-container rounded-lg border border-border-subtle group hover:border-ai-presence transition-colors">
+<div class="flex items-center justify-between mb-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-text-secondary font-code-sm text-[10px] uppercase">Chunk #001</span>
+<div class="flex items-center gap-3 text-[11px] text-text-secondary">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="notes">notes</span> 1,240 chars</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="token">token</span> 312 tokens</span>
+</div>
+</div>
+<p class="font-body-md text-sm text-text-primary line-clamp-3 mb-3 leading-relaxed">
+                            "The architecture of the Own Platform is designed for high-availability multi-tenant engineering workloads. It utilizes a distributed vector store coupled with..."
+                        </p>
+<div class="flex items-center justify-end">
+<button class="flex items-center gap-1 font-label-md text-[12px] text-ai-presence hover:underline">
+                                View in context
+                                <span class="material-symbols-outlined text-[14px]" data-icon="open_in_new">open_in_new</span>
+</button>
+</div>
+</div>
+<!-- Chunk 2 -->
+<div class="p-3 bg-surface-container rounded-lg border border-border-subtle group hover:border-ai-presence transition-colors">
+<div class="flex items-center justify-between mb-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-text-secondary font-code-sm text-[10px] uppercase">Chunk #002</span>
+<div class="flex items-center gap-3 text-[11px] text-text-secondary">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="notes">notes</span> 892 chars</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="token">token</span> 224 tokens</span>
+</div>
+</div>
+<p class="font-body-md text-sm text-text-primary line-clamp-3 mb-3 leading-relaxed">
+                            "Security compliance is maintained through strict RBAC policies enforced at the gateway level. All data at rest is encrypted using AES-256 standards with rotated..."
+                        </p>
+<div class="flex items-center justify-end">
+<button class="flex items-center gap-1 font-label-md text-[12px] text-ai-presence hover:underline">
+                                View in context
+                                <span class="material-symbols-outlined text-[14px]" data-icon="open_in_new">open_in_new</span>
+</button>
+</div>
+</div>
+<!-- Chunk 3 -->
+<div class="p-3 bg-surface-container rounded-lg border border-border-subtle group hover:border-ai-presence transition-colors">
+<div class="flex items-center justify-between mb-2">
+<span class="px-2 py-0.5 rounded bg-surface-container-highest text-text-secondary font-code-sm text-[10px] uppercase">Chunk #003</span>
+<div class="flex items-center gap-3 text-[11px] text-text-secondary">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="notes">notes</span> 1,560 chars</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]" data-icon="token">token</span> 410 tokens</span>
+</div>
+</div>
+<p class="font-body-md text-sm text-text-primary line-clamp-3 mb-3 leading-relaxed">
+                            "Deployment patterns favor rolling updates to ensure zero-downtime availability for critical AI endpoints. Metrics are exported via Prometheus..."
+                        </p>
+<div class="flex items-center justify-end">
+<button class="flex items-center gap-1 font-label-md text-[12px] text-ai-presence hover:underline">
+                                View in context
+                                <span class="material-symbols-outlined text-[14px]" data-icon="open_in_new">open_in_new</span>
+</button>
+</div>
+</div>
+<!-- Visual Data (Mini Graph) -->
+<div class="mt-stack-lg p-stack-md bg-surface-container-lowest rounded-xl border border-border-subtle">
+<h4 class="font-label-md text-[12px] text-text-secondary mb-4 uppercase tracking-wider">Semantic Distribution</h4>
+<div class="h-24 flex items-end justify-between gap-1">
+<div class="w-full bg-ai-presence/20 hover:bg-ai-presence transition-colors rounded-t h-[30%] cursor-help" title="Low density"></div>
+<div class="w-full bg-ai-presence/40 hover:bg-ai-presence transition-colors rounded-t h-[60%] cursor-help" title="Medium density"></div>
+<div class="w-full bg-ai-presence hover:bg-ai-presence transition-colors rounded-t h-[90%] cursor-help" title="High density"></div>
+<div class="w-full bg-ai-presence/30 hover:bg-ai-presence transition-colors rounded-t h-[45%] cursor-help" title="Low-Medium density"></div>
+<div class="w-full bg-ai-presence/70 hover:bg-ai-presence transition-colors rounded-t h-[75%] cursor-help" title="High density"></div>
+<div class="w-full bg-ai-presence/10 hover:bg-ai-presence transition-colors rounded-t h-[20%] cursor-help" title="Minimal density"></div>
+<div class="w-full bg-ai-presence/50 hover:bg-ai-presence transition-colors rounded-t h-[55%] cursor-help" title="Medium density"></div>
+<div class="w-full bg-ai-presence hover:bg-ai-presence transition-colors rounded-t h-[95%] cursor-help" title="Maximum density"></div>
+</div>
+<p class="mt-3 font-label-md text-[11px] text-text-secondary text-center italic">Heatmap of vector clusters for this document</p>
+</div>
+</div>
+</aside>
+</div>
+</main>
+<!-- Micro-interaction Scripts -->
+<script>
+        // Simple hover effect for table rows to simulate selection
+        const rows = document.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            row.addEventListener('click', () => {
+                rows.forEach(r => r.classList.remove('bg-surface-container-high/50', 'border-l-2', 'border-l-ai-presence'));
+                row.classList.add('bg-surface-container-high/50', 'border-l-2', 'border-l-ai-presence');
+            });
+        });
+
+        // Toggle mobile nav (not used in desktop but good to have)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/') {
+                document.querySelector('input').focus();
+                e.preventDefault();
+            }
+        });
+    </script>
+</body></html>

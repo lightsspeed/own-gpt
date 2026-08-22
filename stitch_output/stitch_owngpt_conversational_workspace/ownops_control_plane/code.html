@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OwnOps Control Plane | Operations</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        /* Custom Scrollbar for Engineering Look */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0A0A0A;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 2px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #404040;
+        }
+        /* Grid Background Pattern */
+        .engineering-grid {
+            background-image: radial-gradient(circle, #262626 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary": "#1000a9",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "surface-dim": "#13131b",
+                        "primary-container": "#8083ff",
+                        "on-tertiary-container": "#452000",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "bg-secondary": "#171717",
+                        "on-tertiary-fixed-variant": "#703700",
+                        "on-tertiary-fixed": "#301400",
+                        "on-primary-container": "#0d0096",
+                        "slate-gray": "#404040",
+                        "on-secondary-fixed-variant": "#005048",
+                        "surface-container-highest": "#34343d",
+                        "tertiary-container": "#d97721",
+                        "surface-container-low": "#1b1b23",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "bg-primary": "#0A0A0A",
+                        "surface-tint": "#c0c1ff",
+                        "error-container": "#93000a",
+                        "surface-container": "#1f1f27",
+                        "primary": "#c0c1ff",
+                        "tertiary-fixed": "#ffdcc5",
+                        "on-secondary": "#003731",
+                        "surface-variant": "#34343d",
+                        "inverse-on-surface": "#303038",
+                        "tertiary": "#ffb783",
+                        "primary-fixed": "#e1e0ff",
+                        "on-background": "#e4e1ed",
+                        "on-secondary-fixed": "#00201c",
+                        "surface-container-high": "#292932",
+                        "inverse-surface": "#e4e1ed",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "secondary-container": "#04b4a2",
+                        "on-tertiary": "#4f2500",
+                        "on-error": "#690005",
+                        "inverse-primary": "#494bd6",
+                        "border-subtle": "#262626",
+                        "outline-variant": "#464554",
+                        "on-primary-fixed": "#07006c",
+                        "surface-container-lowest": "#0d0d15",
+                        "outline": "#908fa0",
+                        "on-surface": "#e4e1ed",
+                        "error": "#ffb4ab",
+                        "background": "#13131b",
+                        "secondary-fixed": "#71f8e4",
+                        "bg-tertiary": "#262626",
+                        "success-teal": "#14B8A6",
+                        "secondary": "#4fdbc8",
+                        "surface-bright": "#393841",
+                        "on-secondary-container": "#003f38",
+                        "on-error-container": "#ffdad6",
+                        "ai-presence": "#6366F1",
+                        "text-secondary": "#A3A3A3",
+                        "text-primary": "#F5F5F5",
+                        "on-surface-variant": "#c7c4d7",
+                        "surface": "#13131b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "inset-md": "16px",
+                        "gutter": "24px",
+                        "stack-lg": "24px",
+                        "stack-md": "16px",
+                        "max-content-width": "800px",
+                        "stack-sm": "8px",
+                        "sidebar-width": "280px",
+                        "context-panel-width": "400px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "body-lg": ["Inter"],
+                        "code-sm": ["JetBrains Mono"],
+                        "label-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg-mobile": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-bg-primary text-text-primary font-body-md overflow-hidden">
+<!-- Sidebar Navigation -->
+<aside class="fixed left-0 top-0 h-screen w-sidebar-width bg-secondary dark:bg-bg-secondary border-r border-border-subtle flex flex-col p-stack-md z-50">
+<div class="mb-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-ai-presence rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-lg">settings_input_component</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-text-primary">Own Platform</h1>
+<p class="text-xs text-text-secondary uppercase tracking-widest">AI Engineering</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-md text-label-md">Home</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+<span class="font-label-md text-label-md">Observe</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-md text-label-md">Analyze</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="gavel">gavel</span>
+<span class="font-label-md text-label-md">Govern</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 bg-surface-container-highest text-primary rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="settings_remote">settings_remote</span>
+<span class="font-label-md text-label-md">Operate</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="settings_input_component">settings_input_component</span>
+<span class="font-label-md text-label-md">System</span>
+</a>
+</nav>
+<div class="mt-auto pt-4 border-t border-border-subtle space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-label-md text-label-md">Docs</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-text-secondary hover:bg-surface-container-high hover:text-text-primary transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-label-md text-label-md">Support</span>
+</a>
+</div>
+</aside>
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 right-0 w-[calc(100%-theme(spacing.sidebar-width))] h-16 bg-primary dark:bg-bg-primary border-b border-border-subtle flex items-center justify-between px-gutter z-40">
+<div class="flex items-center gap-6 flex-1">
+<div class="relative w-96 group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-ai-presence text-lg" data-icon="search">search</span>
+<input class="w-full bg-surface-container-low border border-border-subtle rounded-lg py-1.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-ai-presence transition-all" placeholder="Search systems, traces, or logs..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-text-secondary hover:text-text-primary transition-transform active:scale-95">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-text-primary transition-transform active:scale-95">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<div class="h-8 w-[1px] bg-border-subtle mx-2"></div>
+<div class="flex items-center gap-3 pl-2 cursor-pointer group">
+<div class="text-right">
+<p class="font-label-md text-label-md text-text-primary">Admin_01</p>
+<p class="text-[10px] text-text-secondary uppercase">Superuser</p>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-border-subtle">
+<img class="w-full h-full object-cover" data-alt="Professional studio portrait of a system administrator in a dark tech environment, muted lighting, sharp focus, wearing high-tech glasses, neutral expression, minimalist dark clothing, corporate tech aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDi_ZKyo0CH-trwbjRWLPPT-EZAT50E99CPKDK-ZpRy1DKaPaCsTFJlUL1iLegFZwLFUYbiauN-KCtYJ2E7rJjjuTaJ8l-bzHs1UAKqcBlvxOUyRpyrnia1a2qss4XHzud1lxce8gN7hdGplMuoQs3TykaJG5V0gOJ7EUfvpbEjI1tBEUAgPoxyR27NngEQ37BGhKruwvGTp0maoqSo6IHQWEuGXGxZQYiz2ThcGWki40i1oZkIiVfWHlbUH1fMRDBhtzPcNDp1j4o"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-sidebar-width pt-16 h-screen flex overflow-hidden">
+<!-- Center Panel: Status & Health Grid -->
+<section class="flex-1 overflow-y-auto p-gutter engineering-grid">
+<!-- Breadcrumbs -->
+<div class="flex items-center gap-2 text-xs text-text-secondary mb-6">
+<span>Infrastructure</span>
+<span class="material-symbols-outlined text-[12px]" data-icon="chevron_right">chevron_right</span>
+<span class="text-text-primary font-medium">Operations Dashboard</span>
+</div>
+<!-- Global Status Bar -->
+<div class="grid grid-cols-3 gap-stack-md mb-gutter">
+<div class="bg-surface-container-low border border-border-subtle p-stack-md rounded-lg flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-success-teal/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-success-teal" data-icon="check_circle">check_circle</span>
+</div>
+<div>
+<p class="text-2xl font-bold font-headline-md">12</p>
+<p class="text-xs text-text-secondary uppercase">Healthy Systems</p>
+</div>
+</div>
+<div class="bg-surface-container-low border border-border-subtle p-stack-md rounded-lg flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-tertiary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary" data-icon="warning">warning</span>
+</div>
+<div>
+<p class="text-2xl font-bold font-headline-md">02</p>
+<p class="text-xs text-text-secondary uppercase">Degraded State</p>
+</div>
+</div>
+<div class="bg-surface-container-low border border-border-subtle p-stack-md rounded-lg flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-error/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-error" data-icon="error">error</span>
+</div>
+<div>
+<p class="text-2xl font-bold font-headline-md">01</p>
+<p class="text-xs text-text-secondary uppercase">Down / Critical</p>
+</div>
+</div>
+</div>
+<!-- Health Grid -->
+<h2 class="font-headline-md text-headline-md mb-4 flex items-center gap-2">
+                Capability Map
+                <span class="px-2 py-0.5 bg-surface-container-highest text-[10px] rounded uppercase text-text-secondary">Live Telemetry</span>
+</h2>
+<div class="grid grid-cols-4 gap-4 mb-gutter">
+<!-- Card: Runtime -->
+<div class="bg-bg-secondary border border-border-subtle p-4 rounded-lg hover:border-ai-presence transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-text-primary">Runtime</h3>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-success-teal animate-pulse"></span>
+<span class="text-[10px] text-success-teal">OK</span>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs">
+<span class="text-text-secondary font-code-sm">CPU Load</span>
+<span class="font-bold">42%</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-success-teal w-[42%]"></div>
+</div>
+<div class="pt-2 flex justify-between items-center">
+<span class="text-[10px] px-1.5 py-0.5 bg-surface-container rounded font-medium text-text-secondary">V3.4.1</span>
+<span class="text-[10px] text-text-secondary uppercase">Production</span>
+</div>
+</div>
+</div>
+<!-- Card: Ledger -->
+<div class="bg-bg-secondary border border-border-subtle p-4 rounded-lg hover:border-ai-presence transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-text-primary">Ledger</h3>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-success-teal"></span>
+<span class="text-[10px] text-success-teal">OK</span>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs">
+<span class="text-text-secondary font-code-sm">Tx/s</span>
+<span class="font-bold">1.2k</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-success-teal w-[65%]"></div>
+</div>
+<div class="pt-2 flex justify-between items-center">
+<span class="text-[10px] px-1.5 py-0.5 bg-surface-container rounded font-medium text-text-secondary">V2.1.0</span>
+<span class="text-[10px] text-text-secondary uppercase">Production</span>
+</div>
+</div>
+</div>
+<!-- Card: Evidence Engine (Selected) -->
+<div class="bg-surface-container-high border-2 border-ai-presence p-4 rounded-lg shadow-lg relative overflow-hidden">
+<div class="absolute top-0 right-0 p-1">
+<span class="material-symbols-outlined text-ai-presence text-lg" data-icon="star" data-weight="fill">star</span>
+</div>
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-text-primary">Evidence Engine</h3>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="text-[10px] text-tertiary">Degraded</span>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs">
+<span class="text-text-secondary font-code-sm">Latency</span>
+<span class="font-bold text-tertiary">842ms</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-[88%]"></div>
+</div>
+<div class="pt-2 flex justify-between items-center">
+<span class="text-[10px] px-1.5 py-0.5 bg-ai-presence/20 text-ai-presence rounded font-medium border border-ai-presence/30">V4.0-RC</span>
+<span class="text-[10px] text-text-secondary uppercase">Staging</span>
+</div>
+</div>
+</div>
+<!-- Card: Analytics -->
+<div class="bg-bg-secondary border border-border-subtle p-4 rounded-lg hover:border-ai-presence transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-text-primary">Analytics</h3>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-success-teal"></span>
+<span class="text-[10px] text-success-teal">OK</span>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs">
+<span class="text-text-secondary font-code-sm">Query Rate</span>
+<span class="font-bold">4.2k</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-success-teal w-[30%]"></div>
+</div>
+<div class="pt-2 flex justify-between items-center">
+<span class="text-[10px] px-1.5 py-0.5 bg-surface-container rounded font-medium text-text-secondary">V3.0.2</span>
+<span class="text-[10px] text-text-secondary uppercase">Production</span>
+</div>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="bg-bg-secondary border border-border-subtle p-4 rounded-lg hover:border-ai-presence transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-text-primary">Propose</h3>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-success-teal"></span>
+<span class="text-[10px] text-success-teal">OK</span>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-text-secondary uppercase">Status</p>
+<p class="text-sm font-medium">Idle / Ready</p>
+</div>
+</div>
+<div class="bg-bg-secondary border border-border-subtle p-4 rounded-lg hover:border-ai-presence transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-text-primary">Gateway</h3>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+<span class="text-[10px] text-error">Down</span>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-text-secondary uppercase">Reason</p>
+<p class="text-sm font-medium text-error">Auth-Service Timeout</p>
+</div>
+</div>
+<div class="bg-bg-secondary border border-border-subtle p-4 rounded-lg hover:border-ai-presence transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-text-primary">Vector DB</h3>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-success-teal"></span>
+<span class="text-[10px] text-success-teal">OK</span>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-text-secondary uppercase">Memory</p>
+<p class="text-sm font-medium">12.4GB / 32GB</p>
+</div>
+</div>
+<div class="bg-bg-secondary border border-border-subtle p-4 rounded-lg hover:border-ai-presence transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-3">
+<h3 class="font-bold text-text-primary">Audit Log</h3>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-success-teal"></span>
+<span class="text-[10px] text-success-teal">OK</span>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-text-secondary uppercase">Retention</p>
+<p class="text-sm font-medium">90 Days (Compliant)</p>
+</div>
+</div>
+</div>
+<!-- Telemetry Section (Bottom) -->
+<div class="grid grid-cols-1 gap-6 pb-gutter">
+<div class="bg-surface-container-low border border-border-subtle rounded-lg overflow-hidden">
+<div class="px-gutter py-3 border-b border-border-subtle flex justify-between items-center bg-surface-container">
+<h3 class="text-sm font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="terminal">terminal</span>
+                            Recent System Logs
+                        </h3>
+<div class="flex items-center gap-4 text-[10px] text-text-secondary uppercase">
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-error"></span> Error</span>
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Warn</span>
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-ai-presence"></span> Info</span>
+</div>
+</div>
+<div class="font-code-sm text-code-sm max-h-64 overflow-y-auto">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-surface-container text-text-secondary text-[10px] uppercase">
+<tr>
+<th class="px-gutter py-2 border-b border-border-subtle">Timestamp</th>
+<th class="px-4 py-2 border-b border-border-subtle">System</th>
+<th class="px-4 py-2 border-b border-border-subtle">Message</th>
+<th class="px-gutter py-2 border-b border-border-subtle text-right">Status</th>
+</tr>
+</thead>
+<tbody class="text-xs">
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="px-gutter py-3 border-b border-border-subtle text-text-secondary">2023-11-20 14:22:01.442</td>
+<td class="px-4 py-3 border-b border-border-subtle text-ai-presence">evidence-engine</td>
+<td class="px-4 py-3 border-b border-border-subtle">Failed to reach persistence layer. Retrying in 200ms...</td>
+<td class="px-gutter py-3 border-b border-border-subtle text-right"><span class="text-tertiary">WARN</span></td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors">
+<td class="px-gutter py-3 border-b border-border-subtle text-text-secondary">2023-11-20 14:21:59.001</td>
+<td class="px-4 py-3 border-b border-border-subtle text-ai-presence">gateway</td>
+<td class="px-4 py-3 border-b border-border-subtle">Critical: Auth server upstream closed connection.</td>
+<td class="px-gutter py-3 border-b border-border-subtle text-right"><span class="text-error">CRIT</span></td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors">
+<td class="px-gutter py-3 border-b border-border-subtle text-text-secondary">2023-11-20 14:21:58.852</td>
+<td class="px-4 py-3 border-b border-border-subtle text-ai-presence">runtime</td>
+<td class="px-4 py-3 border-b border-border-subtle">Auto-scaling group 'production-v1' triggered up-size.</td>
+<td class="px-gutter py-3 border-b border-border-subtle text-right"><span class="text-success-teal">INFO</span></td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors">
+<td class="px-gutter py-3 border-b border-border-subtle text-text-secondary">2023-11-20 14:21:55.120</td>
+<td class="px-4 py-3 border-b border-border-subtle text-ai-presence">ledger</td>
+<td class="px-4 py-3 border-b border-border-subtle">Checksum verification successful for Block #992821.</td>
+<td class="px-gutter py-3 border-b border-border-subtle text-right"><span class="text-success-teal">INFO</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Panel: Evidence Engine Detail -->
+<aside class="w-context-panel-width h-full bg-surface-container-low border-l border-border-subtle flex flex-col overflow-hidden">
+<div class="p-gutter border-b border-border-subtle flex justify-between items-center">
+<div>
+<h2 class="font-headline-md text-lg">Evidence Engine</h2>
+<p class="text-xs text-text-secondary">System ID: EV-0042-PROD</p>
+</div>
+<button class="w-8 h-8 rounded-full hover:bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-lg" data-icon="close">close</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto p-gutter space-y-gutter">
+<!-- Latency Chart Placeholder -->
+<div class="space-y-2">
+<div class="flex justify-between items-end">
+<h4 class="text-xs font-bold uppercase tracking-wider text-text-secondary">Latency p95 (ms)</h4>
+<span class="text-2xl font-mono text-tertiary">842ms</span>
+</div>
+<div class="h-32 w-full bg-surface-container-highest/50 rounded border border-border-subtle relative overflow-hidden">
+<!-- Simulated Chart Grid -->
+<div class="absolute inset-0 grid grid-cols-6 grid-rows-4 opacity-10">
+<div class="border-r border-b border-text-secondary"></div><div class="border-r border-b border-text-secondary"></div><div class="border-r border-b border-text-secondary"></div><div class="border-r border-b border-text-secondary"></div><div class="border-r border-b border-text-secondary"></div><div class="border-b border-text-secondary"></div>
+<div class="border-r border-b border-text-secondary"></div><div class="border-r border-b border-text-secondary"></div><div class="border-r border-b border-text-secondary"></div><div class="border-r border-b border-text-secondary"></div><div class="border-r border-b border-text-secondary"></div><div class="border-b border-text-secondary"></div>
+</div>
+<!-- Simulated Path -->
+<svg class="absolute bottom-0 w-full h-full" preserveaspectratio="none">
+<path d="M0,100 L50,80 L100,90 L150,60 L200,70 L250,30 L300,40 L350,10 L400,20" fill="none" stroke="#ffb783" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+</svg>
+</div>
+</div>
+<!-- Error Rate Sparkline -->
+<div class="p-4 bg-surface-container rounded-lg border border-border-subtle">
+<div class="flex justify-between items-center mb-2">
+<span class="text-xs text-text-secondary">Error Rate (24h)</span>
+<span class="text-sm font-bold text-error">2.4%</span>
+</div>
+<div class="flex items-end gap-1 h-8">
+<div class="flex-1 bg-success-teal h-2"></div>
+<div class="flex-1 bg-success-teal h-3"></div>
+<div class="flex-1 bg-success-teal h-2"></div>
+<div class="flex-1 bg-success-teal h-4"></div>
+<div class="flex-1 bg-tertiary h-6"></div>
+<div class="flex-1 bg-error h-8"></div>
+<div class="flex-1 bg-tertiary h-5"></div>
+<div class="flex-1 bg-success-teal h-3"></div>
+<div class="flex-1 bg-success-teal h-2"></div>
+<div class="flex-1 bg-success-teal h-2"></div>
+</div>
+</div>
+<!-- Dependency Graph -->
+<div class="space-y-3">
+<h4 class="text-xs font-bold uppercase tracking-wider text-text-secondary">Dependency Graph</h4>
+<div class="h-48 bg-surface-container rounded-lg border border-border-subtle p-4 relative flex items-center justify-center">
+<!-- Abstract Visual of a Graph -->
+<div class="flex flex-col gap-8 items-center">
+<div class="px-3 py-1 bg-surface-container-highest border border-ai-presence rounded text-[10px] font-mono">Gateway</div>
+<div class="flex gap-12 relative">
+<!-- Lines -->
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 h-6 w-0.5 bg-border-subtle"></div>
+<div class="absolute top-2 left-0 w-full h-0.5 bg-border-subtle -z-10"></div>
+<div class="px-3 py-1 bg-ai-presence text-white rounded text-[10px] font-mono shadow-lg shadow-ai-presence/20 ring-2 ring-ai-presence/50 scale-110">Evidence Engine</div>
+<div class="px-3 py-1 bg-surface-container-highest border border-border-subtle rounded text-[10px] font-mono">Vector DB</div>
+</div>
+<div class="px-3 py-1 bg-surface-container-highest border border-tertiary rounded text-[10px] font-mono opacity-50">Persistence</div>
+</div>
+</div>
+</div>
+<!-- Recent Events -->
+<div class="space-y-3">
+<h4 class="text-xs font-bold uppercase tracking-wider text-text-secondary">Recent Events</h4>
+<div class="space-y-2">
+<div class="p-3 bg-surface-container-low border-l-2 border-tertiary rounded">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-bold text-tertiary uppercase">Latency Spike</span>
+<span class="text-[9px] text-text-secondary">4m ago</span>
+</div>
+<p class="text-[11px] leading-relaxed">System crossed threshold (500ms) with current p95 at 842ms.</p>
+</div>
+<div class="p-3 bg-surface-container-low border-l-2 border-ai-presence rounded">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-bold text-ai-presence uppercase">Deployment</span>
+<span class="text-[9px] text-text-secondary">2h ago</span>
+</div>
+<p class="text-[11px] leading-relaxed">Release V4.0-RC deployed to staging environment by @ops_bot.</p>
+</div>
+<div class="p-3 bg-surface-container-low border-l-2 border-success-teal rounded">
+<div class="flex justify-between items-start mb-1">
+<span class="text-[10px] font-bold text-success-teal uppercase">Health Check</span>
+<span class="text-[9px] text-text-secondary">6h ago</span>
+</div>
+<p class="text-[11px] leading-relaxed">Automated quarterly security audit passed with 100% compliance.</p>
+</div>
+</div>
+</div>
+<div class="pt-4">
+<button class="w-full py-2.5 bg-ai-presence text-white rounded-lg font-label-md text-label-md flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm" data-icon="terminal">terminal</span>
+                        Open Debug Inspector
+                    </button>
+<button class="w-full mt-2 py-2.5 bg-transparent border border-border-subtle text-text-primary rounded-lg font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="restart_alt">restart_alt</span>
+                        Restart Capability
+                    </button>
+</div>
+</div>
+</aside>
+</main>
+<!-- Contextual FAB (Hidden on detail, shown here for Home/Ops contextual) -->
+<!-- Suppressed based on UI rules as this is a "Details/Operations" view -->
+<script>
+        // Simple Micro-interaction for Log Table Rows
+        document.querySelectorAll('tbody tr').forEach(row => {
+            row.addEventListener('click', () => {
+                // Flash effect for interaction
+                row.classList.add('bg-ai-presence/10');
+                setTimeout(() => {
+                    row.classList.remove('bg-ai-presence/10');
+                }, 300);
+            });
+        });
+
+        // Simulating Live Telemetry
+        setInterval(() => {
+            const healthDots = document.querySelectorAll('.animate-pulse');
+            healthDots.forEach(dot => {
+                // Minor opacity variation for life
+                dot.style.opacity = 0.5 + Math.random() * 0.5;
+            });
+        }, 1500);
+    </script>
+</body></html>

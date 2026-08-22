@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: owngpt-ingress
+  namespace: owngpt
+  labels:
+    app.kubernetes.io/name: owngpt
+    app.kubernetes.io/component: ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: owngpt-backend
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: owngpt-backend
+                port:
+                  number: 8000
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: owngpt-backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: owngpt-frontend
+                port:
+                  number: 80

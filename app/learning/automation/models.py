@@ -16,6 +16,7 @@ class JobType(str, Enum):
     CALIBRATION_CHECK = "calibration_check"
     BENCHMARK_REGRESSION = "benchmark_regression"
     RECOMMENDATION_REFRESH = "recommendation_refresh"
+    MEMORY_RETENTION = "memory_retention"
 
 
 class JobStatus(str, Enum):
@@ -58,6 +59,27 @@ class AutomationRun:
         if self.lineage is None:
             self.lineage = Lineage(artifact_id=self.id)
 
+    @staticmethod
+    def from_dict(data: dict) -> "AutomationRun":
+        """Reconstruct from a dict (handles enums and nested Lineage)."""
+        kwargs = dict(data)
+        lineage_data = kwargs.pop("lineage", None)
+        if lineage_data and isinstance(lineage_data, dict):
+            kwargs["lineage"] = Lineage(**lineage_data)
+        jt = kwargs.get("job_type")
+        st = kwargs.get("status")
+        if jt is not None:
+            try:
+                kwargs["job_type"] = JobType(jt)
+            except ValueError:
+                pass
+        if st is not None:
+            try:
+                kwargs["status"] = JobStatus(st)
+            except ValueError:
+                pass
+        return AutomationRun(**kwargs)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -70,7 +92,7 @@ class AutomationRun:
             "findings_generated": self.findings_generated,
             "error": self.error,
             "snapshot_id": self.snapshot_id,
-            "lineage": self.lineage.to_dict() if self.lineage else None,
+            "lineage": self.lineage.to_dict() if isinstance(self.lineage, Lineage) else self.lineage,
         }
 
 
@@ -156,7 +178,63 @@ class EvaluationSnapshot:
             "change_summary": self.change_summary,
             "findings_delta": self.findings_delta,
             "confidence_delta": self.confidence_delta,
-            "lineage": self.lineage.to_dict() if self.lineage else None,
+            "lineage": self.lineage.to_dict() if isinstance(self.lineage, Lineage) else self.lineage,
+        }
+
+
+@dataclass
+class BenchmarkBaseline:
+    """Immutable baseline of benchmark results used for regression detection.
+
+    Stores per-dataset aggregate metrics at a point in time. Each run writes a
+    new baseline artifact; regression detection compares the newest run against
+    the most recent baseline and never mutates history.
+    """
+    id: str = ""
+    dataset: str = ""
+    display_name: str = ""
+    timestamp: str = ""
+    benchmark_version: str = "2.0.0"
+    total: int = 0
+    successful: int = 0
+    failed: int = 0
+    success_rate: float = 0.0
+    avg_latency_ms: float = 0.0
+    avg_faithfulness: Optional[float] = None
+    avg_relevancy: Optional[float] = None
+    metrics: dict = field(default_factory=dict)
+    previous_baseline_id: Optional[str] = None
+    lineage: Optional[Lineage] = None
+
+    def __post_init__(self):
+        if not self.id:
+            self.id = f"bl-{uuid.uuid4().hex[:12]}"
+        if not self.timestamp:
+            self.timestamp = datetime.now(timezone.utc).isoformat()
+        if self.lineage is None:
+            self.lineage = Lineage(
+                artifact_id=self.id,
+                parent_artifact_id=self.previous_baseline_id,
+                parent_type=ArtifactType.ANALYTICS_REPORT,
+            )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "dataset": self.dataset,
+            "display_name": self.display_name,
+            "timestamp": self.timestamp,
+            "benchmark_version": self.benchmark_version,
+            "total": self.total,
+            "successful": self.successful,
+            "failed": self.failed,
+            "success_rate": round(self.success_rate, 4),
+            "avg_latency_ms": round(self.avg_latency_ms, 2),
+            "avg_faithfulness": round(self.avg_faithfulness, 4) if self.avg_faithfulness is not None else None,
+            "avg_relevancy": round(self.avg_relevancy, 4) if self.avg_relevancy is not None else None,
+            "metrics": self.metrics,
+            "previous_baseline_id": self.previous_baseline_id,
+            "lineage": self.lineage.to_dict() if isinstance(self.lineage, Lineage) else self.lineage,
         }
 
 
@@ -236,6 +314,8 @@ class DailyBrief:
     routing_note: str = ""
     recommendations_generated: int = 0
     experiments_awaiting: int = 0
+    knowledge_docs: int = 0
+    knowledge_updated: str = ""
     snapshot_id: str = ""
     generated_at: str = ""
 
@@ -256,6 +336,8 @@ class DailyBrief:
             "routing_note": self.routing_note,
             "recommendations_generated": self.recommendations_generated,
             "experiments_awaiting": self.experiments_awaiting,
+            "knowledge_docs": self.knowledge_docs,
+            "knowledge_updated": self.knowledge_updated,
             "snapshot_id": self.snapshot_id,
             "generated_at": self.generated_at,
         }

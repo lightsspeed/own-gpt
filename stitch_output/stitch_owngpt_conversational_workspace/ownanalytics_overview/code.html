@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "text-primary": "#F5F5F5",
+                        "on-surface-variant": "#c7c4d7",
+                        "on-tertiary-container": "#452000",
+                        "error": "#ffb4ab",
+                        "on-primary": "#1000a9",
+                        "inverse-surface": "#e4e1ed",
+                        "bg-secondary": "#171717",
+                        "tertiary-container": "#d97721",
+                        "surface-container-high": "#292932",
+                        "bg-tertiary": "#262626",
+                        "inverse-on-surface": "#303038",
+                        "inverse-primary": "#494bd6",
+                        "primary-fixed": "#e1e0ff",
+                        "surface": "#13131b",
+                        "on-tertiary-fixed-variant": "#703700",
+                        "on-secondary": "#003731",
+                        "bg-primary": "#0A0A0A",
+                        "primary-container": "#8083ff",
+                        "surface-variant": "#34343d",
+                        "on-primary-container": "#0d0096",
+                        "secondary": "#4fdbc8",
+                        "primary": "#c0c1ff",
+                        "on-error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#ffb783",
+                        "secondary-fixed": "#71f8e4",
+                        "on-secondary-fixed": "#00201c",
+                        "error-container": "#93000a",
+                        "ai-presence": "#6366F1",
+                        "surface-container": "#1f1f27",
+                        "surface-container-lowest": "#0d0d15",
+                        "surface-bright": "#393841",
+                        "on-error": "#690005",
+                        "border-subtle": "#262626",
+                        "tertiary-fixed": "#ffdcc5",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "background": "#13131b",
+                        "slate-gray": "#404040",
+                        "on-tertiary": "#4f2500",
+                        "on-background": "#e4e1ed",
+                        "surface-container-highest": "#34343d",
+                        "surface-container-low": "#1b1b23",
+                        "secondary-container": "#04b4a2",
+                        "on-secondary-container": "#003f38",
+                        "on-primary-fixed-variant": "#2f2ebe",
+                        "primary-fixed-dim": "#c0c1ff",
+                        "outline-variant": "#464554",
+                        "success-teal": "#14B8A6",
+                        "text-secondary": "#A3A3A3",
+                        "tertiary": "#ffb783",
+                        "outline": "#908fa0",
+                        "surface-tint": "#c0c1ff",
+                        "on-secondary-fixed-variant": "#005048",
+                        "on-surface": "#e4e1ed",
+                        "on-primary-fixed": "#07006c",
+                        "surface-dim": "#13131b",
+                        "on-tertiary-fixed": "#301400"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-lg": "24px",
+                        "stack-md": "16px",
+                        "sidebar-width": "280px",
+                        "inset-md": "16px",
+                        "max-content-width": "800px",
+                        "context-panel-width": "400px",
+                        "stack-sm": "8px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "headline-lg": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["15px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "label-md": ["13px", {"lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { background-color: #0A0A0A; color: #F5F5F5; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-card { background: rgba(23, 23, 23, 0.7); backdrop-filter: blur(12px); border: 1px solid #262626; }
+        .sparkline-svg { width: 100%; height: 32px; stroke: #6366F1; stroke-width: 2; fill: none; }
+        .trend-up { color: #14B8A6; }
+        .trend-down { color: #ffb4ab; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #262626; border-radius: 10px; }
+    </style>
+</head>
+<body class="flex min-h-screen">
+<!-- SideNavBar (Shared Component) -->
+<aside class="w-sidebar-width h-screen sticky top-0 left-0 border-r border-border-subtle bg-bg-secondary flex flex-col p-inset-md gap-stack-md shrink-0">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 bg-ai-presence rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">terminal</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-text-primary">OwnOps</h1>
+<p class="font-label-md text-label-md text-text-secondary">Platform Engineering</p>
+</div>
+</div>
+<button class="w-full bg-ai-presence text-white py-3 rounded-lg font-label-md text-label-md font-bold flex items-center justify-center gap-2 active:scale-95 transition-all mb-4">
+<span class="material-symbols-outlined text-sm">add</span>
+            New Experiment
+        </button>
+<nav class="flex-1 space-y-1">
+<div class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:bg-surface-container-low transition-colors cursor-pointer">
+<span class="material-symbols-outlined">science</span>
+<span class="font-body-md text-body-md">OwnLab</span>
+</div>
+<!-- Active Navigation -->
+<div class="flex items-center gap-3 p-3 rounded-lg bg-surface-container-high text-ai-presence font-bold transition-colors cursor-pointer">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">OwnAnalytics</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:bg-surface-container-low transition-colors cursor-pointer">
+<span class="material-symbols-outlined">folder_open</span>
+<span class="font-body-md text-body-md">OwnArtifacts</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:bg-surface-container-low transition-colors cursor-pointer">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">OwnConfig</span>
+</div>
+</nav>
+<div class="pt-6 border-t border-border-subtle space-y-1">
+<div class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:bg-surface-container-low transition-colors cursor-pointer">
+<span class="material-symbols-outlined">menu_book</span>
+<span class="font-body-md text-body-md">Documentation</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded-lg text-text-secondary hover:bg-surface-container-low transition-colors cursor-pointer">
+<span class="material-symbols-outlined">support_agent</span>
+<span class="font-body-md text-body-md">Support</span>
+</div>
+</div>
+</aside>
+<div class="flex-1 flex flex-col min-w-0">
+<!-- TopNavBar (Shared Component) -->
+<header class="h-16 w-full sticky top-0 z-40 border-b border-border-subtle bg-bg-primary flex justify-between items-center px-gutter">
+<div class="flex items-center gap-8">
+<div class="relative group">
+<span class="absolute inset-y-0 left-3 flex items-center text-text-secondary group-focus-within:text-ai-presence">
+<span class="material-symbols-outlined text-sm">search</span>
+</span>
+<input class="bg-surface-container-low border-none rounded-full pl-10 pr-4 py-1.5 text-label-md w-64 focus:ring-2 focus:ring-ai-presence transition-all" placeholder="Search telemetry data..." type="text"/>
+</div>
+<nav class="flex gap-6 items-center">
+<a class="font-label-md text-label-md text-text-primary border-b-2 border-ai-presence pb-1" href="#">Explorer</a>
+<a class="font-label-md text-label-md text-text-secondary hover:text-text-primary transition-all" href="#">History</a>
+<a class="font-label-md text-label-md text-text-secondary hover:text-text-primary transition-all" href="#">Compare</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<button class="p-2 text-text-secondary hover:text-text-primary transition-all"><span class="material-symbols-outlined">schedule</span></button>
+<button class="p-2 text-text-secondary hover:text-text-primary transition-all"><span class="material-symbols-outlined">filter_alt</span></button>
+<button class="p-2 text-text-secondary hover:text-text-primary transition-all"><span class="material-symbols-outlined">more_vert</span></button>
+</div>
+<div class="h-8 w-px bg-border-subtle mx-2"></div>
+<div class="flex gap-3">
+<button class="px-4 py-1.5 border border-border-subtle rounded-lg font-label-md text-label-md text-text-primary hover:bg-surface-container-low transition-all">Save</button>
+<button class="px-4 py-1.5 bg-ai-presence rounded-lg font-label-md text-label-md text-white font-bold transition-all active:scale-95">Deploy</button>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-variant overflow-hidden border border-border-subtle">
+<img class="w-full h-full object-cover" data-alt="Close-up portrait of a tech professional with minimalist style, sharp features, soft rim lighting, dark studio background, wearing a neutral charcoal turtleneck, high contrast, cinematic photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCgfq3tqTTF85BnE-ylVGSn3ZxsFHkLIE71H9kGM9s6UGhbyti1NhuhIqNW9BaVabVcRYcdbAMID6LTAd6wjw9lYzDK0CiRV4dYbZ4VjAV-NRMcZJQx0pqUjLcueIwRgcYYm_aVBfPycdRGPDTI4NEJ_xs9x5nz2_xQnWPIt1yzdKdCQnx5RetX4fm2YvUVXOEEi6wqOSi7J4QNZqb5BYcYpLYSLMlA2v5n4z2uMfl0D_nk_cVBsMxXejvAYG4SxQloFozDj0bpPhA"/>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<main class="flex-1 p-gutter overflow-y-auto space-y-stack-lg relative">
+<!-- Animated Background Gradient Subtle Layer -->
+<div class="absolute inset-0 pointer-events-none opacity-10 overflow-hidden">
+
+</div>
+<!-- Header Section -->
+<section class="relative z-10">
+<div class="flex justify-between items-end">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-text-primary">System Overview</h2>
+<p class="text-text-secondary font-body-md mt-1">Real-time inference and retrieval orchestration metrics.</p>
+</div>
+<div class="flex gap-2 bg-bg-secondary p-1 rounded-lg border border-border-subtle">
+<button class="px-4 py-1 rounded bg-surface-container-high text-white text-label-md font-bold transition-all">24h</button>
+<button class="px-4 py-1 rounded text-text-secondary hover:text-white text-label-md transition-all">7d</button>
+<button class="px-4 py-1 rounded text-text-secondary hover:text-white text-label-md transition-all">30d</button>
+</div>
+</div>
+</section>
+<!-- KPI Row (Sparklines) -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-gutter relative z-10">
+<div class="glass-card p-6 rounded-xl flex flex-col justify-between">
+<div>
+<span class="text-text-secondary font-label-md uppercase tracking-wider">Total Queries</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-4xl font-bold font-headline-md">1.2M</span>
+<span class="text-success-teal font-label-md flex items-center">
+<span class="material-symbols-outlined text-xs">trending_up</span> 12.4%
+                            </span>
+</div>
+</div>
+<div class="mt-6">
+<svg class="sparkline-svg" viewbox="0 0 100 20">
+<path d="M0,15 L10,12 L20,18 L30,10 L40,14 L50,8 L60,11 L70,5 L80,9 L90,2 L100,6"></path>
+</svg>
+</div>
+</div>
+<div class="glass-card p-6 rounded-xl flex flex-col justify-between">
+<div>
+<span class="text-text-secondary font-label-md uppercase tracking-wider">Avg Latency</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-4xl font-bold font-headline-md">240ms</span>
+<span class="text-error font-label-md flex items-center">
+<span class="material-symbols-outlined text-xs">trending_up</span> 4.2%
+                            </span>
+</div>
+</div>
+<div class="mt-6">
+<svg class="sparkline-svg" style="stroke: #ffb4ab;" viewbox="0 0 100 20">
+<path d="M0,5 L10,8 L20,4 L30,9 L40,7 L50,12 L60,10 L70,15 L80,13 L90,18 L100,16"></path>
+</svg>
+</div>
+</div>
+<div class="glass-card p-6 rounded-xl flex flex-col justify-between">
+<div>
+<span class="text-text-secondary font-label-md uppercase tracking-wider">Error Rate</span>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-4xl font-bold font-headline-md">0.02%</span>
+<span class="text-success-teal font-label-md flex items-center">
+<span class="material-symbols-outlined text-xs">trending_down</span> 0.8%
+                            </span>
+</div>
+</div>
+<div class="mt-6">
+<svg class="sparkline-svg" style="stroke: #14B8A6;" viewbox="0 0 100 20">
+<path d="M0,18 L10,15 L20,16 L30,12 L40,14 L50,10 L60,9 L70,7 L80,5 L90,3 L100,2"></path>
+</svg>
+</div>
+</div>
+</section>
+<!-- Bento Grid Summary Cards -->
+<section class="grid grid-cols-12 gap-gutter relative z-10">
+<!-- Query Logic (Large Primary) -->
+<div class="col-span-12 md:col-span-8 glass-card p-6 rounded-xl overflow-hidden group">
+<div class="flex justify-between items-start mb-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-ai-presence/20 flex items-center justify-center text-ai-presence">
+<span class="material-symbols-outlined">query_stats</span>
+</div>
+<h3 class="font-headline-md text-headline-md">Query Intelligence</h3>
+</div>
+<button class="text-text-secondary hover:text-ai-presence transition-colors"><span class="material-symbols-outlined">open_in_new</span></button>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-low p-4 rounded-lg border border-border-subtle">
+<p class="font-label-md text-text-secondary">P95 Analysis</p>
+<p class="text-2xl font-bold mt-1">312ms</p>
+<div class="w-full bg-bg-primary h-1 mt-4 rounded-full overflow-hidden">
+<div class="bg-ai-presence h-full w-[72%]"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg border border-border-subtle">
+<p class="font-label-md text-text-secondary">Semantic Hit Rate</p>
+<p class="text-2xl font-bold mt-1">94.2%</p>
+<div class="w-full bg-bg-primary h-1 mt-4 rounded-full overflow-hidden">
+<div class="bg-success-teal h-full w-[94%]"></div>
+</div>
+</div>
+</div>
+<div class="mt-6 border-t border-border-subtle pt-6">
+<div class="w-full h-40 bg-cover bg-center rounded-lg opacity-80 group-hover:opacity-100 transition-opacity" data-alt="A clean, minimalist high-tech data visualization showing a 3D heatmap of cluster density in a dark mode digital environment. The colors transition from deep blues to bright violets and indigos, representing high density nodes. The aesthetic is professional, sharp, and data-driven with no clutter." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDoYn9fTsNwXOswiu-NJkIptJvIf7FbqLtJQpUgFvPe4oLYtRSWdHCRrjN5Hy2hcPbJUYrIWqFP0RhU17LD_ELFQDsnPn5wDaHQQRLXedWKLUawAukcMe_oWi6Qp3fFgfKJAaBnZa2wrG8B3NyR4fNH3XE3cb8js7xWfAtfKSi05lmxfffnIHjqLqWJoQyvE43eUOB115cvhL6HrVS-mh7T8KveoB-TpHwr_dAhUvH-gFXJfAdv1CqxdwwZqhKynP_2HuPhRBir3_s')"></div>
+</div>
+</div>
+<!-- Retrieval Stats -->
+<div class="col-span-12 md:col-span-4 glass-card p-6 rounded-xl flex flex-col">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded bg-secondary/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">database</span>
+</div>
+<h3 class="font-headline-md text-headline-md">Retrieval</h3>
+</div>
+<div class="flex-1 space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-text-secondary font-body-md">Vector DB Latency</span>
+<span class="font-code-md text-white">12ms</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-text-secondary font-body-md">Cache Hit Ratio</span>
+<span class="font-code-md text-white">42.1%</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-text-secondary font-body-md">Context Window Usage</span>
+<span class="font-code-md text-white">68%</span>
+</div>
+</div>
+<div class="mt-8">
+<div class="flex gap-1 items-end h-16">
+<div class="flex-1 bg-secondary/30 h-[40%] rounded-sm"></div>
+<div class="flex-1 bg-secondary/30 h-[60%] rounded-sm"></div>
+<div class="flex-1 bg-secondary/30 h-[55%] rounded-sm"></div>
+<div class="flex-1 bg-secondary h-[85%] rounded-sm"></div>
+<div class="flex-1 bg-secondary/30 h-[70%] rounded-sm"></div>
+<div class="flex-1 bg-secondary h-[95%] rounded-sm"></div>
+<div class="flex-1 bg-secondary/30 h-[50%] rounded-sm"></div>
+<div class="flex-1 bg-secondary/30 h-[65%] rounded-sm"></div>
+</div>
+<p class="text-center font-label-md text-text-secondary mt-2">Retrieval Efficiency Index</p>
+</div>
+</div>
+<!-- Routing & Behavior -->
+<div class="col-span-12 md:col-span-6 glass-card p-6 rounded-xl">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded bg-tertiary-container/20 flex items-center justify-center text-tertiary-container">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<h3 class="font-headline-md text-headline-md">Orchestration &amp; Routing</h3>
+</div>
+<div class="space-y-6">
+<div class="flex gap-4">
+<div class="flex-1 p-4 bg-bg-tertiary rounded border border-border-subtle">
+<span class="block text-text-secondary text-xs uppercase mb-1">Active Nodes</span>
+<span class="text-xl font-bold">142</span>
+</div>
+<div class="flex-1 p-4 bg-bg-tertiary rounded border border-border-subtle">
+<span class="block text-text-secondary text-xs uppercase mb-1">Queue Depth</span>
+<span class="text-xl font-bold">2.4k</span>
+</div>
+</div>
+<div class="p-4 bg-surface-container-low rounded border border-border-subtle">
+<div class="flex justify-between mb-2">
+<span class="text-text-secondary text-sm">Cluster Utilization</span>
+<span class="text-sm font-bold">78%</span>
+</div>
+<div class="grid grid-cols-10 gap-1 h-3">
+<div class="bg-ai-presence rounded-sm col-span-8"></div>
+<div class="bg-surface-container-high rounded-sm col-span-2"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Behavioral Trends -->
+<div class="col-span-12 md:col-span-6 glass-card p-6 rounded-xl">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded bg-success-teal/20 flex items-center justify-center text-success-teal">
+<span class="material-symbols-outlined">trending_up</span>
+</div>
+<h3 class="font-headline-md text-headline-md">Behavioral Trends</h3>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between p-3 bg-surface-container-lowest rounded border-l-4 border-ai-presence">
+<div>
+<p class="text-white font-body-md">Spike in 'Deployment' intent detected</p>
+<p class="text-text-secondary text-xs">Infrastructure Category · 14m ago</p>
+</div>
+<span class="material-symbols-outlined text-text-secondary">arrow_forward_ios</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-lowest rounded border-l-4 border-success-teal">
+<div>
+<p class="text-white font-body-md">Retrieval accuracy increased by 4%</p>
+<p class="text-text-secondary text-xs">Vector Index Optimization · 1h ago</p>
+</div>
+<span class="material-symbols-outlined text-text-secondary">arrow_forward_ios</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-lowest rounded border-l-4 border-error">
+<div>
+<p class="text-white font-body-md">Latency outlier in region 'US-East-1'</p>
+<p class="text-text-secondary text-xs">Traffic Routing · 3h ago</p>
+</div>
+<span class="material-symbols-outlined text-text-secondary">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- Right Side Context Panel (Context Panel Shared Component) -->
+<aside class="w-context-panel-width h-screen sticky top-0 right-0 bg-bg-secondary border-l border-border-subtle flex flex-col overflow-y-auto hidden lg:flex">
+<div class="p-6 border-b border-border-subtle">
+<h3 class="font-headline-md text-headline-md text-text-primary">Resource Details</h3>
+<p class="font-label-md text-label-md text-text-secondary">Metadata &amp; Relations</p>
+</div>
+<nav class="flex border-b border-border-subtle">
+<button class="flex-1 py-3 text-ai-presence border-b-2 border-ai-presence text-label-md font-bold">Inspector</button>
+<button class="flex-1 py-3 text-text-secondary hover:bg-surface-container transition-all text-label-md">Timeline</button>
+<button class="flex-1 py-3 text-text-secondary hover:bg-surface-container transition-all text-label-md">Links</button>
+</nav>
+<div class="p-6 space-y-8">
+<div>
+<span class="text-xs uppercase text-text-secondary font-bold tracking-widest block mb-4">Core Telemetry</span>
+<div class="space-y-4">
+<div class="flex justify-between items-start">
+<span class="text-text-secondary text-sm">Provider ID</span>
+<span class="font-code-sm text-code-sm bg-surface-container-high px-2 py-0.5 rounded text-white">aws-lambda-v2-main</span>
+</div>
+<div class="flex justify-between items-start">
+<span class="text-text-secondary text-sm">Uptime</span>
+<span class="text-sm text-white">99.998%</span>
+</div>
+<div class="flex justify-between items-start">
+<span class="text-text-secondary text-sm">Memory Usage</span>
+<span class="text-sm text-white">412MB / 1024MB</span>
+</div>
+</div>
+</div>
+<div>
+<span class="text-xs uppercase text-text-secondary font-bold tracking-widest block mb-4">Topology Map</span>
+<div class="aspect-square bg-bg-primary rounded-xl border border-border-subtle flex items-center justify-center overflow-hidden relative">
+<!-- Symbolic Topology Visualization -->
+<div class="absolute w-full h-full opacity-20 pointer-events-none">
+
+</div>
+<div class="z-10 flex flex-col items-center">
+<div class="w-16 h-16 rounded-full bg-ai-presence flex items-center justify-center text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]">
+<span class="material-symbols-outlined text-3xl">dns</span>
+</div>
+<p class="mt-4 font-code-sm text-code-sm text-text-primary">Primary Node Cluster</p>
+</div>
+</div>
+</div>
+<div class="p-4 bg-ai-presence/10 rounded-lg border border-ai-presence/30">
+<div class="flex gap-3">
+<span class="material-symbols-outlined text-ai-presence">info</span>
+<div>
+<p class="text-white text-sm font-bold">Optimization Available</p>
+<p class="text-text-secondary text-xs mt-1">Reducing cold-start latency by 15% is possible by increasing memory to 1.5GB.</p>
+<button class="mt-3 text-ai-presence text-xs font-bold hover:underline">Apply Recommendation</button>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<script>
+        // Micro-interactions and data visualization triggers
+        document.querySelectorAll('.glass-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.style.transform = 'translateY(-4px)';
+                card.style.transition = 'transform 0.3s ease';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'translateY(0)';
+            });
+        });
+    </script>
+</body></html>

@@ -118,10 +118,10 @@ register(Capability(
 
 register(Capability(
     id="benchmark_runner", name="Benchmark Runner",
-    description="Executes IntentAccuracy and other benchmark datasets for regression detection",
+    description="Executes IntentAccuracy and other benchmark datasets for regression detection against stored baselines",
     owner="evaluation", lifecycle_stage="measure",
     maturity=MaturityLevel.MATURE,
-    artifacts=("BenchmarkReport",),
+    artifacts=("BenchmarkReport", "BenchmarkBaseline"),
 ))
 
 # Learning
@@ -247,6 +247,26 @@ register(Capability(
     api_prefix="/api/v1/experiments",
 ))
 
+register(Capability(
+    id="experiment_checkout", name="Experiment Checkout Lane (V3.13-3.15)",
+    description="Single-use AuthorizationCode artifacts gate experiment execution: operator approval bound to experiment_id, idempotent exchange, revocation, and a fail-closed sandbox boundary that never bypasses existing capability or tool gates; every outcome is recorded as an immutable ExecutionResult with an append-only audit trail, and read-only query endpoints expose results and audit history per experiment with secrets redacted (404 on unknown)",
+    owner="learning.experiments", lifecycle_stage="validate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("experimentation",),
+    artifacts=("AuthorizationCode", "AuthorizationEvent", "ExperimentResult"),
+    api_prefix="/api/v1/experiments",
+))
+
+# Runtime tooling
+register(Capability(
+    id="tool_sandboxing", name="Tool Sandboxing & HITL Gate",
+    description="Guardrails classify tool calls; mutating tools require human approval and execute in a sandboxed subprocess with timeout and memory caps",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("operations_control_plane",),
+    artifacts=("ToolExecution", "GuardrailDecision"), api_prefix="/api/v1/operations/tool-executions",
+))
+
 # Governance
 register(Capability(
     id="architecture_governance", name="Architecture Governance",
@@ -272,8 +292,17 @@ register(Capability(
     description="Aggregation endpoints for five workspaces: Findings, Recommendations, Experiments, Decisions, Configurations",
     owner="learning.operations", lifecycle_stage="operate",
     maturity=MaturityLevel.IMPLEMENTED,
-    dependencies=("evidence_engine", "recommendation_generation", "experimentation", "config_management"),
+    dependencies=("evidence_engine", "recommendation_generation", "experimentation", "config_management", "decision_lifecycle"),
     api_prefix="/api/v1/operations",
+))
+
+register(Capability(
+    id="decision_lifecycle", name="Decision Lifecycle",
+    description="Human review of recommendations (approve/dismiss) with immutable Decision artifacts, and apply-to-configuration materialization",
+    owner="learning.operations", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("recommendation_generation", "config_management"),
+    artifacts=("ReviewRecord", "Decision"), api_prefix="/api/v1/operations/recommendations",
 ))
 
 register(Capability(
@@ -283,6 +312,164 @@ register(Capability(
     maturity=MaturityLevel.IMPLEMENTED,
     dependencies=("architecture_governance",),
     api_prefix="/api/v1/operations/explore",
+))
+
+register(Capability(
+    id="agent_memory", name="Agent Semantic Memory",
+    description="Immutable, scoped memory facts (global/conversation) with dedupe, lifecycle events, and operator-governed forgetting",
+    owner="learning.operations", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("architecture_governance", "tool_sandboxing"),
+    artifacts=("MemoryFact",), api_prefix="/api/v1/operations/memories",
+))
+
+register(Capability(
+    id="episodic_memory", name="Episodic Conversation Memory",
+    description="Cross-session recall: past conversations consolidated into durable summary artifacts (lazy, capped) and retrieved by cosine similarity for memory-intent queries in new sessions",
+    owner="learning.operations", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_memory",),
+    artifacts=("SessionSummary",), api_prefix="",
+))
+
+register(Capability(
+    id="memory_v2", name="Memory V2 — Governed Memory Store",
+    description="Durable, scoped, curated memories with authority-aware conflict resolution, lifecycle events, and vector retrieval; backs the agent recall node (retrieve_memory) and the memory tools",
+    owner="services.memory", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("architecture_governance", "agent_memory"),
+    artifacts=("MemoryEntity", "MemoryEvent"),
+    api_prefix="/api/v1/memory",
+))
+
+register(Capability(
+    id="memory_extraction", name="Memory Extraction",
+    description="Detached three-gate extraction of durable user facts from completed conversations into the governed memory store (pending status, extracted authority — never self-approved)",
+    owner="learning.extraction", lifecycle_stage="observe",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("memory_v2",),
+    artifacts=("MemoryEntity",),
+))
+
+register(Capability(
+    id="pipeline_learning", name="Pipeline Memory Learning (V3.8)",
+    description="In-pipeline learning stage that persists explicit, durable user statements (preferences, facts, corrections) through Memory V2 after validation; runs only on validated answers and never executes tools",
+    owner="agent.pipeline", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("memory_v2",),
+    artifacts=("LearningResult", "MemoryEntity"),
+))
+
+register(Capability(
+    id="capability_matching", name="Capability Selection & Tool Matching (V3.9)",
+    description="Deterministic pre-execution stage that matches PlanSteps to existing registered capabilities and tools, verifies the Capability Registry, tool registration, source policy, and configuration-driven availability — never executes tools",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("tool_sandboxing", "architecture_governance"),
+    artifacts=("CapabilitySelection",),
+))
+
+register(Capability(
+    id="tool_selection", name="Tool Selection & Argument Construction (V3.11)",
+    description="Deterministic pre-execution stage that turns allowed capability selections into concrete registered tool + validated arguments (query, project_id, fact, user/session scope) — never executes tools",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("capability_matching", "tool_sandboxing"),
+    artifacts=("ToolSelection",),
+))
+
+register(Capability(
+    id="execution_loop", name="Controlled Agent Execution Loop (V3.12)",
+    description="Bounded deterministic loop that executes one eligible plan step per iteration through the executor, never bypassing capability or tool selection; hard caps on steps and iterations, no retries or replanning",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("capability_matching", "tool_selection"),
+    artifacts=("LoopResult", "ExecutionResult"),
+))
+
+register(Capability(
+    id="step_context", name="Step Context & Execution Continuity (V4.6)",
+    description="Structured dependency-scoped context for plan steps: a step receives ONLY outputs of its declared dependencies, size-bounded with safe truncation; every propagated entry retains originating step_id + execution_id for synthesis and audit; reuses Memory V2 and AgentState, introduces no new memory system",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("execution_loop",),
+    artifacts=("StepContext", "ContextEntry"),
+))
+
+register(Capability(
+    id="tool_result_standard", name="Tool Result Standardization (V4.7)",
+    description="Standard boundary for every tool outcome: ToolResult with status completed|failed|blocked|empty|timeout and stable error codes (TOOL_FAILED, TOOL_BLOCKED, TOOL_EMPTY, TOOL_TIMEOUT, PROVIDER_UNAVAILABLE, INVALID_TOOL_ARGUMENTS, AUTHORIZATION_REQUIRED); existing tool implementations untouched, normalization at the boundary only; no raw provider text as primary client error",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("step_context", "tool_selection"),
+    artifacts=("ToolResult",),
+))
+
+register(Capability(
+    id="agent_tracing", name="Agent Execution Observability (V4.8)",
+    description="Passive event-based AgentTrace over the execution lifecycle (intent, routing, planning, capability_selection, tool_selection, execution, synthesis, validation, learning); reuses existing logging + TracingService — no new telemetry system; secrets, prompts, memory contents, and raw tool outputs never recorded; derived metrics exposed for the existing observability stack",
+    owner="agent.pipeline", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("tool_result_standard",),
+    artifacts=("AgentTrace", "TraceEvent"),
+))
+
+register(Capability(
+    id="token_governance", name="Cost & Token Governance (V4.9)",
+    description="Per-request and per-step token accounting with provider/model-aware estimated cost and budget enforcement BEFORE LLM calls; blocks further steps when request or step budgets are exhausted (runaway multi-step prevention) and gates optional synthesis/validation escalation; cost data attaches to the existing AgentTrace correlation IDs — no new billing or telemetry system",
+    owner="agent.pipeline", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_tracing", "tool_result_standard"),
+    artifacts=("TokenBudget", "TokenUsage"),
+))
+
+register(Capability(
+    id="agent_security_boundary", name="Agent Security Boundary (V4.10)",
+    description="One boundary where untrusted material enters the agent: tool input validation (scalar-only, secret/PII redaction), tool output sanitization, and retrieved-content containment (prompt-injection phrase neutralization + untrusted-content wrapping); complements existing authorization layers (guardrail, tool_gate, V3.10/V3.11 selections) without duplicating them; every security decision recorded on the existing AgentTrace — no new security or telemetry system",
+    owner="agent.pipeline", lifecycle_stage="apply",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_tracing", "tool_result_standard", "tool_selection"),
+    artifacts=("SecurityFinding",),
+))
+
+register(Capability(
+    id="production_reliability", name="Production Reliability & Cancellation (V4.11)",
+    description="Timeout boundaries at three levels (per-tool, per-step, request-level) re-labeled onto the existing TOOL_TIMEOUT taxonomy — no new error vocabulary; cooperative cancellation propagating request to execution to current step with nothing left running or pending; partial execution recovery (completed steps stay valid, dependants blocked, independent steps continue once — no automatic retry, no replanning); idempotent execution where the first terminal (execution_id, step_id) outcome wins; all gates order AFTER capability/tool selection and never bypass the security boundary or token budget",
+    owner="agent.pipeline", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_tracing", "tool_result_standard", "token_governance"),
+    artifacts=("ReliabilityGuard", "TimeoutPolicy", "IdempotencyLedger"),
+))
+
+register(Capability(
+    id="agent_api_contract", name="Stable Agent API Contract (V4.12)",
+    description="Pure DTO layer (AgentRequest/AgentResponse/AgentError/StreamEvent/ExecutionSummary/ModelUsageSummary) with one deterministic status mapping (completed/partial/failed/blocked/cancelled/timed_out), enumerated SSE payload projection, stable error mapping that never leaks internal text, and backwards-compatible legacy chat keys; the production chat API keeps its stable SSE vocabulary unchanged",
+    owner="agent.contract", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_tracing", "token_governance", "production_reliability"),
+    artifacts=("AgentRequest", "AgentResponse", "AgentError", "StreamEvent",
+               "ExecutionSummary", "ModelUsageSummary"),
+    api_prefix="/api/v1/chat",
+))
+
+register(Capability(
+    id="agent_execution_metrics", name="Agent Execution Metrics (Phase 3.2)",
+    description="Bounded-label Prometheus families (owngpt_agent_*) recorded at the two authoritative boundaries: request status/duration/tokens/cost at the single finalization boundary (finalize_trace — same status and same TokenBudget totals as the request_completed trace event) and tool calls/duration/failures/blocks at the single guarded tool gate; failures and block reasons are finite taxonomies, model/tool collapse to allowlists plus 'other', and Prometheus/Grafana consume the same registry the /metrics endpoint already serves",
+    owner="core.metrics", lifecycle_stage="operate",
+    maturity=MaturityLevel.IMPLEMENTED,
+    dependencies=("agent_api_contract", "agent_tracing", "token_governance",
+                  "production_reliability"),
+    artifacts=(
+        "owngpt_agent_requests_total",
+        "owngpt_agent_request_tokens_total",
+        "owngpt_agent_request_cost_usd_total",
+        "owngpt_agent_request_duration_seconds",
+        "owngpt_agent_tool_calls_total",
+        "owngpt_agent_tool_duration_seconds",
+        "owngpt_agent_tool_failures_total",
+        "owngpt_agent_tool_blocked_total",
+    ),
+    api_prefix="/metrics",
 ))
 
 # Automation
