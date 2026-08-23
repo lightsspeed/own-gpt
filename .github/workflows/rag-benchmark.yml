@@ -1,6 +1,6 @@
 name: RAG Benchmark
 
-on:
+#on:
   push:
     branches: [main, master, develop]
   pull_request:
