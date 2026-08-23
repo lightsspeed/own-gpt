@@ -16,12 +16,13 @@ interface ConversationOutlineProps {
   chapters: NavigatorAnchor[]
   streamingId?: string | null
   onAnchorClick: (anchorId: string, targetMsgId: string) => void
+  direction?: 'up' | 'down'
 }
 
 const CHAPTER_ICONS: Record<string, string> = {
-  user: '\u25B6',
-  artifact: '\u25C6',
-  summary: '\u25A0',
+  user: '▶',
+  artifact: '◆',
+  summary: '■',
 }
 
 function ChapterIcon({ type }: { type: NavigatorAnchor['type'] }) {
@@ -29,7 +30,7 @@ function ChapterIcon({ type }: { type: NavigatorAnchor['type'] }) {
   return <span className="shrink-0 leading-none text-[11px]">{icon}</span>
 }
 
-export function ConversationOutline({ chapters, streamingId, onAnchorClick }: ConversationOutlineProps) {
+export function ConversationOutline({ chapters, streamingId, onAnchorClick, direction = 'up' }: ConversationOutlineProps) {
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -49,24 +50,26 @@ export function ConversationOutline({ chapters, streamingId, onAnchorClick }: Co
   return (
     <div ref={panelRef} className="relative">
       <button
+        id="composer-outline-trigger"
         onClick={() => setOpen(!open)}
         className={cn(
-          'flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-all',
+          'flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1.5 rounded-full transition-all',
           open
             ? 'text-primary bg-primary/[0.08]'
             : 'text-muted-foreground/50 hover:text-foreground hover:bg-hover/50',
         )}
+        title="Conversation Outline"
       >
         <List size={14} />
-        Outline
+        <span className="hidden sm:inline">Outline</span>
       </button>
 
       {open && (
         <div
           className={cn(
-            'absolute left-0 top-full mt-1 z-50 w-[260px] rounded-xl border border-border/40 bg-elevated/95 backdrop-blur-lg shadow-xl overflow-hidden animate-scale-in origin-top-left',
+            'absolute left-0 z-50 w-[260px] rounded-xl border border-border/40 bg-elevated/95 backdrop-blur-lg shadow-xl overflow-hidden animate-scale-in',
+            direction === 'up' ? 'bottom-full mb-2 origin-bottom-left' : 'top-full mt-1 origin-top-left',
           )}
-          style={{ transformOrigin: 'top left' }}
         >
           <div className="px-4 py-2.5 border-b border-border/10">
             <p className="text-[13px] font-medium text-foreground">Conversation Outline</p>

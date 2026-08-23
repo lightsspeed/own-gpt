@@ -1,4 +1,5 @@
 import type { ChatSession, MessageData, ContextItem } from '../types';
+import { summarizeTitle } from '@/lib/sessionTitle';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
@@ -56,6 +57,14 @@ export async function responseError(res: Response): Promise<Error> {
 export const api = {
   baseUrl: API_BASE,
 
+  async fetchModels(): Promise<{ provider: string; default_model: string; models: string[] }> {
+    try {
+      const res = await fetch(`${API_BASE}/chat/models`);
+      if (res.ok) return await res.json();
+    } catch { /* ignore */ }
+    return { provider: 'default', default_model: 'gemini-3.6-flash', models: ['gemini-3.6-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro'] };
+  },
+
   async fetchSessions(): Promise<ChatSession[]> {
     try {
       const res = await fetch(`${API_BASE}/chat/sessions`);
@@ -82,6 +91,21 @@ export const api = {
       if (res.ok) return await res.json();
     } catch { /* ignore */ }
     return { results: [], total: 0 };
+  },
+
+  async generateTitle(sessionId: string, message: string): Promise<string> {
+    try {
+      const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}/generate-title`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) return data.title;
+      }
+    } catch { /* ignore */ }
+    return summarizeTitle(message);
   },
 
   async fetchHistory(sessionId: string): Promise<MessageData[]> {

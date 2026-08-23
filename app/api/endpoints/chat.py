@@ -14,7 +14,7 @@ from app.agent.graph import graph, pool
 from app.evaluation.models import build_evaluation_result
 from app.core.database import get_sync_db
 from app.core.config import settings
-from app.core.model_config import resolve_model, validate_temperature, ModelConfigError
+from app.core.model_config import resolve_model, validate_temperature, ModelConfigError, SUPPORTED_MODELS, DEFAULT_MODEL
 from app.api.deps import get_current_user, api_error
 from app.services import chat_persistence as store
 from app.services.memory import resolve_owned_project
@@ -66,11 +66,27 @@ class ChatRequest(BaseModel):
     message: str
     model: Optional[str] = None
     temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
     request_id: Optional[str] = None
     system_prompt: Optional[str] = None
     active_tools: Optional[dict[str, bool]] = None
     document: Optional[str] = None
     project_id: Optional[str] = None
+
+
+class ModelListResponse(BaseModel):
+    provider: str
+    default_model: str
+    models: List[str]
+
+
+@router.get("/chat/models", response_model=ModelListResponse)
+async def get_supported_models():
+    return ModelListResponse(
+        provider=settings.LLM_PROVIDER,
+        default_model=DEFAULT_MODEL,
+        models=SUPPORTED_MODELS,
+    )
 
 
 class ResourceItem(BaseModel):
@@ -218,6 +234,9 @@ def _agent_usage_metadata(messages) -> list:
     return usage
 
 
+_UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+
+
 async def _generate_session_title(message: str) -> str:
     try:
         from app.core.llm_provider import build_llm
@@ -225,14 +244,62 @@ async def _generate_session_title(message: str) -> str:
         # configured provider's default model — never a hardcoded OpenAI name.
         title_model = build_llm(model=None, temperature=0)
         res = await title_model.ainvoke([
-            SystemMessage(content="Summarize the user's query in 3 to 5 words as a conversation title. Output ONLY the title, no punctuation, no quotes, no extra text."),
+            SystemMessage(content="Extract the core subject or entity of the user's message as a clean 2 to 4 word topic title for a sidebar (e.g. 'Dota 2 Io Hero', 'AWS EKS Module', 'Python Multithreading'). Never repeat full questions or filler ('what is...', 'how to...'). Output ONLY the title, no punctuation, no quotes, no extra text."),
             HumanMessage(content=message)
         ])
-        title = res.content.strip().replace('"', '').replace("'", "")
-        return title[:50]
+        title = res.content.strip().replace('"', '').replace("'", "").replace("?", "").replace(".", "")
+        return title[:45]
     except Exception as e:
         logger.error(f"Error generating session title: {e}")
-        return message[:30] + "..." if len(message) > 30 else message
+        # Clean fallback topic extraction without raw question repeating
+        clean = re.sub(r'^(hi|hello|hey|what is my|what is|how to|explain|write a|create a|tell me about)\s+', '', message, flags=re.IGNORECASE).strip()
+        words = [w for w in clean.split() if w]
+        if words:
+            topic = " ".join(words[:4]).title()
+            return topic[:40]
+        return "New Chat"
+
+
+def _get_first_user_message_content(db: Session, session_id: str) -> str | None:
+    msgs = store.list_messages(db, session_id)
+    user_msg = next((m for m in msgs if m.role == "user" and m.content and m.content.strip()), None)
+    if user_msg:
+        return user_msg.content.strip()
+
+    try:
+        config = {"configurable": {"thread_id": session_id}}
+        existing_state = graph.get_state(config)
+        checkpoint_msgs = _checkpoint_messages(existing_state)
+        for m in checkpoint_msgs:
+            role = type(m).__name__
+            msg_type = getattr(m, "type", None)
+            if role == "HumanMessage" or msg_type == "human":
+                content = store._plain_content(getattr(m, "content", ""))
+                if content and content.strip():
+                    return content.strip()
+    except Exception as exc:
+        logger.debug("checkpoint_lookup_failed session_id=%s error=%s", session_id, exc)
+    return None
+
+
+async def _resolve_clean_title(session, db: Session) -> str:
+    title = (session.title or "").strip()
+    if not title or title == session.id or _UUID_RE.match(title) or _UUID_RE.match(title.split('_')[0]):
+        first_user_text = await asyncio.to_thread(_get_first_user_message_content, db, session.id)
+        if first_user_text:
+            try:
+                title = await _generate_session_title(first_user_text)
+            except Exception:
+                title = first_user_text[:35] + ("…" if len(first_user_text) > 35 else "")
+        else:
+            title = "New Chat"
+        try:
+            store.update_conversation(db, session, title=title)
+        except Exception as exc:
+            logger.warning("failed_to_update_session_title id=%s error=%s", session.id, exc)
+    return title
+
+
 
 
 def _run_pipeline(message: str, session_id: str, retriever_mode: Optional[str] = None, document: Optional[str] = None, project_id: Optional[str] = None) -> PipelineContext:
@@ -547,19 +614,21 @@ async def list_sessions(
 ):
     try:
         sessions = store.list_conversations(db, user)
-        return SessionListResponse(
-            sessions=[
+        items = []
+        for s in sessions:
+            title = await _resolve_clean_title(s, db)
+            items.append(
                 SessionListItem(
                     id=s.id,
-                    title=s.title,
+                    title=title,
                     is_pinned=s.is_pinned,
                     selected_model=s.selected_model,
                     project_id=s.project_id,
                     created_at=s.created_at,
                     updated_at=s.updated_at,
-                ) for s in sessions
-            ]
-        )
+                )
+            )
+        return SessionListResponse(sessions=items)
     except Exception as e:
         logger.error(f"Failed to list sessions: {e}")
         raise api_error(500, "internal_error", "An internal error occurred")
@@ -582,42 +651,44 @@ async def search_conversations(
             return SearchResponse(query="", results=[], total=0)
 
         results: List[SearchResultItem] = []
-
-        # Search session titles (owned only)
         convs = store.list_conversations(db, user, limit=100)
-        for s in convs:
-            if query.lower() in (s.title or "").lower():
-                preview = (s.title or "")[:120]
-                idx = preview.lower().index(query.lower())
-                start = max(0, idx - 30)
-                end = min(len(preview), idx + len(query) + 30)
-                preview = ("…" if start > 0 else "") + preview[start:end] + ("…" if end < len(preview) else "")
-                results.append(SearchResultItem(
-                    session_id=s.id,
-                    session_title=s.title,
-                    match_type="title",
-                    preview=preview,
-                    timestamp=s.updated_at or s.created_at,
-                ))
-                if len(results) >= limit:
-                    break
 
-        # Search message content via the application chat database — never
-        # by parsing LangGraph checkpoint blobs.
-        if len(results) < limit:
-            for msg in store.search_messages(db, user, query, limit=limit * 2):
+        # 1. Title search when type is 'all' or 'title'
+        if type in ("all", "title"):
+            for s in convs:
+                if query.lower() in (s.title or "").lower():
+                    preview = (s.title or "")[:120]
+                    idx = preview.lower().index(query.lower())
+                    start = max(0, idx - 30)
+                    end = min(len(preview), idx + len(query) + 30)
+                    preview = ("…" if start > 0 else "") + preview[start:end] + ("…" if end < len(preview) else "")
+                    results.append(SearchResultItem(
+                        session_id=s.id,
+                        session_title=s.title,
+                        match_type="title",
+                        preview=preview,
+                        timestamp=s.updated_at or s.created_at,
+                    ))
+                    if len(results) >= limit:
+                        break
+
+        # 2. Message content search when type is 'all' or 'message'
+        if type in ("all", "message") and len(results) < limit:
+            matched_sessions = set()
+            for msg in store.search_messages(db, user, query, limit=limit * 3):
                 if len(results) >= limit:
                     break
-                if any(r.session_id == msg.session_id for r in results):
+                if msg.session_id in matched_sessions:
                     continue
                 conv = next((c for c in convs if c.id == msg.session_id), None)
                 if conv is None:
                     continue
                 content = msg.content or ""
                 if query.lower() in content.lower():
+                    matched_sessions.add(msg.session_id)
                     idx = content.lower().index(query.lower())
-                    start = max(0, idx - 60)
-                    end = min(len(content), idx + len(query) + 60)
+                    start = max(0, idx - 40)
+                    end = min(len(content), idx + len(query) + 50)
                     preview = ("…" if start > 0 else "") + content[start:end] + ("…" if end < len(content) else "")
                     results.append(SearchResultItem(
                         session_id=msg.session_id,
@@ -627,11 +698,37 @@ async def search_conversations(
                         timestamp=msg.created_at or conv.updated_at or conv.created_at,
                     ))
 
-        search_logger.info("search query=%s hits=%d", query, len(results))
+        search_logger.info("search query=%s type=%s hits=%d", query, type, len(results))
         return SearchResponse(query=query, results=results[:limit], total=len(results))
     except Exception as e:
         logger.error("Search endpoint error: %s\n%s", str(e), traceback.format_exc())
         raise api_error(500, "internal_error", "An internal error occurred")
+
+
+class GenerateTitlePayload(BaseModel):
+    message: str
+
+
+# ---------------------------------------------------------------------------
+# POST /chat/sessions/{session_id}/generate-title – LLM topic title generator
+# ---------------------------------------------------------------------------
+@router.post("/chat/sessions/{session_id}/generate-title")
+async def generate_title_endpoint(
+    session_id: str,
+    payload: GenerateTitlePayload,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_sync_db),
+):
+    try:
+        conv = _load_conversation(db, user, session_id, require=True)
+        title = await _generate_session_title(payload.message)
+        store.update_conversation(db, conv, title=title)
+        return {"id": conv.id, "title": title}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Generate title endpoint error: {e}")
+        raise api_error(500, "internal_error", "Failed to generate session title")
 
 
 # ---------------------------------------------------------------------------

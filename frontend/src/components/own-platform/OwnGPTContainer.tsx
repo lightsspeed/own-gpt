@@ -15,9 +15,10 @@ import {
   type SessionRegistry,
 } from '@/features/projects/projectSession'
 import { projectsApi, type Project } from '@/features/projects/services/projectsApi'
-import { PanelLeft, Sparkles, Settings } from 'lucide-react'
+import { Sparkles, Settings, PanelLeftOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/features/chat/services/chatApi'
+import { needsTitle, summarizeTitle } from '@/lib/sessionTitle'
 import type { ChatSession } from '@/features/chat/types'
 
 export function OwnGPTContainer() {
@@ -131,9 +132,8 @@ export function OwnGPTContainer() {
   const handleFirstUserMessage = useCallback(async (content: string) => {
     if (!activeId) return
     const session = sessions.find(s => s.id === activeId)
-    if (session && (session.title === 'New Chat' || !session.title || session.title === 'Untitled Conversation')) {
-      const generatedTitle = content.length > 35 ? content.slice(0, 35).trim() + '…' : content.trim()
-      await api.updateSession(activeId, { title: generatedTitle })
+    if (session && needsTitle(session.title)) {
+      const generatedTitle = await api.generateTitle(activeId, content)
       setSessions(prev => prev.map(s => s.id === activeId ? { ...s, title: generatedTitle } : s))
     }
   }, [activeId, sessions])
@@ -177,35 +177,16 @@ export function OwnGPTContainer() {
       />
 
       <main className="flex-1 flex flex-col h-full transition-all duration-300 min-w-0 bg-background relative">
-        {/* Header Bar */}
-        <header className="h-12 border-b border-border/50 bg-surface/80 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-20">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(prev => !prev)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
-              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              <PanelLeft size={18} />
-            </button>
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-primary" />
-              <span className="font-semibold text-foreground text-sm">OwnGPT</span>
-            </div>
-            <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold tracking-wider uppercase hidden sm:inline">
-              Enterprise
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="p-1.5 rounded-lg hover:bg-hover hover:text-foreground transition-colors"
-              title="Settings"
-            >
-              <Settings size={16} />
-            </button>
-          </div>
-        </header>
+        {/* Top Right Controls */}
+        <div className="absolute right-4 top-3 z-30 flex items-center gap-2">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="p-2 rounded-xl border border-border/40 bg-surface/80 backdrop-blur-md text-muted-foreground hover:text-foreground hover:bg-hover transition-all shadow-md active:scale-95"
+            title="Settings"
+          >
+            <Settings size={18} />
+          </button>
+        </div>
 
         <div className="flex-1 min-h-0 relative">
           {activeId ? (

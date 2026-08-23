@@ -52,7 +52,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
   }
 
   return (
-    <div className={cn('flex flex-col group', isUser ? 'items-end' : 'items-start')}>
+    <div className={cn('flex flex-col group/msg', isUser ? 'items-end' : 'items-start')}>
 
       {/* Message content */}
       {role === 'assistant' && status === 'failed' && !isStreaming && (
@@ -74,7 +74,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
 
       {/* Actions */}
       {showActions && (
-        <div className={cn('flex items-center gap-1 pt-1.5 opacity-70 group-hover:opacity-100 transition-opacity', isUser ? 'flex-row-reverse' : 'flex-row')}>
+        <div className={cn('flex items-center gap-1 pt-1.5 opacity-70 group-hover/msg:opacity-100 transition-opacity', isUser ? 'flex-row-reverse' : 'flex-row')}>
           {isUser ? (
             <UserActions content={content} onEdit={onEdit} />
           ) : (

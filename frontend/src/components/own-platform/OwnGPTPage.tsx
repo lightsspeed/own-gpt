@@ -88,12 +88,6 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
     setContextPanelOpen(true)
   }, [])
 
-  const handleChapterClick = useCallback((_anchorId: string, targetMsgId: string) => {
-    setHighlightedMsgId(targetMsgId)
-    if (highlightTimer.current) clearTimeout(highlightTimer.current)
-    highlightTimer.current = setTimeout(() => setHighlightedMsgId(null), 2000)
-  }, [])
-
   const chapters: NavigatorAnchor[] = useMemo(() => {
     const userMessages = messages.filter(m => m.role === 'user')
     if (userMessages.length === 0) return []
@@ -169,6 +163,16 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
     }, 300)
   }, [rowVirtualizer, visibleMessages.length])
 
+  const handleChapterClick = useCallback((_anchorId: string, targetMsgId: string) => {
+    const targetIndex = visibleMessages.findIndex(m => m.id === targetMsgId)
+    if (targetIndex !== -1) {
+      rowVirtualizer.scrollToIndex(targetIndex, { align: 'start', behavior: 'smooth' })
+    }
+    setHighlightedMsgId(targetMsgId)
+    if (highlightTimer.current) clearTimeout(highlightTimer.current)
+    highlightTimer.current = setTimeout(() => setHighlightedMsgId(null), 2500)
+  }, [visibleMessages, rowVirtualizer])
+
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
@@ -226,24 +230,8 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
           className="overflow-y-auto custom-scrollbar h-full"
           style={{ overflowAnchor: 'none' }}
         >
-          <div className="pt-4 pb-20 px-6">
-            <div className="max-w-[920px] mx-auto">
-              {/* Outline — pinned above virtual list */}
-              {hasMessages && (
-                <div className="flex items-center gap-3 pb-2 border-b border-border/10 mb-5">
-                  <ConversationOutline
-                    chapters={chapters}
-                    streamingId={streamingId}
-                    onAnchorClick={handleChapterClick}
-                  />
-                  <ConversationExportButton
-                    hasContent={exportMessages.length > 0}
-                    loading={exporting}
-                    onExport={() => setExporting(true)}
-                  />
-                </div>
-              )}
-
+          <div className="pt-16 pb-20 px-6">
+            <div className="max-w-[860px] mx-auto">
               {/* Virtual message list */}
               <div style={{ height: totalSize, position: 'relative' }}>
                 {virtualRows.map(virtualRow => {
@@ -269,7 +257,13 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
                         transform: `translateY(${virtualRow.start}px)`,
                       }}
                     >
-                      <div className={cn('animate-message-in', highlightedMsgId === msg.id && 'animate-highlight-fade')}>
+                      <div
+                        className={cn(
+                          'animate-message-in',
+                          msg.role === 'user' && virtualRow.index > 0 && 'mt-8 sm:mt-10 pt-4 border-t border-border/25',
+                          highlightedMsgId === msg.id && 'animate-highlight-fade',
+                        )}
+                      >
                       <MessageBubble
                         role={msg.role}
                         content={msg.content}
@@ -310,27 +304,21 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
               )}
 
               {!hasMessages && !loadingHistory && (
-                <div className="transition-all duration-500 ease-in-out overflow-hidden" style={{ maxHeight: '500px', opacity: 1, paddingBottom: '32px' }}>
-                  <div className="flex items-end justify-center">
-                    <div className="max-w-[600px] mx-auto text-center space-y-5 px-6">
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/25 mb-2">
-                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                          <path d="M16 2L20 10L28 12L20 14L16 22L12 14L4 12L12 10L16 2Z" fill="currentColor" className="text-primary" />
-                          <circle cx="16" cy="22" r="3" fill="currentColor" className="text-primary/60" />
-                          <path d="M16 28L18 26H14L16 28Z" fill="currentColor" className="text-primary/40" />
-                        </svg>
-                      </div>
-                      <div className="prose prose-invert max-w-none prose-headings:text-foreground prose-p:text-muted-foreground">
-                        <h2 className="text-2xl font-semibold">Welcome to <span className="text-primary">OwnGPT</span></h2>
-                        <p className="text-muted-foreground/80">Your intelligent engineering co-pilot. Ask me anything about your platform.</p>
-                      </div>
-                      <div className="flex flex-wrap justify-center gap-2 max-w-[480px] mx-auto">
-                        {['Summarize platform health', 'Investigate retrieval quality', 'Run an evaluation', 'Compare experiments', 'Search knowledge base', 'Analyze recent findings'].map(q => (
-                          <button key={q} onClick={() => setInput(q)} className="px-3.5 py-2 rounded-xl border border-border/60 bg-elevated/40 text-small text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all">{q}</button>
-                        ))}
-                      </div>
-                    </div>
+                <div className="flex flex-col items-center justify-center min-h-[50vh] text-center px-4 animate-fade-in">
+                  <div className="relative mb-6 group cursor-pointer">
+                    <div className="absolute -inset-4 rounded-full bg-primary/20 blur-xl opacity-75 group-hover:opacity-100 transition-opacity" />
+                    <img
+                      src="/OwnGPT_brand_assets_clean/OwnGPT-logo-symbol-blood-orange-tight.png"
+                      alt="OwnGPT"
+                      className="relative w-20 h-20 sm:w-24 sm:h-24 object-contain drop-shadow-[0_10px_25px_rgba(255,77,0,0.3)] transition-transform duration-300 group-hover:scale-105"
+                    />
                   </div>
+                  <h1 className="text-3xl font-extrabold text-foreground tracking-tight sm:text-4xl mb-3">
+                    What can I help with today?
+                  </h1>
+                  <p className="text-muted-foreground/70 text-base max-w-md font-normal leading-relaxed">
+                    OwnGPT AI Engineering Co-Pilot. Ask anything about your platform, code, or knowledge base.
+                  </p>
                 </div>
               )}
             </div>
@@ -338,8 +326,8 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
         </div>
       </div>
 
-      <div className="pb-4">
-        <div className="max-w-[920px] mx-auto relative">
+      <div className="px-4 pb-5 pt-2">
+        <div className="max-w-[860px] mx-auto relative">
           <ScrollToBottom show={showScrollBtn} onClick={scrollToBottom} newMessages={newMsgCount || undefined} isLoading={isLoading} />
           <Composer
             input={input}
@@ -356,6 +344,9 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
             messages={messages}
             onExportPdf={() => setExporting(true)}
             title={title}
+            chapters={chapters}
+            streamingId={streamingId}
+            onChapterClick={handleChapterClick}
           />
         </div>
       </div>

@@ -56,13 +56,27 @@ export function SearchPalette({ open, onClose, onSelect, onNewChat }: SearchPale
     if (cached) { setResults(cached.results); return }
     setLoading(true)
     const data = await api.search(q, f, 20)
-    const results = data.results || []
+    let searchResults = data.results || []
+    if (searchResults.length === 0 && (f === 'all' || f === 'title')) {
+      try {
+        const allSessions = await api.fetchSessions()
+        const matches = allSessions.filter(s => s.title.toLowerCase().includes(q.toLowerCase()))
+        searchResults = matches.map(s => ({
+          session_id: s.id,
+          session_title: s.title,
+          match_type: 'title',
+          preview: s.title,
+          timestamp: s.updated_at || s.created_at || new Date().toISOString(),
+        }))
+      } catch { /* ignore */ }
+    }
+
     if (searchCache.size >= MAX_CACHE) {
       const firstKey = searchCache.keys().next().value
       if (firstKey) searchCache.delete(firstKey)
     }
-    searchCache.set(key, { results, total: data.total })
-    setResults(results)
+    searchCache.set(key, { results: searchResults, total: searchResults.length })
+    setResults(searchResults)
     setLoading(false)
     setSelectedIdx(0)
   }, [])

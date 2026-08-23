@@ -17,18 +17,18 @@ const PRINT_STYLES = `
 #print-conversation { display: none; }
 
 @media print {
-  @page { margin: 0; }
+  @page { margin: 12mm 15mm 15mm 15mm; size: auto; }
 
-  body { background: #ffffff !important; }
+  body { background: #ffffff !important; overflow: visible !important; }
   body * { visibility: hidden !important; }
   #print-conversation, #print-conversation * { visibility: visible !important; }
 
   #print-conversation {
     display: block !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
     width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
     background: #ffffff !important;
     color: #1F2937 !important;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
@@ -178,7 +178,7 @@ const PRINT_STYLES = `
     background: #ffffff !important;
   }
   #print-conversation .pc-page-num::after {
-    content: counter(page) " / " counter(pages);
+    content: counter(page);
   }
 }
 `
@@ -211,7 +211,7 @@ export function PrintConversation({ title, messages, exporting, onExportComplete
 
     const printTimer = setTimeout(() => {
       if (typeof window.print === 'function') window.print()
-    }, 50)
+    }, 350)
 
     const finish = () => {
       document.title = prevTitle

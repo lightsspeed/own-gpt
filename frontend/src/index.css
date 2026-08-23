@@ -28,7 +28,7 @@
     --popover: var(--overlay);
     --popover-foreground: var(--text-primary);
 
-    --primary: 221 83% 53%;        /* vibrant blue */
+    --primary: 16 100% 50%;        /* Blood Orange #FF4D00 */
     --primary-foreground: 0 0% 100%;
 
     --secondary: var(--elevated);
@@ -46,7 +46,7 @@
     /* ── Borders & rings ── */
     --border: 214 32% 88%;         /* crisp light border #cbd5e1 */
     --input:  214 32% 88%;
-    --ring:   221 83% 53%;
+    --ring:   16 100% 50%;
 
     --radius: 0.75rem;
 
@@ -63,7 +63,7 @@
     /* ── Sidebar ── */
     --sidebar-background: var(--surface);
     --sidebar-foreground: var(--text-primary);
-    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary: 16 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: var(--elevated);
     --sidebar-accent-foreground: var(--text-primary);
@@ -94,7 +94,7 @@
     --popover: var(--overlay);
     --popover-foreground: var(--text-primary);
 
-    --primary: 221 90% 55%;
+    --primary: 16 100% 50%;        /* Blood Orange #FF4D00 */
     --primary-foreground: 0 0% 100%;
 
     --secondary: var(--elevated);
@@ -108,12 +108,12 @@
 
     --border: 0 0% 16%;
     --input:  0 0% 16%;
-    --ring:   221 90% 55%;
+    --ring:   16 100% 50%;
 
     /* ── Sidebar ── */
     --sidebar-background: var(--canvas);
     --sidebar-foreground: var(--text-primary);
-    --sidebar-primary: 221 90% 55%;
+    --sidebar-primary: 16 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: var(--elevated);
     --sidebar-accent-foreground: var(--text-primary);
@@ -198,9 +198,10 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(100, 150, 255, 0.06) inset;
 }
 
-/* ── Blue glow accent ── */
-.blue-glow {
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.35), 0 0 60px rgba(59, 130, 246, 0.1);
+/* ── Blood Orange glow accent ── */
+.blue-glow,
+.orange-glow {
+  box-shadow: 0 0 20px rgba(255, 77, 0, 0.4), 0 0 60px rgba(255, 77, 0, 0.15);
 }
 
 /* ── Composer shadow (elevation at bottom) ── */
@@ -208,17 +209,12 @@
   box-shadow: 0 -10px 40px -10px rgba(0,0,0,0.5);
 }
 
-/* ── Sidebar transition ── */
-.sidebar-transition {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 /* ── Cursor blink ── */
 .cursor-blink {
   display: inline-block;
   width: 2px;
   height: 1.2em;
-  background-color: hsl(221 90% 55%);
+  background-color: hsl(16 100% 50%);
   margin-left: 2px;
   animation: cursor-blink 1s step-end infinite;
   vertical-align: middle;
@@ -337,7 +333,222 @@
   display: inline;
   white-space: pre-wrap;
   will-change: opacity, filter, transform;
+}/* ═══════════════════════════════════════════════════════════
+   MARKDOWN BODY — Premium Chat Typography System
+   ═══════════════════════════════════════════════════════════ */
+
+.markdown-body {
+  font-size: 15px;
+  line-height: 1.75;
+  color: hsl(var(--foreground));
+  word-break: break-word;
 }
 
+/* ── Paragraphs ── */
+.markdown-body p {
+  margin-top: 0;
+  margin-bottom: 0.85em;
+  color: hsl(var(--foreground));
+}
+.markdown-body p:last-child { margin-bottom: 0; }
+
+/* ── H1 — Big statement heading ── */
+.md-h1 {
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+  margin-top: 1.6em;
+  margin-bottom: 0.55em;
+  padding-bottom: 0.4em;
+  border-bottom: 2px solid hsl(var(--primary) / 0.25);
+}
+.md-h1:first-child { margin-top: 0; }
+
+/* ── H2 — Section heading with left accent bar ── */
+.md-h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  color: hsl(var(--foreground));
+  margin-top: 1.6em;
+  margin-bottom: 0.5em;
+  padding-left: 0.75em;
+  border-left: 3px solid hsl(var(--primary) / 0.7);
+}
+.md-h2:first-child { margin-top: 0.25em; }
+
+/* ── H3 — Sub-section ── */
+.md-h3 {
+  font-size: 0.975rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: hsl(var(--foreground));
+  margin-top: 1.2em;
+  margin-bottom: 0.35em;
+  padding-left: 0.6em;
+  border-left: 2px solid hsl(var(--primary) / 0.35);
+}
+.md-h3:first-child { margin-top: 0.15em; }
+
+/* ── H4 ── */
+.md-h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 1em;
+  margin-bottom: 0.3em;
+}
+
+/* ── Lists ── */
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.5em;
+  margin-top: 0.5em;
+  margin-bottom: 0.85em;
+}
+.markdown-body li {
+  margin-bottom: 0.35em;
+  color: hsl(var(--foreground));
+  line-height: 1.7;
+}
+.markdown-body li::marker {
+  color: hsl(var(--primary) / 0.6);
+}
+.markdown-body ul { list-style-type: disc; }
+.markdown-body ol { list-style-type: decimal; }
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+
+/* ── Strong & Em ── */
+.markdown-body strong {
+  font-weight: 650;
+  color: hsl(var(--foreground));
+}
+.markdown-body em {
+  font-style: italic;
+  color: hsl(var(--foreground) / 0.85);
+}
+
+/* ── Blockquote ── */
+.markdown-body blockquote {
+  border-left: 3px solid hsl(var(--primary) / 0.5);
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  border-radius: 0 0.5rem 0.5rem 0;
+  background: hsl(var(--primary) / 0.05);
+  color: hsl(var(--foreground) / 0.85);
+  font-style: italic;
+}
+.markdown-body blockquote p { margin: 0; }
+
+/* ── HR ── */
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 1.5em 0;
+}
+
+/* ── Inline code ── */
+.inline-code {
+  background: hsl(var(--muted) / 0.55);
+  color: hsl(var(--foreground));
+  padding: 0.15em 0.4em;
+  border-radius: 0.35em;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875em;
+  font-weight: 500;
+  border: 1px solid hsl(var(--border) / 0.5);
+}
+
+/* ── Links ── */
+.markdown-body a {
+  color: hsl(var(--primary));
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid hsl(var(--primary) / 0.3);
+  transition: border-color 0.15s;
+}
+.markdown-body a:hover {
+  border-bottom-color: hsl(var(--primary));
+}
+
+/* ── Tables ── */
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin: 1em 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border) / 0.6);
+}
+.markdown-body th {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--foreground));
+  font-weight: 600;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.55em 0.85em;
+  text-align: left;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.markdown-body td {
+  padding: 0.5em 0.85em;
+  color: hsl(var(--foreground) / 0.9);
+  border-bottom: 1px solid hsl(var(--border) / 0.4);
+}
+.markdown-body tr:last-child td { border-bottom: none; }
+.markdown-body tr:nth-child(even) td {
+  background: hsl(var(--muted) / 0.2);
+}
+
+/* ── Pre/code blocks ── */
+.markdown-body pre {
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0.75em 0 !important;
+}
+
+/* ── Light mode adjustments ── */
+:root:not(.dark) .md-h2 {
+  border-left-color: hsl(var(--primary) / 0.8);
+}
+:root:not(.dark) .md-h3 {
+  border-left-color: hsl(var(--primary) / 0.5);
+}
+:root:not(.dark) .inline-code {
+  background: hsl(var(--muted) / 0.6);
+  border-color: hsl(var(--border));
+}
+
+/* ── Custom Sleek Scrollbar ── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--border) / 0.8);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.6);
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border) / 0.8) transparent;
+}
 
 

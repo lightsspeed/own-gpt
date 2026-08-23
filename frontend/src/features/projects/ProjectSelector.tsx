@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Folder, Check, ChevronDown, Loader, AlertTriangle, Plus, X } from 'lucide-react'
+import { Folder, FolderGit2, Check, ChevronDown, Loader, AlertTriangle, Plus, X, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Project } from './services/projectsApi'
 
@@ -63,18 +63,20 @@ export function ProjectSelector({
       <button
         onClick={() => setOpen(v => !v)}
         className={cn(
-          'w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-small transition-all',
+          'w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl border text-small transition-all shadow-xs',
           open
-            ? 'border-primary/40 bg-primary/10 text-foreground'
-            : 'border-border/60 bg-background/30 text-muted-foreground hover:text-foreground hover:bg-background/50',
+            ? 'border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20'
+            : 'border-border/60 bg-background/40 text-foreground/80 hover:text-foreground hover:bg-background/60 hover:border-border',
         )}
-        title="Select project"
+        title="Select active workspace project"
       >
-        <span className="flex items-center gap-2 min-w-0">
-          <Folder size={14} className={cn(selected ? 'text-primary' : 'text-muted-foreground/40')} />
-          <span className="truncate max-w-[180px]">{selected ? selected.name : 'General (all content)'}</span>
+        <span className="flex items-center gap-2.5 min-w-0">
+          <div className="w-5 h-5 rounded-md bg-primary/15 border border-primary/25 flex items-center justify-center text-primary shrink-0">
+            <FolderGit2 size={12} />
+          </div>
+          <span className="truncate font-medium text-xs max-w-[170px]">{selected ? selected.name : 'General (All Content)'}</span>
         </span>
-        <ChevronDown size={14} className={cn('shrink-0 transition-transform', open && 'rotate-180')} />
+        <ChevronDown size={14} className={cn('shrink-0 text-muted-foreground/60 transition-transform duration-200', open && 'rotate-180 text-primary')} />
       </button>
 
       {open && (

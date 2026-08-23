@@ -69,29 +69,17 @@ export function InlineCitationText({
       continue
     }
 
-    const key = groupKey(group)
-    const isActive = open?.key === key
+    const instanceKey = `${groupKey(group)}@${groupCursor}`
+    const isActive = open?.key === instanceKey
     const activeIndex = isActive ? Math.min(open!.index, group.sources.length - 1) : 0
 
     out.push(
-      <span key={`c-${keyCounter++}`} className="relative inline-block align-baseline">
+      <React.Fragment key={`c-${keyCounter++}`}>
         <CitationPill
           label={pillowLabel(group)}
-          active={isActive}
-          onActivate={() => onActivateKey(key)}
-          onHoverEnter={() => onHoverEnterKey(key)}
-          onHoverLeave={() => onHoverLeaveKey(key)}
+          resource={group.sources[0]?.resource}
         />
-        {isActive && (
-          <CitationPopover
-            sources={group.sources}
-            activeIndex={activeIndex}
-            onNavigate={onNavigate}
-            onClose={onClose}
-            variant={variant}
-          />
-        )}
-      </span>,
+      </React.Fragment>,
     )
     i++
     groupCursor++

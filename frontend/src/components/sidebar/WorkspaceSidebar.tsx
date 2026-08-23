@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Stack, Divider } from '@/components/layout';
 import { cn } from '@/lib/utils';
 import type { ChatSession } from '@/features/chat/types';
+import { resolveSessionTitle } from '@/lib/sessionTitle';
 
 interface WorkspaceSidebarProps {
   sessions: ChatSession[];
@@ -207,9 +208,9 @@ function ConversationItem({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(session.title || '');
+  const [editTitle, setEditTitle] = useState(resolveSessionTitle(session.title));
 
-  const displayTitle = (session.title || '').trim() || 'New Chat';
+  const displayTitle = resolveSessionTitle(session.title);
 
   return (
     <div

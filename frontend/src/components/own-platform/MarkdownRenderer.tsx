@@ -7,7 +7,7 @@ import { Check, Copy } from 'lucide-react'
 import { useCopy } from '@/hooks/useCopy'
 import type { ResourceItem } from '@/features/chat/types'
 import { InlineCitationText, groupKey, type CitationOpen } from './inline-citation/InlineCitation'
-import { buildCiteGroups, type CiteGroup, type CitationToken } from './inline-citation/CitationMarker'
+import { buildCiteGroups, normalizeContentAndResources, type CiteGroup, type CitationToken } from './inline-citation/CitationMarker'
 import { useCoarsePointer } from './inline-citation/useCoarsePointer'
 
 interface MarkdownRendererProps {
@@ -74,7 +74,12 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({ content, 
   const coarse = useCoarsePointer()
   const variant: 'card' | 'sheet' = coarse ? 'sheet' : 'card'
 
-  const groups = useMemo<CiteGroup[]>(() => buildCiteGroups(content, resources), [content, resources])
+  const { normalizedContent, effectiveResources } = useMemo(() => {
+    const res = normalizeContentAndResources(content, resources)
+    return { normalizedContent: res.normalizedContent, effectiveResources: res.resources }
+  }, [content, resources])
+
+  const groups = useMemo<CiteGroup[]>(() => buildCiteGroups(normalizedContent, effectiveResources), [normalizedContent, effectiveResources])
   const groupByKey = useMemo(() => {
     const map = new Map<string, CiteGroup>()
     for (const g of groups) map.set(groupKey(g), g)
@@ -163,7 +168,7 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({ content, 
     return (
       <div
         ref={containerRef}
-        className="w-full max-w-full prose dark:prose-invert prose-sm text-foreground prose-p:my-2.5 prose-p:leading-relaxed prose-p:text-[15px] prose-p:text-foreground prose-headings:font-semibold prose-headings:text-foreground prose-h1:text-xl prose-h1:mt-5 prose-h1:mb-2.5 prose-h1:border-b prose-h1:border-border/40 prose-h1:pb-1.5 prose-h2:text-lg prose-h2:mt-4 prose-h2:mb-2 prose-h3:text-[15px] prose-h3:mt-3.5 prose-h3:mb-1.5 prose-strong:font-semibold prose-strong:text-foreground prose-em:text-foreground prose-ul:my-2.5 prose-ul:pl-5 prose-ul:space-y-1 prose-ul:list-disc prose-ol:my-2.5 prose-ol:pl-5 prose-ol:space-y-1 prose-ol:list-decimal prose-li:text-[15px] prose-li:leading-relaxed prose-li:text-foreground prose-blockquote:border-l-4 prose-blockquote:border-primary/60 prose-blockquote:pl-3.5 prose-blockquote:py-1 prose-blockquote:my-2.5 prose-blockquote:italic prose-blockquote:bg-elevated/40 prose-blockquote:rounded-r-md prose-blockquote:text-foreground/90 prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:my-3 prose-hr:border-border prose-hr:my-4 prose-a:text-primary prose-a:font-medium prose-a:no-underline hover:prose-a:underline prose-table:text-[15px] prose-th:text-foreground prose-td:text-foreground/90"
+        className="w-full max-w-full markdown-body text-foreground"
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
@@ -176,7 +181,7 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({ content, 
                 return <MemoCodeBlock language={match?.[1] || 'text'} code={code} />
               }
               return (
-                <code className={className} {...props}>
+                <code className="inline-code" {...props}>
                   {children}
                 </code>
               )
@@ -186,20 +191,91 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({ content, 
                 {children}
               </a>
             ),
-            p: CitationAware,
-            li: CitationAware,
-            h1: CitationAware,
-            h2: CitationAware,
-            h3: CitationAware,
-            h4: CitationAware,
-            h5: CitationAware,
-            h6: CitationAware,
-            blockquote: CitationAware,
-            td: CitationAware,
-            th: CitationAware,
+            h1: ({ children, ...props }: any) => (
+              <h1 className="md-h1" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </h1>
+            ),
+            h2: ({ children, ...props }: any) => (
+              <h2 className="md-h2" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </h2>
+            ),
+            h3: ({ children, ...props }: any) => (
+              <h3 className="md-h3" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </h3>
+            ),
+            h4: ({ children, ...props }: any) => (
+              <h4 className="md-h4" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </h4>
+            ),
+            h5: ({ children, ...props }: any) => (
+              <h5 className="font-semibold text-sm text-foreground my-2" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </h5>
+            ),
+            h6: ({ children, ...props }: any) => (
+              <h6 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider my-2" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </h6>
+            ),
+            p: ({ children, ...props }: any) => (
+              <p className="my-2.5 leading-relaxed text-foreground" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </p>
+            ),
+            ul: ({ children, ...props }: any) => (
+              <ul className="my-3 space-y-1.5 pl-5 list-disc text-foreground" {...props}>
+                {children}
+              </ul>
+            ),
+            ol: ({ children, ...props }: any) => (
+              <ol className="my-3 space-y-1.5 pl-5 list-decimal text-foreground" {...props}>
+                {children}
+              </ol>
+            ),
+            li: ({ children, ...props }: any) => (
+              <li className="leading-relaxed my-1" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </li>
+            ),
+            table: ({ children, ...props }: any) => (
+              <div className="my-4 overflow-x-auto rounded-xl border border-border/60 bg-surface/40 dark:bg-elevated/40 shadow-xs">
+                <table className="w-full border-collapse text-left text-sm" {...props}>
+                  {children}
+                </table>
+              </div>
+            ),
+            thead: ({ children, ...props }: any) => (
+              <thead className="bg-muted/50 text-xs font-semibold uppercase text-muted-foreground border-b border-border/60" {...props}>
+                {children}
+              </thead>
+            ),
+            tbody: ({ children, ...props }: any) => (
+              <tbody className="divide-y divide-border/40" {...props}>
+                {children}
+              </tbody>
+            ),
+            tr: ({ children, ...props }: any) => (
+              <tr className="hover:bg-hover/40 transition-colors" {...props}>
+                {children}
+              </tr>
+            ),
+            th: ({ children, ...props }: any) => (
+              <th className="px-4 py-2.5 font-semibold text-xs text-muted-foreground uppercase tracking-wider text-left border-b border-border/60" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </th>
+            ),
+            td: ({ children, ...props }: any) => (
+              <td className="px-4 py-3 text-sm text-foreground/90 align-top border-b border-border/30" {...props}>
+                <CitationAware>{children}</CitationAware>
+              </td>
+            ),
           }}
         >
-          {content}
+          {normalizedContent}
         </ReactMarkdown>
       </div>
     )

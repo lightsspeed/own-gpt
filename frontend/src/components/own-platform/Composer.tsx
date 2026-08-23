@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Paperclip, Mic, X, Upload, Wrench, Download, ChevronDown, FileText, FileCode, FileSpreadsheet } from 'lucide-react'
+import { Paperclip, Mic, X, Upload, Wrench, Download, ChevronDown, FileText, FileCode, FileSpreadsheet, Plus, List } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './FilePreview'
@@ -11,6 +11,7 @@ import {
   exportConversationAsMarkdown,
   exportConversationAsTxt,
 } from '@/features/chat/services/conversationExport'
+import { ConversationOutline, type NavigatorAnchor } from './ConversationNavigator'
 import type { AttachmentFile, ToolInfo, ToolMode, ContextItem, ContextCategory, MessageData } from '@/features/chat/types'
 
 declare global {
@@ -47,6 +48,9 @@ interface ComposerProps {
   messages?: MessageData[]
   onExportPdf?: () => void
   title?: string
+  chapters?: NavigatorAnchor[]
+  streamingId?: string | null
+  onChapterClick?: (anchorId: string, targetMsgId: string) => void
 }
 
 function DownloadDropdown({
@@ -81,10 +85,10 @@ function DownloadDropdown({
         onClick={() => setOpen(prev => !prev)}
         disabled={disabled || !hasMessages}
         className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-200 text-xs font-medium',
+          'flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all duration-200 text-xs font-medium',
           open
             ? 'border-primary/50 bg-primary/10 text-primary shadow-sm'
-            : 'border-border/60 bg-elevated/70 hover:bg-hover text-foreground/80 hover:text-foreground shadow-xs',
+            : 'border-border/60 bg-surface/80 hover:bg-hover text-foreground/80 hover:text-foreground shadow-xs',
           'disabled:opacity-40 disabled:pointer-events-none cursor-pointer'
         )}
         title={hasMessages ? 'Download complete conversation' : 'No messages to download'}
@@ -155,6 +159,9 @@ export function Composer({
   messages = [],
   onExportPdf,
   title,
+  chapters = [],
+  streamingId,
+  onChapterClick,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -163,7 +170,47 @@ export function Composer({
   const [files, setFiles] = useState<AttachmentFile[]>([])
   const [focused, setFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
-  const [toolsOpen, setToolsOpen] = useState(false)
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const plusMenuRef = useRef<HTMLDivElement>(null)
+
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!plusMenuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
+        setPlusMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [plusMenuOpen])
+
+  const [topicsMenuOpen, setTopicsMenuOpen] = useState(false)
+  const topicsMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [exportMenuOpen])
+
+  useEffect(() => {
+    if (!topicsMenuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (topicsMenuRef.current && !topicsMenuRef.current.contains(e.target as Node)) {
+        setTopicsMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [topicsMenuOpen])
   const [slashOpen, setSlashOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const [isListening, setIsListening] = useState(false)
@@ -347,7 +394,7 @@ export function Composer({
   return (
     <div ref={containerRef} className="w-full max-w-[920px] mx-auto relative">
       {isDragging && (
-        <div className="absolute inset-0 z-50 rounded-[18px] border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-50 rounded-[28px] border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-sm flex items-center justify-center pointer-events-none">
           <div className="text-center space-y-2">
             <Upload size={32} className="mx-auto text-primary/60" />
             <p className="text-small text-foreground font-medium">Drop files to attach</p>
@@ -357,10 +404,10 @@ export function Composer({
 
       <div
         className={cn(
-          'relative flex flex-col rounded-[18px] border shadow-2xl transition-all duration-160 bg-elevated/90 backdrop-blur-sm',
+          'relative flex flex-col rounded-[28px] border transition-all duration-200 bg-surface/95 dark:bg-elevated/95 backdrop-blur-xl shadow-xl',
           focused
-            ? 'border-primary shadow-[0_0_0_3px_rgba(59,130,246,0.12)]'
-            : 'border-border/60',
+            ? 'border-primary/80 ring-2 ring-primary/20 shadow-[0_4px_30px_rgba(59,130,246,0.15)]'
+            : 'border-border/70 hover:border-border/90 shadow-[0_4px_24px_rgba(0,0,0,0.06)]',
         )}
       >
         {/* Slash commands (positioned above) */}
@@ -376,7 +423,7 @@ export function Composer({
 
         {/* Inline attachments */}
         {hasAttachments && (
-          <div className="flex flex-wrap gap-1.5 pt-3 px-[18px]">
+          <div className="flex flex-wrap gap-1.5 pt-3.5 px-5">
             {files.map(f => (
               <div key={f.id} className="flex-1 min-w-[200px]">
                 <FilePreview file={f} onRemove={removeFile} />
@@ -387,21 +434,21 @@ export function Composer({
 
         {/* Inline context chips */}
         {hasContext && (
-          <div className="flex items-center gap-1.5 pt-2.5 px-[18px] overflow-x-auto">
+          <div className="flex items-center gap-1.5 pt-3 px-5 overflow-x-auto">
             {contextItems.map(item => {
               const meta = CATEGORY_META[item.category]
               return (
                 <div
                   key={item.id}
                   className={cn(
-                    'group flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg border text-[11px] font-medium transition-all',
+                    'group flex items-center gap-1.5 shrink-0 px-2.5 py-1 rounded-full border text-[11px] font-medium transition-all',
                     meta.color,
                   )}
                 >
                   <span className="max-w-[100px] truncate">{item.label}</span>
                   <button
                     onClick={() => onContextRemove?.(item.id)}
-                    className="ml-0.5 p-0.5 rounded text-current/40 hover:text-current opacity-0 group-hover:opacity-100 transition-all duration-160"
+                    className="ml-0.5 p-0.5 rounded-full text-current/40 hover:text-current opacity-0 group-hover:opacity-100 transition-all duration-160"
                   >
                     <X size={10} />
                   </button>
@@ -412,49 +459,202 @@ export function Composer({
         )}
 
         {/* Main row: toolbar + textarea + actions */}
-        <div className="flex items-end px-[18px] py-[14px] gap-2">
-          {/* Left toolbar */}
-          <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
-            {tools && onToggleTool && (
-              <div className="relative">
-                <button
-                  onClick={() => setToolsOpen(!toolsOpen)}
-                    className={cn(
-                      'flex items-center justify-center w-9 h-9 rounded-[10px] transition-all duration-160',
-                      toolsOpen || activeToolCount > 0
-                        ? 'bg-primary/[0.08] text-primary hover:bg-primary/[0.12]'
-                        : 'text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.05]',
-                  )}
-                  title="Toggle tools"
-                >
-                  <Wrench size={17} />
-                  {activeToolCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-primary text-[9px] font-bold text-white flex items-center justify-center">
-                      {activeToolCount}
-                    </span>
-                  )}
-                </button>
-                {toolsOpen && (
-                  <ToolPicker
-                    tools={tools}
-                    onToggle={onToggleTool}
-                    onModeChange={onToolModeChange || (() => {})}
-                    onClose={() => setToolsOpen(false)}
-                  />
+        <div className="flex items-end px-4 py-3 gap-2">
+          {/* Left toolbar — single + action button */}
+          <div className="flex items-center gap-1 shrink-0 pb-0.5" ref={plusMenuRef}>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setPlusMenuOpen(!plusMenuOpen)}
+                className={cn(
+                  'flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 relative',
+                  plusMenuOpen
+                    ? 'bg-primary text-primary-foreground rotate-45 shadow-md scale-105'
+                    : 'text-muted-foreground/80 hover:text-foreground hover:bg-hover bg-muted/30 border border-border/40',
                 )}
-              </div>
-            )}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center w-9 h-9 rounded-[10px] transition-all duration-160 text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.05]"
-              title="Attach files"
-            >
-              <Paperclip size={18} />
-            </button>
+                title="Add content, tools, or outline"
+              >
+                <Plus size={18} className="transition-transform duration-200" />
+                {activeToolCount > 0 && !plusMenuOpen && (
+                  <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-primary text-[9px] font-bold text-white flex items-center justify-center">
+                    {activeToolCount}
+                  </span>
+                )}
+              </button>
+
+              {plusMenuOpen && (
+                <div
+                  className="absolute left-0 bottom-full mb-2.5 w-64 py-2 rounded-2xl border border-border/60 bg-surface/95 dark:bg-elevated/95 backdrop-blur-xl shadow-2xl z-50 animate-scale-in origin-bottom-left"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Attach Files */}
+                  <button
+                    onClick={() => {
+                      setPlusMenuOpen(false)
+                      fileInputRef.current?.click()
+                    }}
+                    className="flex items-center gap-3 w-full px-3.5 py-2.5 text-left hover:bg-hover/80 transition-colors group"
+                  >
+                    <Paperclip size={17} className="text-primary shrink-0 group-hover:scale-110 transition-transform" />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-small font-medium text-foreground">Attach Files</span>
+                      <span className="text-[11px] text-muted-foreground/70">Upload documents, code, or images</span>
+                    </div>
+                  </button>
+
+                  {/* Active AI Tools */}
+                  {tools && onToggleTool && (
+                    <button
+                      onClick={() => {
+                        setPlusMenuOpen(false)
+                        setToolsOpen(true)
+                      }}
+                      className="flex items-center justify-between w-full px-3.5 py-2.5 text-left hover:bg-hover/80 transition-colors group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Wrench size={17} className="text-primary shrink-0 group-hover:scale-110 transition-transform" />
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-small font-medium text-foreground">Active AI Tools</span>
+                          <span className="text-[11px] text-muted-foreground/70">Web Search, KB, Python Sandbox</span>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-bold shrink-0">
+                        {activeToolCount} Active
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Export Conversation */}
+                  <button
+                    onClick={() => {
+                      setPlusMenuOpen(false)
+                      setExportMenuOpen(true)
+                    }}
+                    className="flex items-center justify-between w-full px-3.5 py-2.5 text-left hover:bg-hover/80 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Download size={17} className="text-primary shrink-0 group-hover:scale-110 transition-transform" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-small font-medium text-foreground">Export Conversation</span>
+                        <span className="text-[11px] text-muted-foreground/70">Save as PDF, Markdown, or Text</span>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Topics */}
+                  {chapters && chapters.length > 0 && onChapterClick && (
+                    <button
+                      onClick={() => {
+                        setPlusMenuOpen(false)
+                        setTopicsMenuOpen(true)
+                      }}
+                      className="flex items-center justify-between w-full px-3.5 py-2.5 text-left hover:bg-hover/80 transition-colors group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <List size={17} className="text-primary shrink-0 group-hover:scale-110 transition-transform" />
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-small font-medium text-foreground">Topics</span>
+                          <span className="text-[11px] text-muted-foreground/70">Scroll to any question in this chat</span>
+                        </div>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold shrink-0">{chapters.length}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Export sub-menu popover */}
+              {exportMenuOpen && (
+                <div
+                  ref={exportMenuRef}
+                  className="absolute left-0 bottom-full mb-2.5 w-60 py-2 rounded-2xl border border-border/60 bg-surface/95 dark:bg-elevated/95 backdrop-blur-xl shadow-2xl z-50 animate-scale-in origin-bottom-left"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="px-3.5 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/40 mb-1">
+                    Export Format
+                  </div>
+
+                  {onExportPdf && (
+                    <button
+                      onClick={() => {
+                        setExportMenuOpen(false)
+                        onExportPdf()
+                      }}
+                      className="flex items-center gap-3 w-full px-3.5 py-2 text-left text-small text-foreground hover:bg-hover/80 transition-colors"
+                    >
+                      <FileText size={16} className="text-primary shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-medium">PDF Document</span>
+                        <span className="text-[10px] text-muted-foreground">Printable formatted document</span>
+                      </div>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setExportMenuOpen(false)
+                      exportConversationAsMarkdown(messages, title)
+                    }}
+                    className="flex items-center gap-3 w-full px-3.5 py-2 text-left text-small text-foreground hover:bg-hover/80 transition-colors"
+                  >
+                    <FileCode size={16} className="text-primary shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-medium">Markdown (.md)</span>
+                      <span className="text-[10px] text-muted-foreground">Raw markdown text file</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setExportMenuOpen(false)
+                      exportConversationAsTxt(messages, title)
+                    }}
+                    className="flex items-center gap-3 w-full px-3.5 py-2 text-left text-small text-foreground hover:bg-hover/80 transition-colors"
+                  >
+                    <FileSpreadsheet size={16} className="text-primary shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-medium">Plain Text (.txt)</span>
+                      <span className="text-[10px] text-muted-foreground">Unformatted text file</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {/* Topics upward popover */}
+              {topicsMenuOpen && chapters && chapters.length > 0 && onChapterClick && (
+                <div
+                  ref={topicsMenuRef}
+                  className="absolute left-0 bottom-full mb-2.5 w-72 py-2 rounded-2xl border border-border/60 bg-surface/95 dark:bg-elevated/95 backdrop-blur-xl shadow-2xl z-50 animate-scale-in origin-bottom-left"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="px-3.5 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/40 mb-1 flex items-center justify-between">
+                    <span>Topics ({chapters.length})</span>
+                    <button onClick={() => setTopicsMenuOpen(false)} className="text-muted-foreground/50 hover:text-foreground transition-colors">
+                      <X size={13} />
+                    </button>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto custom-scrollbar py-1">
+                    {chapters.map((c, i) => (
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          setTopicsMenuOpen(false)
+                          onChapterClick(c.id, c.targetMsgId)
+                        }}
+                        className="flex items-start gap-3 w-full px-3.5 py-2 text-left hover:bg-hover/80 transition-colors group"
+                      >
+                        <span className="text-[11px] font-bold text-primary/60 group-hover:text-primary pt-0.5 w-4 shrink-0">{i + 1}</span>
+                        <span className="text-sm text-foreground/80 group-hover:text-foreground leading-snug">{c.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Textarea */}
-          <div className="relative flex-1 min-w-0">
+          <div className="relative flex-1 min-w-0 px-1">
             <textarea
               ref={textareaRef}
               value={input}
@@ -465,8 +665,8 @@ export function Composer({
               placeholder={isDragging ? 'Drop files here...' : placeholder}
               disabled={disabled || isLoading}
               rows={1}
-              className="w-full resize-none bg-transparent outline-none text-[16px] text-foreground placeholder:text-foreground/55 placeholder:font-normal leading-relaxed"
-              style={{ minHeight: '1.75rem', maxHeight: '10rem', paddingTop: '2px' }}
+              className="w-full resize-none bg-transparent outline-none text-[15px] text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal leading-relaxed"
+              style={{ minHeight: '1.75rem', maxHeight: '10rem', paddingTop: '3px' }}
             />
           </div>
 
@@ -478,14 +678,14 @@ export function Composer({
                 onClick={toggleListening}
                 disabled={disabled || isLoading}
                 className={cn(
-                  'flex items-center justify-center w-9 h-9 rounded-[10px] transition-all duration-160 relative',
+                  'flex items-center justify-center w-9 h-9 rounded-full transition-all duration-160 relative',
                   isListening
-                    ? 'bg-red-500/15 text-red-400 border border-red-500/30 animate-pulse'
-                    : 'text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.05]',
+                    ? 'bg-red-500/15 text-red-500 border border-red-500/30 animate-pulse'
+                    : 'text-muted-foreground/70 hover:text-foreground hover:bg-hover',
                 )}
                 title={isListening ? 'Listening... (Click to stop)' : 'Voice input (Click to speak)'}
               >
-                <Mic size={18} className={isListening ? 'text-red-400' : ''} />
+                <Mic size={18} className={isListening ? 'text-red-500' : ''} />
                 {isListening && (
                   <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 animate-ping" />
                 )}
@@ -497,20 +697,12 @@ export function Composer({
               )}
             </div>
 
-            {/* Download complete conversation dropdown */}
-            <DownloadDropdown
-              messages={messages}
-              onExportPdf={onExportPdf}
-              title={title}
-              disabled={disabled || isLoading}
-            />
-
-            <div className="w-px h-6 bg-foreground/[0.18] mx-0.5" />
+            <div className="w-px h-5 bg-border/60 mx-0.5" />
 
             {isLoading ? (
               <button
                 onClick={onStop}
-                className="flex items-center justify-center w-9 h-9 rounded-full bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-160 shrink-0"
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-160 shrink-0 shadow-sm"
                 title="Stop generation"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
@@ -520,10 +712,10 @@ export function Composer({
                 onClick={onSend}
                 disabled={disabled || !canSend}
                 className={cn(
-                  'flex items-center justify-center w-9 h-9 rounded-full transition-all duration-160 shrink-0',
+                  'flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 shrink-0',
                   canSend
-                    ? 'bg-primary text-primary-foreground hover:scale-105 active:scale-[0.96] shadow-md'
-                    : 'bg-muted/10 text-muted-foreground/35',
+                    ? 'bg-primary text-primary-foreground hover:brightness-110 hover:scale-105 active:scale-[0.95] shadow-[0_2px_12px_rgba(59,130,246,0.4)]'
+                    : 'bg-muted/20 text-muted-foreground/30 cursor-not-allowed',
                 )}
                 title="Send"
               >
