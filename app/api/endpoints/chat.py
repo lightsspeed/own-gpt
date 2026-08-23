@@ -100,6 +100,7 @@ class HistoryMessage(BaseModel):
     resources: List[ResourceItem] = []
     model: Optional[str] = None
     status: str = "completed"
+    created_at: Optional[datetime] = None
 
 
 class HistoryResponse(BaseModel):
@@ -712,6 +713,7 @@ async def get_history(
                 resources=resources,
                 model=m.model,
                 status=m.status,
+                created_at=m.created_at,
             ))
 
         return HistoryResponse(session_id=session_id, messages=messages)

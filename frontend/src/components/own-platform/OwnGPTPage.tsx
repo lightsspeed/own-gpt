@@ -21,9 +21,10 @@ interface OwnGPTPageProps {
   sessionId: string
   projectId?: string | null
   title?: string
+  onFirstUserMessage?: (content: string) => void
 }
 
-export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation' }: OwnGPTPageProps) {
+export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation', onFirstUserMessage }: OwnGPTPageProps) {
   const navigate = useNavigate()
   const [contextPanelOpen, setContextPanelOpen] = useState(false)
   const [sourcesData, setSourcesData] = useState<ResourceItem[]>([])
@@ -53,6 +54,7 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
     model: import.meta.env.VITE_DEFAULT_MODEL || '',
     temperature: 0.7,
     systemPrompt: `You are a helpful AI engineering assistant on the Own Platform. Today's date is ${new Date().toISOString().split('T')[0]}.`,
+    onFirstUserMessage,
   })
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -339,7 +341,22 @@ export function OwnGPTPage({ sessionId, projectId, title = 'OwnGPT Conversation'
       <div className="pb-4">
         <div className="max-w-[920px] mx-auto relative">
           <ScrollToBottom show={showScrollBtn} onClick={scrollToBottom} newMessages={newMsgCount || undefined} isLoading={isLoading} />
-          <Composer input={input} setInput={setInput} onSend={send} onStop={stop} isLoading={isLoading} tools={tools} onToggleTool={toggleTool} onToolModeChange={setToolMode} contextItems={context.items} onContextRemove={removeContextItem} projectId={projectId} />
+          <Composer
+            input={input}
+            setInput={setInput}
+            onSend={send}
+            onStop={stop}
+            isLoading={isLoading}
+            tools={tools}
+            onToggleTool={toggleTool}
+            onToolModeChange={setToolMode}
+            contextItems={context.items}
+            onContextRemove={removeContextItem}
+            projectId={projectId}
+            messages={messages}
+            onExportPdf={() => setExporting(true)}
+            title={title}
+          />
         </div>
       </div>
 

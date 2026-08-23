@@ -11,6 +11,7 @@ export interface UseChatOptions {
   uploadedFiles?: UploadedFile[];
   document?: string;
   projectId?: string | null;
+  onFirstUserMessage?: (userContent: string) => void;
 }
 
 export interface UseChatReturn {
@@ -153,6 +154,9 @@ export function useChat(options: UseChatOptions): UseChatReturn {
       content: input.trim(),
       timestamp: new Date(),
     };
+    if (messages.filter(m => m.role === 'user').length === 0 && options.onFirstUserMessage) {
+      options.onFirstUserMessage(userMsg.content);
+    }
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);

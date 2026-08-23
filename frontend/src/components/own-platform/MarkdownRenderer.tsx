@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Check, Copy } from 'lucide-react'
 import { useCopy } from '@/hooks/useCopy'
 import type { ResourceItem } from '@/features/chat/types'
@@ -23,36 +23,41 @@ const HOVER_CLOSE_DELAY_MS = 150
 
 function CodeBlock({ language, code }: { language: string; code: string }) {
   const { copied, copy } = useCopy()
+  const isDark = typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : true
 
   return (
-    <div className="relative my-3 rounded-xl overflow-hidden border border-border">
-      <div className="flex items-center justify-between bg-elevated px-4 py-1.5 border-b border-border">
-        <span className="text-caption font-mono text-muted-foreground">{language}</span>
+    <div className="code-block-wrapper relative my-3 rounded-xl overflow-hidden border border-border bg-elevated shadow-sm">
+      <div className="flex items-center justify-between bg-muted/60 px-4 py-2 border-b border-border">
+        <span className="text-xs font-mono text-muted-foreground uppercase font-semibold tracking-wider">{language || 'code'}</span>
         <button
           onClick={() => copy(code)}
-          className={`flex items-center gap-1 rounded-md px-2 py-1 text-caption font-medium transition-all ${
-            copied ? 'text-success' : 'text-muted-foreground hover:text-foreground hover:bg-hover'
+          className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+            copied
+              ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+              : 'bg-hover/80 hover:bg-hover text-muted-foreground hover:text-foreground border border-border/50'
           }`}
         >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+          {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      <SyntaxHighlighter
-        style={oneDark}
-        language={language}
-        PreTag="div"
-        customStyle={{
-          margin: 0,
-          padding: '1rem',
-          background: 'rgba(0,0,0,0.3)',
-          fontSize: '0.8rem',
-          lineHeight: '1.6',
-        }}
-        showLineNumbers={code.split('\n').length > 3}
-      >
-        {code}
-      </SyntaxHighlighter>
+      <div className="code-block-content p-3.5 sm:p-4 overflow-x-auto text-xs sm:text-sm font-mono leading-relaxed">
+        <SyntaxHighlighter
+          style={isDark ? oneDark : oneLight}
+          language={language || 'text'}
+          PreTag="div"
+          customStyle={{
+            margin: 0,
+            padding: 0,
+            background: 'transparent',
+            fontSize: '0.85rem',
+            lineHeight: '1.6',
+          }}
+          showLineNumbers={code.split('\n').length > 3}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
     </div>
   )
 }
@@ -158,7 +163,7 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({ content, 
     return (
       <div
         ref={containerRef}
-        className="prose prose-invert max-w-none prose-headings:text-foreground prose-headings:font-semibold prose-p:text-foreground/90 prose-p:leading-relaxed prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-strong:text-foreground prose-code:text-primary prose-code:bg-muted/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-small prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:my-4 prose-pre:border-none prose-li:text-foreground/90 prose-hr:border-border prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground prose-table:text-body prose-th:text-foreground prose-td:text-muted-foreground"
+        className="w-full max-w-full prose dark:prose-invert prose-sm text-foreground prose-p:my-2.5 prose-p:leading-relaxed prose-p:text-[15px] prose-p:text-foreground prose-headings:font-semibold prose-headings:text-foreground prose-h1:text-xl prose-h1:mt-5 prose-h1:mb-2.5 prose-h1:border-b prose-h1:border-border/40 prose-h1:pb-1.5 prose-h2:text-lg prose-h2:mt-4 prose-h2:mb-2 prose-h3:text-[15px] prose-h3:mt-3.5 prose-h3:mb-1.5 prose-strong:font-semibold prose-strong:text-foreground prose-em:text-foreground prose-ul:my-2.5 prose-ul:pl-5 prose-ul:space-y-1 prose-ul:list-disc prose-ol:my-2.5 prose-ol:pl-5 prose-ol:space-y-1 prose-ol:list-decimal prose-li:text-[15px] prose-li:leading-relaxed prose-li:text-foreground prose-blockquote:border-l-4 prose-blockquote:border-primary/60 prose-blockquote:pl-3.5 prose-blockquote:py-1 prose-blockquote:my-2.5 prose-blockquote:italic prose-blockquote:bg-elevated/40 prose-blockquote:rounded-r-md prose-blockquote:text-foreground/90 prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:my-3 prose-hr:border-border prose-hr:my-4 prose-a:text-primary prose-a:font-medium prose-a:no-underline hover:prose-a:underline prose-table:text-[15px] prose-th:text-foreground prose-td:text-foreground/90"
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}

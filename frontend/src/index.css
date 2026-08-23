@@ -6,17 +6,83 @@
 
 @layer base {
   :root {
-    /* ── Surface hierarchy ── */
-    --canvas:  0 0% 0%;
-    --surface: 0 0% 2%;
-    --elevated: 0 0% 6%;
-    --overlay: 0 0% 2%;
-    --hover:   0 0% 10%;
+    /* ── Light Mode (High Contrast & Clean Typography) ── */
+    --canvas:  0 0% 98%;           /* #fafafa */
+    --surface: 0 0% 100%;         /* #ffffff */
+    --elevated: 220 14% 96%;      /* #f1f5f9 */
+    --overlay: 0 0% 100%;         /* #ffffff */
+    --hover:   220 14% 92%;       /* #e2e8f0 */
+
+    /* ── Text hierarchy (High Contrast) ── */
+    --text-primary:   222 47% 11%;  /* #0f172a - rich dark navy slate */
+    --text-secondary: 217 19% 27%;  /* #334155 - Slate 700, 100% crisp high-contrast gray text */
+    --text-disabled:  215 16% 45% / 0.7;
+
+    /* ── shadcn compatibility ── */
+    --background: var(--canvas);
+    --foreground: var(--text-primary);
+
+    --card: var(--surface);
+    --card-foreground: var(--text-primary);
+
+    --popover: var(--overlay);
+    --popover-foreground: var(--text-primary);
+
+    --primary: 221 83% 53%;        /* vibrant blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: var(--elevated);
+    --secondary-foreground: var(--text-primary);
+
+    --muted: var(--elevated);
+    --muted-foreground: var(--text-secondary); /* #334155 - high contrast gray */
+
+    --accent: var(--hover);
+    --accent-foreground: var(--text-primary);
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* ── Borders & rings ── */
+    --border: 214 32% 88%;         /* crisp light border #cbd5e1 */
+    --input:  214 32% 88%;
+    --ring:   221 83% 53%;
+
+    --radius: 0.75rem;
+
+    /* ── Functional colors ── */
+    --success:      152 60% 40%;
+    --success-soft: 152 60% 40% / 0.12;
+    --warning:      38 90% 50%;
+    --warning-soft: 38 90% 50% / 0.12;
+    --danger:       0 68% 50%;
+    --danger-soft:  0 68% 50% / 0.12;
+    --info:         270 60% 50%;
+    --info-soft:    270 60% 50% / 0.12;
+
+    /* ── Sidebar ── */
+    --sidebar-background: var(--surface);
+    --sidebar-foreground: var(--text-primary);
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: var(--elevated);
+    --sidebar-accent-foreground: var(--text-primary);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+  }
+
+  .dark {
+    /* ── Dark Mode (High Contrast) ── */
+    --canvas:  0 0% 0%;            /* #000000 */
+    --surface: 0 0% 4%;           /* #0a0a0a */
+    --elevated: 0 0% 9%;          /* #171717 */
+    --overlay: 0 0% 4%;
+    --hover:   0 0% 14%;
 
     /* ── Text hierarchy ── */
-    --text-primary:   210 60% 97%;
-    --text-secondary: 215 25% 58%;
-    --text-disabled:  215 25% 58% / 0.5;
+    --text-primary:   210 60% 98%;  /* #f8fafc */
+    --text-secondary: 215 20% 75%;  /* #cbd5e1 - Slate 300, crisp high-contrast light gray text */
+    --text-disabled:  215 20% 75% / 0.5;
 
     /* ── shadcn compatibility ── */
     --background: var(--canvas);
@@ -35,44 +101,16 @@
     --secondary-foreground: var(--text-primary);
 
     --muted: var(--elevated);
-    --muted-foreground: var(--text-secondary);
+    --muted-foreground: var(--text-secondary); /* #cbd5e1 */
 
     --accent: var(--hover);
     --accent-foreground: var(--text-primary);
 
-    --destructive: 0 68% 42%;
-    --destructive-foreground: 0 0% 100%;
-
-    /* ── Borders & rings ── */
-    --border: 0 0% 14%;
-    --input:  0 0% 14%;
+    --border: 0 0% 16%;
+    --input:  0 0% 16%;
     --ring:   221 90% 55%;
 
-    --radius: 0.75rem;
-
-    /* ── Functional colors ── */
-    --success:      152 60% 40%;
-    --success-soft: 152 60% 40% / 0.12;
-    --warning:      38 90% 50%;
-    --warning-soft: 38 90% 50% / 0.12;
-    --danger:       0 68% 50%;
-    --danger-soft:  0 68% 50% / 0.12;
-    --info:         270 60% 50%;
-    --info-soft:    270 60% 50% / 0.12;
-
     /* ── Sidebar ── */
-    --sidebar-background: var(--canvas);
-    --sidebar-foreground: var(--text-primary);
-    --sidebar-primary: 221 90% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: var(--elevated);
-    --sidebar-accent-foreground: var(--text-primary);
-    --sidebar-border: var(--border);
-    --sidebar-ring: var(--ring);
-  }
-
-  .dark {
-    /* Same as root — app is dark-only for now */
     --sidebar-background: var(--canvas);
     --sidebar-foreground: var(--text-primary);
     --sidebar-primary: 221 90% 55%;
@@ -89,11 +127,66 @@
     @apply border-border;
   }
   body {
-    @apply text-foreground antialiased;
+    @apply text-foreground antialiased bg-background;
     font-family: 'Encode Sans Semi Expanded', system-ui, sans-serif;
-    background: #000;
     min-height: 100vh;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
+}
+
+/* ── Code Block Container & Token Background Overrides ── */
+.code-block-wrapper {
+  background-color: hsl(var(--elevated)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+
+.code-block-content,
+.code-block-content *,
+.code-block-content pre,
+.code-block-content code,
+.code-block-content span,
+.code-block-content div,
+.code-block-content [data-sd-animate],
+.code-block-content span[style*="background"],
+.prose pre,
+.prose pre code,
+.prose pre code span,
+.prose pre span {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  border: none !important;
+  outline: none !important;
+}
+
+.prose code:not(.code-block-content code) {
+  background-color: hsl(var(--muted) / 0.6) !important;
+  color: hsl(var(--foreground)) !important;
+  padding: 0.15rem 0.35rem !important;
+  border-radius: 0.3rem !important;
+  font-weight: 500 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  border: none !important;
+}
+
+.prose pre code,
+.prose code::before,
+.prose code::after {
+  content: "" !important;
+}
+
+/* Inline code snippet styling (NO blue highlighter, NO harsh boxes) */
+.prose :not(pre) > code,
+.prose code:not(.code-block-content code) {
+  background-color: rgba(125, 125, 125, 0.12) !important;
+  color: inherit !important;
+  padding: 0.15em 0.35em !important;
+  border-radius: 0.35rem !important;
+  font-size: 0.88em !important;
+  font-weight: 500 !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* ── Glassmorphism utility ── */
@@ -206,5 +299,45 @@
     transform: translateY(0);
   }
 }
+
+/* ── Streamdown per-word animation keyframes ── */
+@keyframes sd-blurIn {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0);
+  }
+}
+
+@keyframes sd-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sd-slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-sd-animate] {
+  animation: var(--sd-animation, sd-blurIn)
+    var(--sd-duration, 200ms)
+    var(--sd-easing, ease-out) both;
+  display: inline;
+  white-space: pre-wrap;
+  will-change: opacity, filter, transform;
+}
+
 
 

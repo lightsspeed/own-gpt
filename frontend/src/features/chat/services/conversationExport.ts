@@ -114,3 +114,67 @@ export function selectExportMessages(messages: MessageData[]): ExportMessage[] {
 export function hasExportableContent(messages: MessageData[]): boolean {
   return selectExportMessages(messages).length > 0
 }
+
+export function exportConversationAsMarkdown(messages: MessageData[], title?: string) {
+  const exportMsgs = selectExportMessages(messages)
+  if (exportMsgs.length === 0) return
+
+  const docTitle = title || 'OwnGPT Conversation'
+  const dateStr = new Date().toLocaleDateString()
+  let mdContent = `# ${docTitle}\n*Exported on ${dateStr}*\n\n---\n\n`
+
+  for (const msg of exportMsgs) {
+    const roleName = msg.role === 'user' ? '👤 **User**' : '🤖 **OwnGPT**'
+    mdContent += `### ${roleName}\n\n${normalizeMarkdownForExport(msg.content)}\n\n`
+
+    if (msg.resources && msg.resources.length > 0) {
+      mdContent += `**Sources:**\n`
+      for (const res of msg.resources) {
+        mdContent += `- [${res.citation_index || '1'}] ${res.title}${res.url ? ` (${res.url})` : ''}\n`
+      }
+      mdContent += `\n`
+    }
+    mdContent += `---\n\n`
+  }
+
+  const filename = `${exportDocumentTitle(docTitle)}.md`
+  const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function exportConversationAsTxt(messages: MessageData[], title?: string) {
+  const exportMsgs = selectExportMessages(messages)
+  if (exportMsgs.length === 0) return
+
+  const docTitle = title || 'OwnGPT Conversation'
+  const dateStr = new Date().toLocaleDateString()
+  let txtContent = `${docTitle.toUpperCase()}\nExported on ${dateStr}\n${'='.repeat(40)}\n\n`
+
+  for (const msg of exportMsgs) {
+    const roleName = msg.role === 'user' ? 'USER' : 'OWNGPT'
+    txtContent += `[${roleName}]\n${msg.content}\n\n`
+
+    if (msg.resources && msg.resources.length > 0) {
+      txtContent += `Sources:\n`
+      for (const res of msg.resources) {
+        txtContent += `- [${res.citation_index || '1'}] ${res.title}${res.url ? ` (${res.url})` : ''}\n`
+      }
+      txtContent += `\n`
+    }
+    txtContent += `${'-'.repeat(30)}\n\n`
+  }
+
+  const filename = `${exportDocumentTitle(docTitle)}.txt`
+  const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
