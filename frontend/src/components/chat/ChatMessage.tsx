@@ -1,11 +1,9 @@
 import React, { useState, memo } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Card } from "@/components/ui/card";
-import { Globe, BookOpen, Zap, FileText, Copy, Check, ThumbsUp, ThumbsDown, Edit2 } from 'lucide-react';
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Globe, BookOpen, Zap, Copy, Check, ThumbsUp, ThumbsDown, Edit2 } from 'lucide-react';
 import { EvidencePanel } from '@/components/evidence';
+import { Streamdown } from '@/components/streamdown';
 
 interface ToolCall {
   name: string;
@@ -75,13 +73,24 @@ function CopyButton({ text }: { text: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
-      className={`p-1.5 rounded-md transition-all ${
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
         copied
-          ? 'bg-green-500/20 text-green-400'
-          : 'bg-blue-500/10 hover:bg-blue-500/25 text-white/50 hover:text-blue-300'
+          ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+          : 'bg-hover/80 hover:bg-hover text-muted-foreground hover:text-foreground border border-border/50'
       }`}
+      title="Copy code"
     >
-      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? (
+        <>
+          <Check size={12} className="text-emerald-500" />
+          <span className="text-emerald-500">Copied!</span>
+        </>
+      ) : (
+        <>
+          <Copy size={12} />
+          <span>Copy</span>
+        </>
+      )}
     </button>
   );
 }
@@ -145,7 +154,7 @@ export const ChatMessage = memo(function ChatMessage({ id, role, content, tool, 
 
   return (
     <div className={`flex w-full group ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`w-full max-w-[95%] space-y-2 flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`w-full max-w-full space-y-2 flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         {isUser ? (
           <div className="flex flex-col items-end gap-2 max-w-[85%]">
             {/* Image previews */}
@@ -162,7 +171,7 @@ export const ChatMessage = memo(function ChatMessage({ id, role, content, tool, 
               </div>
             )}
             {content && (
-              <div className="bg-[#1e1f20] px-5 py-3 rounded-3xl text-[15px] text-gray-200 shadow-sm leading-relaxed border border-white/5">
+              <div className="bg-elevated px-5 py-3 rounded-3xl text-[15px] text-foreground shadow-sm leading-relaxed border border-border">
                 {content}
               </div>
             )}
@@ -176,73 +185,82 @@ export const ChatMessage = memo(function ChatMessage({ id, role, content, tool, 
           </div>
         ) : (
           <div className="w-full">
+            {/* Streamdown per-word blurIn animation during streaming, zero DOM overhead when finished */}
             <div className="
-              prose prose-invert prose-sm max-w-[95%]
-              prose-p:my-3 prose-p:leading-relaxed prose-p:text-gray-300 prose-p:text-[15px]
-              prose-headings:text-gray-100 prose-headings:font-semibold
-              prose-h1:text-xl prose-h1:mt-5 prose-h1:mb-3
-              prose-h2:text-lg prose-h2:mt-5 prose-h2:mb-2
-              prose-h3:text-[16px] prose-h3:mt-4 prose-h3:mb-2
-              prose-strong:text-gray-100 prose-strong:font-semibold
-              prose-em:text-gray-300/80
-              prose-ul:my-3 prose-ul:pl-6 prose-ul:space-y-2 prose-ul:list-[circle]
-              prose-ol:my-3 prose-ol:pl-6 prose-ol:space-y-2
-              prose-li:text-gray-300 prose-li:text-[15px] prose-li:marker:text-gray-400
-              prose-blockquote:border-l-gray-600 prose-blockquote:text-gray-400 prose-blockquote:not-italic
-              prose-code:text-blue-300 prose-code:bg-blue-950/60 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-[13px] prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
-              prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:my-4
-              prose-hr:border-white/10 prose-hr:my-5
-              prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
-              prose-table:text-[15px] prose-th:text-gray-200 prose-td:text-gray-300/80
+              w-full max-w-full prose dark:prose-invert prose-sm text-foreground
+              prose-p:my-2.5 prose-p:leading-relaxed prose-p:text-[15px] prose-p:text-foreground
+              prose-headings:font-semibold prose-headings:text-foreground
+              prose-h1:text-xl prose-h1:mt-5 prose-h1:mb-2.5 prose-h1:border-b prose-h1:border-border/40 prose-h1:pb-1.5
+              prose-h2:text-lg prose-h2:mt-4 prose-h2:mb-2
+              prose-h3:text-[15px] prose-h3:mt-3.5 prose-h3:mb-1.5
+              prose-strong:font-semibold prose-strong:text-foreground
+              prose-em:opacity-90 prose-em:text-foreground
+              prose-ul:my-2.5 prose-ul:pl-5 prose-ul:space-y-1 prose-ul:list-disc
+              prose-ol:my-2.5 prose-ol:pl-5 prose-ol:space-y-1 prose-ol:list-decimal
+              prose-li:text-[15px] prose-li:leading-relaxed prose-li:text-foreground
+              prose-blockquote:border-l-4 prose-blockquote:border-primary/60 prose-blockquote:pl-3.5 prose-blockquote:py-1 prose-blockquote:my-2.5 prose-blockquote:italic prose-blockquote:bg-elevated/40 prose-blockquote:rounded-r-md prose-blockquote:text-foreground/90
+              prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0 prose-pre:my-3
+              prose-hr:border-border prose-hr:my-4
+              prose-a:text-primary prose-a:font-medium prose-a:no-underline hover:prose-a:underline
+              prose-table:text-[15px] prose-th:text-foreground prose-td:text-foreground/90
             ">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+              <Streamdown
+                animated={{
+                  animation: 'blurIn',
+                  duration: 250,
+                  easing: 'ease-out',
+                  sep: 'word',
+                }}
+                isAnimating={isStreaming}
                 components={{
-                  code({ node, className, children, ...props }: any) {
-                  const match = /language-(\w+)/.exec(className || '');
-                  const codeString = String(children).replace(/\n$/, '');
-                  const isBlock = match || codeString.includes('\n');
-                  if (isBlock) {
-                    return (
-                      <div className="relative my-3 rounded-xl overflow-hidden border border-blue-500/20">
-                        <div className="flex items-center justify-between px-4 py-1.5 bg-blue-950/60 border-b border-blue-500/10">
-                          <span className="text-xs text-blue-300/60 font-mono">{match ? match[1] : 'code'}</span>
-                          <CopyButton text={codeString} />
+                  code({ node: _node, className, children }: any) {
+                    const match = /language-(\w+)/.exec(className || '');
+                    const codeString = String(children).replace(/\n$/, '');
+                    const isBlock = match || codeString.includes('\n');
+                    const isDark = typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : true;
+
+                    if (isBlock) {
+                      return (
+                        <div className="code-block-wrapper relative my-4 rounded-xl overflow-hidden border border-border shadow-sm bg-elevated">
+                          <div className="flex items-center justify-between px-4 py-2 bg-muted/60 border-b border-border/60">
+                            <span className="text-xs font-mono text-muted-foreground font-medium">{match ? match[1] : 'code'}</span>
+                            <CopyButton text={codeString} />
+                          </div>
+                          <div className="code-block-content p-4 overflow-x-auto text-xs sm:text-sm font-mono leading-relaxed">
+                            <SyntaxHighlighter
+                              style={isDark ? oneDark : oneLight}
+                              language={match ? match[1] : 'text'}
+                              PreTag="div"
+                              customStyle={{
+                                margin: 0,
+                                padding: 0,
+                                background: 'transparent',
+                                fontSize: '0.85rem',
+                                lineHeight: '1.6',
+                              }}
+                            >
+                              {codeString}
+                            </SyntaxHighlighter>
+                          </div>
                         </div>
-                        <SyntaxHighlighter
-                          style={oneDark}
-                          language={match ? match[1] : 'text'}
-                          PreTag="div"
-                          customStyle={{
-                            margin: 0,
-                            padding: '1rem',
-                            background: 'rgba(0,0,0,0.4)',
-                            fontSize: '0.8rem',
-                            lineHeight: '1.6',
-                          }}
-                          {...props}
-                        >
-                          {codeString}
-                        </SyntaxHighlighter>
-    </div>
-  );
-}
-                  return (
-                    <code className={className} {...props}>
+                      );
+                    }
+                    return (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                  hr: () => <hr className="border-border my-5" />,
+                  a: ({ href, children, ...props }: any) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
                       {children}
-                    </code>
-                  );
-                },
-                hr: () => <hr className="border-white/10 my-4" />,
-                a: ({ href, children, ...props }: any) => (
-                  <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-                    {children}
-                  </a>
-                ),
-              }}
-            >
-              {content}
-            </ReactMarkdown>
+                    </a>
+                  ),
+                }}
+              >
+                {content}
+              </Streamdown>
             </div>
 
             {/* Evidence Panel — unified answer mode, sources, confidence, pipeline, debug */}

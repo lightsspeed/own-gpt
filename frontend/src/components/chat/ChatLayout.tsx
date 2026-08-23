@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
-  Send, Settings, History, FileText, Plus, Loader2,
-  Globe, BookOpen, Zap, PanelLeftClose, PanelLeft, Mic, Trash2, MessageSquare,
-  Pin, Edit2, Check, X, MoreHorizontal, FileDown
+  Send, Settings, FileText, Plus, Loader2,
+  Globe, BookOpen, Zap, Mic, Trash2, MessageSquare,
+  Pin, Edit2, Check, X, MoreHorizontal, FileDown, Sun, Moon,
+  Download, ChevronDown, FileCode, FileSpreadsheet
 } from 'lucide-react';
+import {
+  hasExportableContent,
+  exportConversationAsMarkdown,
+  exportConversationAsTxt
+} from '@/features/chat/services/conversationExport';
 import {
   Sidebar,
   SidebarContent,
@@ -33,13 +37,75 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChatMessage } from '@/features/chat/messages';
 import type { MessageData } from '@/features/chat/messages';
-import { DocumentUpload } from '../documents/DocumentUpload';
 import { SettingsModal } from '../settings/SettingsModal';
 import { KnowledgeBaseModal } from '../documents/KnowledgeBaseModal';
 import type { AppSettings } from '../settings/SettingsModal';
 import { ToolPicker } from './ToolPicker';
+import { DaySeparator, isDifferentDay } from './DaySeparator';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+function ChatDownloadDropdown({ messages, onExportPdf }: { messages: MessageData[]; onExportPdf: () => void }) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const hasMessages = hasExportableContent(messages);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        disabled={!hasMessages}
+        className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-border/60 bg-surface/80 hover:bg-hover text-foreground/80 hover:text-foreground text-xs font-medium transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+        title={hasMessages ? 'Download complete conversation' : 'No messages to download'}
+      >
+        <Download size={13} className="text-primary" />
+        <span className="hidden sm:inline">Download</span>
+        <ChevronDown size={11} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 bottom-full mb-2 w-48 rounded-xl border border-border/80 bg-surface/95 backdrop-blur-md p-1 shadow-xl z-50 animate-in fade-in zoom-in-95">
+          <div className="px-2.5 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border/40 mb-1">
+            Download Full Chat
+          </div>
+          <button
+            type="button"
+            onClick={() => { setOpen(false); onExportPdf(); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs text-foreground hover:bg-hover transition-colors font-medium text-left cursor-pointer"
+          >
+            <FileText size={14} className="text-red-500 shrink-0" />
+            <span>Download as PDF</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setOpen(false); exportConversationAsMarkdown(messages, 'OwnGPT Conversation'); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs text-foreground hover:bg-hover transition-colors font-medium text-left cursor-pointer"
+          >
+            <FileCode size={14} className="text-blue-500 shrink-0" />
+            <span>Download as Markdown</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setOpen(false); exportConversationAsTxt(messages, 'OwnGPT Conversation'); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs text-foreground hover:bg-hover transition-colors font-medium text-left cursor-pointer"
+          >
+            <FileSpreadsheet size={14} className="text-emerald-500 shrink-0" />
+            <span>Download as TXT</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function getOrCreateSessionId(): string {
   let sid = localStorage.getItem('chat_session_id');
@@ -59,7 +125,7 @@ const TOOLS_INFO = [
 export function ChatLayout() {
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [input, setInput] = useState('');
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [_isSidebarOpen, _setSidebarOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [streamingId, setStreamingId] = useState<string | null>(null);
   // Content buffer for smooth streaming — flushes on each animation frame
@@ -91,6 +157,29 @@ export function ChatLayout() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
+  // Theme Management (Light / Dark mode)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   const fetchSessions = async () => {
     try {
       const res = await fetch(`${API_BASE}/chat/sessions`);
@@ -117,7 +206,9 @@ export function ChatLayout() {
               id: `history-${i}`,
               role: m.role as 'user' | 'assistant',
               content: m.content,
-              timestamp: new Date(),
+              // Use real per-message timestamp from the DB for accurate day separators.
+              // Fall back to now() only for legacy messages that have no stored timestamp.
+              timestamp: m.created_at ? new Date(m.created_at) : new Date(),
               resources: m.resources
             })));
           } else {
@@ -466,13 +557,25 @@ export function ChatLayout() {
                             </SidebarMenuAction>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent side="right" align="start">
+                            <DropdownMenuItem onClick={() => { setEditTitle(s.title); setEditingSessionId(s.id); }}>
+                              <Edit2 className="mr-2 h-4 w-4" />
+                              Rename
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => handleUpdateSession(s.id, { is_pinned: !s.is_pinned }, e as any)}>
                               <Pin className="mr-2 h-4 w-4" />
                               {s.is_pinned ? "Unpin" : "Pin"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setEditTitle(s.title); setEditingSessionId(s.id); }}>
-                              <Edit2 className="mr-2 h-4 w-4" />
-                              Rename
+                            <DropdownMenuItem onClick={() => {}}>
+                              <FileText className="mr-2 h-4 w-4" />
+                              Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {}}>
+                              <MessageSquare className="mr-2 h-4 w-4" />
+                              Share
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {}}>
+                              <BookOpen className="mr-2 h-4 w-4" />
+                              Archive
                             </DropdownMenuItem>
                             <DropdownMenuItem className="text-red-500 hover:text-red-600" onClick={(e) => handleDeleteSession(s.id, e as any)}>
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -500,6 +603,19 @@ export function ChatLayout() {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
+              <SidebarMenuButton onClick={toggleTheme}>
+                {theme === 'dark' ? (
+                  <>
+                    <Sun size={18} className="mr-2 text-amber-400" /> <span>Light Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon size={18} className="mr-2 text-indigo-600" /> <span>Dark Mode</span>
+                  </>
+                )}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
               <SidebarMenuButton onClick={() => setSettingsOpen(true)}>
                 <Settings size={18} className="mr-2" /> <span>Settings</span>
               </SidebarMenuButton>
@@ -520,15 +636,29 @@ export function ChatLayout() {
           </div>
 
           <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              Live
-            </span>
             <span>{messages.filter(m => m.role === 'user').length} msgs</span>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={downloadPDF}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={downloadPDF} title="Download PDF">
               <FileDown size={14} />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSettingsOpen(true)}>
+            {/* Prominent Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-border bg-elevated hover:bg-hover text-foreground font-medium text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun size={14} className="text-amber-400" />
+                  <span>Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon size={14} className="text-indigo-600" />
+                  <span>Dark</span>
+                </>
+              )}
+            </button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSettingsOpen(true)} title="Settings">
               <Settings size={14} />
             </Button>
           </div>
@@ -536,27 +666,35 @@ export function ChatLayout() {
 
         {/* Messages */}
         <ScrollArea className="flex-1 h-full w-full">
-          <div ref={chatRef} className="max-w-3xl mx-auto px-4 pt-20 pb-40 space-y-5">
+          <div ref={chatRef} className="max-w-3xl mx-auto px-4 pt-16 pb-32 space-y-4">
             {isLoadingHistory ? (
               <div className="flex justify-center items-center h-40 gap-3 text-muted-foreground">
                 <Loader2 className="animate-spin" size={18} />
                 <span className="text-sm">Restoring conversation…</span>
               </div>
             ) : (
-              messages.map(msg => (
-                <ChatMessage
-                  key={msg.id}
-                  {...msg}
-                  isStreaming={msg.id === streamingId && msg.role === 'assistant'}
-                  onEdit={(text) => {
-                    setInput(text);
-                    document.getElementById('chat-input')?.focus();
-                  }}
-                  onFeedback={(id, fb) => {
-                    setMessages(prev => prev.map(m => m.id === id ? { ...m, feedback: fb } : m));
-                  }}
-                />
-              ))
+              messages.map((msg, idx) => {
+                const prev = messages[idx - 1];
+                const showSeparator =
+                  msg.timestamp &&
+                  (idx === 0 || isDifferentDay(prev?.timestamp, msg.timestamp));
+                return (
+                  <React.Fragment key={msg.id}>
+                    {showSeparator && <DaySeparator date={msg.timestamp!} />}
+                    <ChatMessage
+                      {...msg}
+                      isStreaming={msg.id === streamingId && msg.role === 'assistant'}
+                      onEdit={(text) => {
+                        setInput(text);
+                        document.getElementById('chat-input')?.focus();
+                      }}
+                      onFeedback={(id, fb) => {
+                        setMessages(prev => prev.map(m => m.id === id ? { ...m, feedback: fb } : m));
+                      }}
+                    />
+                  </React.Fragment>
+                );
+              })
             )}
 
             {/* Typing indicator */}
@@ -699,58 +837,66 @@ export function ChatLayout() {
               </div>
             )}
 
-            {/* The Gemini-style Floating Pill Input */}
+            {/* Floating Pill Input */}
             <div className="relative">
-              {/* Glow layer */}
-              <div className="absolute inset-0 rounded-full blur-xl opacity-30 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-400 animate-pulse pointer-events-none" />
-              <div ref={inputBarRef} className="relative flex items-center gap-2 bg-[#12141a] rounded-full px-4 py-3 shadow-2xl border border-blue-500/20 focus-within:border-blue-400/60 focus-within:shadow-[0_0_30px_rgba(59,130,246,0.35)] transition-all duration-300">
-              {/* + Tool picker button */}
-              <Button
-                id="tool-picker-btn"
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-full flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
-                onClick={() => setToolPickerOpen(v => !v)}
-                disabled={isLoadingHistory}
-              >
-                <Plus size={20} />
-              </Button>
+              <div ref={inputBarRef} className="relative flex items-center gap-2 bg-elevated/95 backdrop-blur-md rounded-full px-3 py-1.5 shadow-lg border border-border focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-200">
+                {/* + Tool picker button */}
+                <Button
+                  id="tool-picker-btn"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+                  onClick={() => setToolPickerOpen(v => !v)}
+                  disabled={isLoadingHistory}
+                  title="Add tools / attachments"
+                >
+                  <Plus size={18} />
+                </Button>
 
-              {/* Tool Picker Popup */}
-              <ToolPicker
-                open={isToolPickerOpen}
-                onClose={() => setToolPickerOpen(false)}
-                onFileUploadClick={() => hiddenFileInputRef.current?.click()}
-                onToolSelect={handleToolSelect}
-                activeTools={activeTools}
-              />
+                {/* Tool Picker Popup */}
+                <ToolPicker
+                  open={isToolPickerOpen}
+                  onClose={() => setToolPickerOpen(false)}
+                  onFileUploadClick={() => hiddenFileInputRef.current?.click()}
+                  onToolSelect={handleToolSelect}
+                  activeTools={activeTools}
+                />
 
-              {/* Input */}
-              <input
-                id="chat-input"
-                placeholder="Ask anything…"
-                className="flex-1 bg-transparent text-[15px] outline-none text-white placeholder:text-gray-400 py-2"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                disabled={isLoadingHistory}
-              />
+                {/* Input */}
+                <input
+                  id="chat-input"
+                  placeholder="Ask anything…"
+                  className="flex-1 bg-transparent text-[15px] outline-none text-foreground placeholder:text-muted-foreground py-1 px-1"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  disabled={isLoadingHistory}
+                />
 
-              {/* Mic button */}
-              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors">
-                <Mic size={20} />
-              </Button>
+                {/* Mic button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full flex-shrink-0 text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+                  title="Voice input"
+                >
+                  <Mic size={18} />
+                </Button>
 
-              {/* Send */}
-              <Button
-                id="chat-send-btn"
-                size="icon"
-                className="h-10 w-10 rounded-full bg-white hover:bg-gray-200 text-black shadow-lg transition-transform hover:scale-105 active:scale-95 flex-shrink-0"
-                onClick={handleSend}
-                disabled={isLoading || isLoadingHistory || !input.trim()}
-              >
-                <Send size={18} />
-              </Button>
+                {/* Download complete conversation dropdown */}
+                <ChatDownloadDropdown messages={messages} onExportPdf={downloadPDF} />
+
+                {/* Send button */}
+                <Button
+                  id="chat-send-btn"
+                  size="icon"
+                  className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all hover:scale-105 active:scale-95 flex-shrink-0 disabled:opacity-30 disabled:pointer-events-none"
+                  onClick={handleSend}
+                  disabled={isLoading || isLoadingHistory || !input.trim()}
+                  title="Send message"
+                >
+                  <Send size={15} />
+                </Button>
               </div>
             </div>
             

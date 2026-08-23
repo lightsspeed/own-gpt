@@ -97,6 +97,10 @@ export function ConversationToolbar({ session, onRename, onDelete, onTogglePin }
             <div className="absolute right-0 top-full mt-1 min-w-[160px] rounded-lg border border-border bg-surface py-1 shadow-lg z-50">
               <MenuBtn onClick={handleStartRename} label="Rename" />
               <MenuBtn onClick={() => { onTogglePin(session.id); setMenuOpen(false); }} label={session.is_pinned ? 'Unpin' : 'Pin'} />
+              <MenuBtn onClick={() => setMenuOpen(false)} label="Duplicate" />
+              <MenuBtn onClick={() => setMenuOpen(false)} label="Share" />
+              <div className="my-1 border-t border-border/50" />
+              <MenuBtn onClick={() => setMenuOpen(false)} label="Archive" />
               <MenuBtn onClick={() => { onDelete(session.id); setMenuOpen(false); }} label="Delete" danger />
             </div>
           )}

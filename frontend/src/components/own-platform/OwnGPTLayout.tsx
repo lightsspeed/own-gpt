@@ -42,40 +42,21 @@ export function OwnGPTLayout({
         onDelete={onDelete}
         onTogglePin={onTogglePin}
         sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(false)}
+        onToggleSidebar={() => setSidebarOpen(prev => !prev)}
       />
 
-      {/* Hamburger when sidebar closed */}
-      {!sidebarOpen && (
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-50 p-2 bg-surface border border-border rounded-lg text-muted-foreground hover:text-foreground hover:bg-hover transition-all shadow-md"
-        >
-          <Menu size={18} />
-        </button>
-      )}
-
       {/* Main area */}
-      <main
-        className={cn(
-          'flex-1 flex flex-col h-full transition-all duration-300 relative bg-background',
-          sidebarOpen ? 'ml-[280px]' : 'ml-0',
-        )}
-      >
+      <main className="flex-1 flex flex-col h-full min-w-0 bg-background relative">
         {/* Top bar */}
-        <header className={cn(
-          'fixed top-0 right-0 h-14 glass-panel z-40 px-6 flex items-center justify-between transition-all duration-300',
-          sidebarOpen ? 'w-[calc(100%-280px)]' : 'w-full',
-        )}>
+        <header className="h-14 glass-panel border-b border-border/50 px-6 flex items-center justify-between shrink-0 z-20">
           <div className="flex items-center gap-4">
-            {!sidebarOpen && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-1.5 text-muted-foreground hover:text-foreground transition-all rounded-lg"
-              >
-                <Menu size={18} />
-              </button>
-            )}
+            <button
+              onClick={() => setSidebarOpen(prev => !prev)}
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-hover transition-all rounded-lg"
+              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
+              <Menu size={18} />
+            </button>
             <div className="flex items-center gap-2">
               <Sparkles size={18} className="text-primary" />
               <span className="text-title font-bold text-foreground">OwnGPT</span>
@@ -97,7 +78,7 @@ export function OwnGPTLayout({
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto pt-14 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
           {children}
         </div>
       </main>

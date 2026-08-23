@@ -96,18 +96,22 @@ export function ConversationSidebar({
 
   return (
     <>
+      {/* Mobile backdrop overlay only */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
           onClick={onToggleSidebar}
         />
       )}
+
+      {/* Responsive Sidebar Container */}
       <aside
         className={cn(
-          'sidebar-transition z-50 fixed top-0 left-0 flex flex-col h-screen',
-          'shadow-2xl bg-surface/95 backdrop-blur-xl',
-          'w-[315px]',
-          sidebarOpen ? 'left-0' : '-left-[361px]',
+          'sidebar-transition h-screen shrink-0 border-r border-border/60 bg-surface/95 backdrop-blur-xl flex flex-col z-30 transition-all duration-300 relative',
+          'md:relative fixed top-0 left-0',
+          sidebarOpen
+            ? 'w-[280px] opacity-100 translate-x-0'
+            : 'w-0 opacity-0 -translate-x-full md:translate-x-0 overflow-hidden border-none',
         )}
       >
       {/* Logo + collapse */}
@@ -348,7 +352,7 @@ function SessionRow({
             <div className="flex items-center gap-1.5">
               {session.is_pinned && <Pin size={10} className="shrink-0 text-primary/50" />}
               <span className={cn('truncate text-small', isActive ? 'font-semibold text-foreground' : 'text-muted-foreground/80 group-hover:text-foreground')}>
-                {session.title}
+                {(session.title || '').trim() || 'Untitled Conversation'}
               </span>
             </div>
 

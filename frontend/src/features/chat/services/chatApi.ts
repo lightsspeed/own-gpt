@@ -95,7 +95,9 @@ export const api = {
             role: m.role as 'user' | 'assistant',
             content: m.content,
             status: m.status,
-            timestamp: new Date(),
+            // Use the real DB timestamp so day separators work retrospectively.
+            // Fall back to now() only for legacy rows without a stored timestamp.
+            timestamp: m.created_at ? new Date(m.created_at) : new Date(),
             resources: m.resources,
           }));
         }

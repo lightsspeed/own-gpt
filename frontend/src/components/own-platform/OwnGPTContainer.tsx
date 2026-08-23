@@ -15,7 +15,7 @@ import {
   type SessionRegistry,
 } from '@/features/projects/projectSession'
 import { projectsApi, type Project } from '@/features/projects/services/projectsApi'
-import { Menu, Sparkles } from 'lucide-react'
+import { PanelLeft, Sparkles, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/features/chat/services/chatApi'
 import type { ChatSession } from '@/features/chat/types'
@@ -128,6 +128,16 @@ export function OwnGPTContainer() {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, is_pinned } : s))
   }, [sessions])
 
+  const handleFirstUserMessage = useCallback(async (content: string) => {
+    if (!activeId) return
+    const session = sessions.find(s => s.id === activeId)
+    if (session && (session.title === 'New Chat' || !session.title || session.title === 'Untitled Conversation')) {
+      const generatedTitle = content.length > 35 ? content.slice(0, 35).trim() + '…' : content.trim()
+      await api.updateSession(activeId, { title: generatedTitle })
+      setSessions(prev => prev.map(s => s.id === activeId ? { ...s, title: generatedTitle } : s))
+    }
+  }, [activeId, sessions])
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       <SearchPalette
@@ -150,7 +160,7 @@ export function OwnGPTContainer() {
         onDelete={handleDelete}
         onTogglePin={handleTogglePin}
         sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(false)}
+        onToggleSidebar={() => setSidebarOpen(prev => !prev)}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenKnowledgeBase={() => navigate('/learn')}
         projectSelector={
@@ -166,26 +176,45 @@ export function OwnGPTContainer() {
         }
       />
 
-      {!sidebarOpen && (
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="fixed top-4 left-4 z-50 p-2.5 bg-surface border border-border rounded-xl text-muted-foreground hover:text-foreground hover:bg-hover transition-all shadow-lg"
-        >
-          <Menu size={18} />
-        </button>
-      )}
+      <main className="flex-1 flex flex-col h-full transition-all duration-300 min-w-0 bg-background relative">
+        {/* Header Bar */}
+        <header className="h-12 border-b border-border/50 bg-surface/80 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-20">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(prev => !prev)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            >
+              <PanelLeft size={18} />
+            </button>
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-primary" />
+              <span className="font-semibold text-foreground text-sm">OwnGPT</span>
+            </div>
+            <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold tracking-wider uppercase hidden sm:inline">
+              Enterprise
+            </span>
+          </div>
 
-      <main className={cn(
-        'flex-1 flex flex-col h-full transition-all duration-300 min-w-0',
-        sidebarOpen ? 'opacity-40 blur-[1px] pointer-events-none' : 'opacity-100',
-      )}>
-        <div className="flex-1 min-h-0">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="p-1.5 rounded-lg hover:bg-hover hover:text-foreground transition-colors"
+              title="Settings"
+            >
+              <Settings size={16} />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 min-h-0 relative">
           {activeId ? (
             <OwnGPTPage
               key={activeId}
               sessionId={activeId}
               projectId={sessions.find(s => s.id === activeId)?.project_id ?? activeProjectId}
               title={sessions.find(s => s.id === activeId)?.title}
+              onFirstUserMessage={handleFirstUserMessage}
             />
           ) : (
             <div className="h-full flex items-center justify-center">

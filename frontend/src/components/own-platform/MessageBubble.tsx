@@ -60,10 +60,10 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
       )}
       <div
         className={cn(
-          'px-4 py-2.5 max-w-[85%] text-body text-foreground',
+          'text-body text-foreground',
           isUser
-            ? 'bg-primary/15 rounded-2xl rounded-br-md'
-            : 'px-1',
+            ? 'px-4 py-2.5 max-w-[85%] bg-primary/15 rounded-2xl rounded-br-md'
+            : 'w-full max-w-full px-0 py-1',
         )}
       >
         <MarkdownRenderer
@@ -74,7 +74,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
 
       {/* Actions */}
       {showActions && (
-        <div className={cn('flex items-center gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity', isUser ? 'flex-row-reverse' : 'flex-row')}>
+        <div className={cn('flex items-center gap-1 pt-1.5 opacity-70 group-hover:opacity-100 transition-opacity', isUser ? 'flex-row-reverse' : 'flex-row')}>
           {isUser ? (
             <UserActions content={content} onEdit={onEdit} />
           ) : (

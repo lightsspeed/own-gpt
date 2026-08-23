@@ -196,16 +196,26 @@ function ConversationItem({
   session,
   isActive,
   onSelect,
+  onRename,
+  onDelete,
 }: {
   session: ChatSession;
   isActive: boolean;
   onSelect: () => void;
+  onRename?: (id: string, title: string) => void;
+  onDelete?: (id: string) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(session.title || '');
+
+  const displayTitle = (session.title || '').trim() || 'New Chat';
+
   return (
-    <button
+    <div
       onClick={onSelect}
       className={cn(
-        'group relative flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-all',
+        'group relative flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-all cursor-pointer',
         isActive ? 'bg-elevated' : 'hover:bg-hover hover:translate-x-0.5',
       )}
     >
@@ -213,20 +223,60 @@ function ConversationItem({
         <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-accent" />
       )}
 
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        {session.is_pinned && (
-          <svg className="h-3 w-3 shrink-0 text-accent/60" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-          </svg>
-        )}
-        <span className={cn(
-          'truncate text-small',
-          isActive ? 'font-semibold text-text-primary' : 'text-text-secondary group-hover:text-text-primary',
-        )}>
-          {session.title}
-        </span>
-      </div>
-    </button>
+      {editing ? (
+        <div className="flex items-center gap-1 w-full" onClick={e => e.stopPropagation()}>
+          <input
+            autoFocus
+            className="flex-1 bg-background text-foreground border border-border rounded px-1.5 py-0.5 outline-none text-xs"
+            value={editTitle}
+            onChange={e => setEditTitle(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { onRename?.(session.id, editTitle); setEditing(false); }
+              if (e.key === 'Escape') setEditing(false);
+            }}
+          />
+          <button onClick={() => { onRename?.(session.id, editTitle); setEditing(false); }} className="text-emerald-500 text-xs px-1">✓</button>
+        </div>
+      ) : (
+        <>
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            {session.is_pinned && (
+              <svg className="h-3 w-3 shrink-0 text-accent/60" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+              </svg>
+            )}
+            <span className={cn(
+              'truncate text-small',
+              isActive ? 'font-semibold text-text-primary' : 'text-text-secondary group-hover:text-text-primary',
+            )}>
+              {displayTitle}
+            </span>
+          </div>
+
+          <div className="relative shrink-0" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setMenuOpen(prev => !prev)}
+              className="p-1 rounded-md text-text-disabled hover:text-text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Conversation options"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 bottom-full mb-1 w-44 rounded-xl border border-border bg-surface p-1 shadow-xl z-50 animate-in fade-in">
+                <button onClick={() => { setEditing(true); setMenuOpen(false); }} className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-text-primary hover:bg-hover rounded-md text-left">Rename</button>
+                <button onClick={() => setMenuOpen(false)} className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-text-primary hover:bg-hover rounded-md text-left">{session.is_pinned ? 'Unpin' : 'Pin'}</button>
+                <button onClick={() => setMenuOpen(false)} className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-text-primary hover:bg-hover rounded-md text-left">Duplicate</button>
+                <button onClick={() => setMenuOpen(false)} className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-text-primary hover:bg-hover rounded-md text-left">Share</button>
+                <div className="my-1 border-t border-border/50" />
+                <button onClick={() => setMenuOpen(false)} className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-text-primary hover:bg-hover rounded-md text-left">Archive</button>
+                <button onClick={() => { onDelete?.(session.id); setMenuOpen(false); }} className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-red-500 hover:bg-red-500/10 rounded-md text-left">Delete</button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

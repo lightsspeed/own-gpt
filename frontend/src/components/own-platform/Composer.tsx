@@ -1,12 +1,17 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Paperclip, Mic, X, Upload, Wrench } from 'lucide-react'
+import { Paperclip, Mic, X, Upload, Wrench, Download, ChevronDown, FileText, FileCode, FileSpreadsheet } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './FilePreview'
 import { ToolPicker } from './ToolPicker'
 import { SlashCommands, type SlashCommand } from './SlashCommands'
 import { uploadService } from '@/features/chat/services/uploadService'
-import type { AttachmentFile, ToolInfo, ToolMode, ContextItem, ContextCategory } from '@/features/chat/types'
+import {
+  hasExportableContent,
+  exportConversationAsMarkdown,
+  exportConversationAsTxt,
+} from '@/features/chat/services/conversationExport'
+import type { AttachmentFile, ToolInfo, ToolMode, ContextItem, ContextCategory, MessageData } from '@/features/chat/types'
 
 declare global {
   interface Window {
@@ -39,6 +44,98 @@ interface ComposerProps {
   contextItems?: ContextItem[]
   onContextRemove?: (id: string) => void
   projectId?: string | null
+  messages?: MessageData[]
+  onExportPdf?: () => void
+  title?: string
+}
+
+function DownloadDropdown({
+  messages = [],
+  onExportPdf,
+  title = 'OwnGPT Conversation',
+  disabled = false,
+}: {
+  messages?: MessageData[]
+  onExportPdf?: () => void
+  title?: string
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const hasMessages = hasExportableContent(messages)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div ref={dropdownRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        disabled={disabled || !hasMessages}
+        className={cn(
+          'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-200 text-xs font-medium',
+          open
+            ? 'border-primary/50 bg-primary/10 text-primary shadow-sm'
+            : 'border-border/60 bg-elevated/70 hover:bg-hover text-foreground/80 hover:text-foreground shadow-xs',
+          'disabled:opacity-40 disabled:pointer-events-none cursor-pointer'
+        )}
+        title={hasMessages ? 'Download complete conversation' : 'No messages to download'}
+      >
+        <Download size={14} className="text-primary" />
+        <span className="hidden sm:inline">Download</span>
+        <ChevronDown size={12} className={cn('transition-transform duration-200', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 bottom-full mb-2 w-52 rounded-xl border border-border/80 bg-surface/95 backdrop-blur-md p-1 shadow-xl z-50 animate-in fade-in zoom-in-95">
+          <div className="px-2.5 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border/40 mb-1">
+            Download Full Chat
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              if (onExportPdf) onExportPdf()
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs text-foreground hover:bg-hover transition-colors font-medium text-left"
+          >
+            <FileText size={14} className="text-red-500 shrink-0" />
+            <span>Download as PDF</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              exportConversationAsMarkdown(messages, title)
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs text-foreground hover:bg-hover transition-colors font-medium text-left"
+          >
+            <FileCode size={14} className="text-blue-500 shrink-0" />
+            <span>Download as Markdown</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              exportConversationAsTxt(messages, title)
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg text-xs text-foreground hover:bg-hover transition-colors font-medium text-left"
+          >
+            <FileSpreadsheet size={14} className="text-emerald-500 shrink-0" />
+            <span>Download as TXT</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function Composer({
@@ -55,6 +152,9 @@ export function Composer({
   contextItems,
   onContextRemove,
   projectId,
+  messages = [],
+  onExportPdf,
+  title,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -396,6 +496,14 @@ export function Composer({
                 </div>
               )}
             </div>
+
+            {/* Download complete conversation dropdown */}
+            <DownloadDropdown
+              messages={messages}
+              onExportPdf={onExportPdf}
+              title={title}
+              disabled={disabled || isLoading}
+            />
 
             <div className="w-px h-6 bg-foreground/[0.18] mx-0.5" />
 
