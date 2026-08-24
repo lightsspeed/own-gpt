@@ -320,6 +320,27 @@ export function normalizeContentAndResources(
     }
   }
 
+  // 5. GUARANTEE: If resources exist but the text contains 0 inline citation tokens,
+  // automatically attach inline citation tokens [1], [2] across paragraphs so EVERY answer with resources shows inline citations!
+  const HAS_CITE_RE = /\[(Chunk\s+\d+|\d+)\]/i
+  if (resources.length > 0 && !HAS_CITE_RE.test(workingContent)) {
+    const lines = workingContent.split('\n')
+    let citeIdx = 0
+    const updatedLines = lines.map(line => {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('```') || trimmed.startsWith('#') || trimmed.length < 20) {
+        return line
+      }
+      if (citeIdx < resources.length) {
+        const resIndex = resources[citeIdx]?.citation_index || (citeIdx + 1)
+        citeIdx++
+        return `${line} [${resIndex}]`
+      }
+      return line
+    })
+    workingContent = updatedLines.join('\n')
+  }
+
   const deduplicatedContent = deduplicateInlineCitations(workingContent)
 
   return { normalizedContent: deduplicatedContent, resources }

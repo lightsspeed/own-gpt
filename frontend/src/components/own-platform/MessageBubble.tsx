@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, ExternalLink, FileText } from 'lucide-react'
+import { Copy, Check, ThumbsUp, ThumbsDown, Edit3, Ellipsis, ExternalLink, FileText, BookOpen, Globe } from 'lucide-react'
 import type { ResourceItem } from '@/features/chat/types'
 import {
   DropdownMenu,
@@ -51,6 +51,8 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
     )
   }
 
+  const hasResources = !isUser && !isStreaming && Boolean(resources && resources.length > 0)
+
   return (
     <div className={cn('flex flex-col group/msg', isUser ? 'items-end' : 'items-start')}>
 
@@ -74,7 +76,7 @@ export const MessageBubble = React.memo(function MessageBubble({ role, content, 
 
       {/* Actions */}
       {showActions && (
-        <div className={cn('flex items-center gap-1 pt-1.5 opacity-70 group-hover/msg:opacity-100 transition-opacity', isUser ? 'flex-row-reverse' : 'flex-row')}>
+        <div className={cn('flex items-center gap-1 pt-1 opacity-70 group-hover/msg:opacity-100 transition-opacity', isUser ? 'flex-row-reverse' : 'flex-row')}>
           {isUser ? (
             <UserActions content={content} onEdit={onEdit} />
           ) : (
