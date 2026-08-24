@@ -188,7 +188,7 @@ export function normalizeContentAndResources(
   if (!content) return { normalizedContent: '', resources: existingResources || [] }
 
   const resources: ResourceItem[] = [...(existingResources || [])]
-  
+
   // Ensure every resource has a valid 1-based citation_index
   resources.forEach((r, idx) => {
     if (!r.citation_index) {
@@ -201,44 +201,69 @@ export function normalizeContentAndResources(
   const urlMap = new Map<string, number>()
   for (const r of resources) {
     if (r.url && r.citation_index) {
-      urlMap.set(r.url.trim(), r.citation_index)
+      urlMap.set(r.url.trim().toLowerCase(), r.citation_index)
     }
   }
 
-  // Matches `[https://...]` or `[http://..., http://...]`
-  const BRACKETED_URLS_RE = /\[(https?:\/\/[^\]\)\s]+(?:,\s*https?:\/\/[^\]\)\s]+)*)\]/gi
+  let workingContent = content
 
-  const normalizedContent = content.replace(BRACKETED_URLS_RE, (fullMatch, rawUrlsGroup) => {
-    const rawUrls = rawUrlsGroup.split(/,\s*/).map((u: string) => u.trim()).filter(Boolean)
-    const tokenIndexes: number[] = []
+  // 1. Extract and strip trailing Sources / References section from markdown body
+  const SOURCES_SECTION_RE = /(?:\n|^)\s*(?:---|___|\*\*\*)*\s*(?:\*|_|#|\*\*)*\s*(?:Sources|References|Citations):?\s*(?:\*|_|#|\*\*)*\s*\n([\s\S]*)$/i
+  const sourcesMatch = SOURCES_SECTION_RE.exec(workingContent)
 
-    for (const urlStr of rawUrls) {
-      if (urlMap.has(urlStr)) {
-        tokenIndexes.push(urlMap.get(urlStr)!)
-      } else {
+  if (sourcesMatch) {
+    const sourcesText = sourcesMatch[1]
+    // Strip trailing sources block from text body so it doesn't leak as raw text at the bottom
+    workingContent = workingContent.slice(0, sourcesMatch.index).trimEnd()
+
+    // Parse list items `- [Title](URL)`
+    const LINK_ITEM_RE = /[-*+]\s*\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi
+    let linkMatch: RegExpExecArray | null
+    while ((linkMatch = LINK_ITEM_RE.exec(sourcesText)) !== null) {
+      const linkTitle = linkMatch[1].trim()
+      const linkUrl = linkMatch[2].trim()
+      const lowerUrl = linkUrl.toLowerCase()
+
+      if (!urlMap.has(lowerUrl)) {
         const index = nextIndex++
-        urlMap.set(urlStr, index)
+        urlMap.set(lowerUrl, index)
 
         let domain = 'web'
-        try {
-          domain = new URL(urlStr).hostname.replace(/^www\./, '')
-        } catch { /* ignore */ }
-
-        let pathTitle = domain
-        try {
-          const pathname = new URL(urlStr).pathname.replace(/\/+$/, '')
-          const lastSegment = pathname.split('/').pop()
-          if (lastSegment && lastSegment.length > 2) {
-            pathTitle = lastSegment
-              .replace(/[-_]/g, ' ')
-              .replace(/\b\w/g, c => c.toUpperCase())
-          }
-        } catch { /* ignore */ }
+        try { domain = new URL(linkUrl).hostname.replace(/^www\./, '') } catch {}
 
         resources.push({
           citation_index: index,
           type: 'web',
-          title: pathTitle !== domain ? `${pathTitle} (${domain})` : domain,
+          title: linkTitle,
+          url: linkUrl,
+          snippet: `Source from ${domain}`,
+        })
+      }
+    }
+  }
+
+  // 2. Matches `[https://...]` or `[http://..., http://...]`
+  const BRACKETED_URLS_RE = /\[(https?:\/\/[^\]\)\s]+(?:,\s*https?:\/\/[^\]\)\s]+)*)\]/gi
+
+  workingContent = workingContent.replace(BRACKETED_URLS_RE, (fullMatch, rawUrlsGroup) => {
+    const rawUrls = rawUrlsGroup.split(/,\s*/).map((u: string) => u.trim()).filter(Boolean)
+    const tokenIndexes: number[] = []
+
+    for (const urlStr of rawUrls) {
+      const lowerUrl = urlStr.toLowerCase()
+      if (urlMap.has(lowerUrl)) {
+        tokenIndexes.push(urlMap.get(lowerUrl)!)
+      } else {
+        const index = nextIndex++
+        urlMap.set(lowerUrl, index)
+
+        let domain = 'web'
+        try { domain = new URL(urlStr).hostname.replace(/^www\./, '') } catch {}
+
+        resources.push({
+          citation_index: index,
+          type: 'web',
+          title: domain,
           url: urlStr,
           snippet: `Source from ${domain}`,
         })
@@ -249,11 +274,41 @@ export function normalizeContentAndResources(
     return ' ' + tokenIndexes.map(idx => `[${idx}]`).join(' ') + ' '
   })
 
-  // Synthesize fallback resource entries for any [Chunk N] markers if unmapped
+  // 3. Replace named bracket citations like `[Mayo Clinic]`, `[Cleveland Clinic]` with standard `[N]` tokens
+  if (resources.length > 0) {
+    const NAMED_BRACKET_RE = /\[(?!Chunk\b|\d+\])([^\]]+)\](?!\()/gi
+    workingContent = workingContent.replace(NAMED_BRACKET_RE, (fullMatch, rawName) => {
+      const cleanName = rawName.trim().toLowerCase()
+      if (!cleanName || cleanName.startsWith('http')) return fullMatch
+
+      // Find matching resource by title or domain
+      const matchRes = resources.find(r => {
+        const titleLower = (r.title || '').toLowerCase()
+        const urlLower = (r.url || '').toLowerCase()
+        return titleLower.includes(cleanName) || cleanName.includes(titleLower) || urlLower.includes(cleanName)
+      })
+
+      if (matchRes && matchRes.citation_index) {
+        return ` [${matchRes.citation_index}]`
+      }
+
+      // If no exact resource match, synthesize a web resource for the named site
+      const index = nextIndex++
+      resources.push({
+        citation_index: index,
+        type: 'web',
+        title: rawName.trim(),
+        snippet: `Source: ${rawName.trim()}`,
+      })
+      return ` [${index}]`
+    })
+  }
+
+  // 4. Synthesize fallback resource entries for any [Chunk N] markers if unmapped
   const UNMAPPED_CHUNK_RE = /\[Chunk\s+(\d+)\]/gi
-  let match: RegExpExecArray | null
-  while ((match = UNMAPPED_CHUNK_RE.exec(normalizedContent)) !== null) {
-    const chunkNum = parseInt(match[1], 10)
+  let chunkMatch: RegExpExecArray | null
+  while ((chunkMatch = UNMAPPED_CHUNK_RE.exec(workingContent)) !== null) {
+    const chunkNum = parseInt(chunkMatch[1], 10)
     const targetIdx = chunkNum + 1
     if (!resources.some(r => r.citation_index === targetIdx || r.citation_index === chunkNum)) {
       resources.push({
@@ -265,7 +320,7 @@ export function normalizeContentAndResources(
     }
   }
 
-  const deduplicatedContent = deduplicateInlineCitations(normalizedContent)
+  const deduplicatedContent = deduplicateInlineCitations(workingContent)
 
   return { normalizedContent: deduplicatedContent, resources }
 }
